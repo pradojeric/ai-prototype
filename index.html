@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>STRINGS — Zone 1: Pantal Market (Prototype)</title>
+<style>
+  :root {
+    --teal: #6fd8d0;
+    --amber: #ffd9a0;
+    --ink: #0a1518;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #04090b; }
+  body { font-family: 'Georgia', 'Times New Roman', serif; color: #eaf6f4; }
+  canvas { display: block; }
+
+  /* ---- Crosshair ---- */
+  #crosshair {
+    position: fixed; top: 50%; left: 50%;
+    width: 6px; height: 6px; margin: -3px 0 0 -3px;
+    border-radius: 50%; background: rgba(234, 246, 244, 0.55);
+    pointer-events: none; opacity: 0; transition: opacity .4s;
+  }
+  #crosshair.active { opacity: 1; }
+
+  /* ---- Hold-to-collect ring (around crosshair) ---- */
+  #holdring {
+    position: fixed; top: 50%; left: 50%;
+    width: 78px; height: 78px; margin: -39px 0 0 -39px;
+    transform: rotate(-90deg);            /* start the sweep from 12 o'clock */
+    pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 5;
+  }
+  #holdring.active { opacity: 1; }
+  #holdring circle { fill: none; stroke-width: 3; }
+  #holdring .track { stroke: rgba(234, 246, 244, 0.14); }
+  #holdring .prog {
+    stroke: var(--teal); stroke-linecap: round;
+    stroke-dasharray: 213.6; stroke-dashoffset: 213.6;
+    filter: drop-shadow(0 0 6px rgba(111, 216, 208, .85));
+  }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: fixed; top: 22px; right: 26px;
+    text-align: right; pointer-events: none;
+    opacity: 0; transition: opacity .6s;
+    text-shadow: 0 2px 12px rgba(0,0,0,.7);
+  }
+  #hud.active { opacity: 1; }
+  #hud .label { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--teal); opacity: .8; }
+  #hud .count { font-size: 30px; font-weight: bold; letter-spacing: 2px; }
+
+  /* ---- Interact prompt ---- */
+  #prompt {
+    position: fixed; bottom: 18%; left: 50%; transform: translateX(-50%);
+    padding: 10px 20px; border: 1px solid rgba(111,216,208,.4);
+    background: rgba(10,21,24,.45); border-radius: 30px;
+    font-size: 15px; letter-spacing: 1px; pointer-events: none;
+    opacity: 0; transition: opacity .3s; backdrop-filter: blur(3px);
+  }
+  #prompt.active { opacity: 1; }
+  #prompt b { color: var(--amber); }
+
+  /* ---- Start overlay ---- */
+  #start, #discovery, #zonecomplete {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    z-index: 10;
+  }
+  #start {
+    background: radial-gradient(circle at 50% 40%, #0d2a2e 0%, #04090b 80%);
+    cursor: pointer;
+  }
+  #start h1 {
+    font-size: 64px; letter-spacing: 14px; font-weight: normal;
+    color: var(--teal); text-shadow: 0 0 40px rgba(111,216,208,.5);
+  }
+  #start .sub { margin-top: 14px; font-style: italic; opacity: .65; font-size: 17px; }
+  #start .zone { margin-top: 40px; font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: var(--amber); opacity: .8; }
+  #start .enter {
+    margin-top: 44px; padding: 14px 34px; border: 1px solid var(--teal);
+    border-radius: 40px; font-size: 15px; letter-spacing: 3px; text-transform: uppercase;
+    animation: pulse 2.6s ease-in-out infinite;
+  }
+  #start .controls { margin-top: 34px; font-size: 12px; opacity: .45; letter-spacing: 1px; line-height: 1.9; }
+  @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
+
+  /* ---- White flash + Discovery ---- */
+  #flash {
+    position: fixed; inset: 0; background: #fff; opacity: 0;
+    pointer-events: none; z-index: 20; transition: opacity 1.1s ease;
+  }
+  #discovery {
+    background: #f4f1ea; color: #1c2a2c; opacity: 0; pointer-events: none;
+    transition: opacity .8s ease; z-index: 21; padding: 5vw;
+  }
+  #discovery.active { opacity: 1; pointer-events: auto; }
+  #discovery .card { max-width: 620px; }
+  #discovery .icon {
+    width: 120px; height: 120px; margin: 0 auto 30px; border-radius: 12px;
+    background: linear-gradient(135deg, #2a4f52, #6fd8d0);
+    box-shadow: 0 20px 60px rgba(0,0,0,.25); animation: float 4s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-12px) rotate(3deg)} }
+  #discovery .fil { font-size: 38px; letter-spacing: 1px; }
+  #discovery .eng { font-size: 16px; font-style: italic; opacity: .6; margin-top: 4px; }
+  #discovery hr { width: 60px; border: none; border-top: 2px solid #c9a16b; margin: 22px auto; }
+  #discovery .fact { font-size: 17px; line-height: 1.75; }
+  #discovery .note { font-size: 15px; line-height: 1.7; margin-top: 18px; opacity: .8; font-style: italic; }
+  #discovery .zone { margin-top: 26px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #8a6a3a; }
+  #discovery .saved {
+    margin-top: 30px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase;
+    color: #2a7d72; opacity: 0; transition: opacity .6s .5s;
+  }
+  #discovery.active .saved { opacity: 1; }
+  #discovery .cont { margin-top: 36px; font-size: 13px; opacity: .45; letter-spacing: 2px; }
+
+  /* ---- Zone complete ---- */
+  #zonecomplete {
+    background: radial-gradient(circle at 50% 45%, #173b3a 0%, #04090b 85%);
+    opacity: 0; pointer-events: none; transition: opacity 1.6s ease; z-index: 22;
+  }
+  #zonecomplete.active { opacity: 1; pointer-events: auto; }
+  #zonecomplete h2 { font-size: 30px; letter-spacing: 6px; color: var(--teal); font-weight: normal; }
+  #zonecomplete .quote { margin-top: 28px; font-size: 20px; font-style: italic; max-width: 560px; line-height: 1.7; }
+  #zonecomplete .trans { margin-top: 12px; font-size: 14px; opacity: .55; }
+
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #04090b; z-index: 30; color: var(--teal); letter-spacing: 4px; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div id="loading">LOADING…</div>
+
+  <div id="crosshair"></div>
+
+  <svg id="holdring" viewBox="0 0 80 80" aria-hidden="true">
+    <circle class="track" cx="40" cy="40" r="34"></circle>
+    <circle class="prog"  cx="40" cy="40" r="34"></circle>
+  </svg>
+
+  <div id="hud">
+    <div class="label">Artifacts Recovered</div>
+    <div class="count"><span id="found">0</span> / 3</div>
+  </div>
+
+  <div id="prompt">Hold <b>E</b> to reach toward it</div>
+
+  <div id="start" style="display:none">
+    <h1>STRINGS</h1>
+    <div class="sub">"Beneath the water, the city still breathes."</div>
+    <div class="zone">Zone 1 — Pantal Market</div>
+    <div class="enter">Click to Descend</div>
+    <div class="controls">WASD — Wade · MOUSE — Look · E — Reach · ESC — Release</div>
+  </div>
+
+  <div id="flash"></div>
+
+  <div id="discovery">
+    <div class="card">
+      <div class="icon"></div>
+      <div class="fil" id="d-fil"></div>
+      <div class="eng" id="d-eng"></div>
+      <hr />
+      <div class="fact" id="d-fact"></div>
+      <div class="note" id="d-note"></div>
+      <div class="zone" id="d-zone"></div>
+      <div class="saved">✦ Saved to your Digital Museum — Aking Museo</div>
+      <div class="cont">Click anywhere to return to the water</div>
+    </div>
+  </div>
+
+  <div id="zonecomplete">
+    <h2>ZONE 1 COMPLETE</h2>
+    <div class="quote">"Hindi natin malilimutan ang isang bagay na ating minahal."</div>
+    <div class="trans">(We cannot forget something we have loved.)</div>
+  </div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
