@@ -16,7 +16,7 @@ export const CONFIG = {
   FOG_DENSITY: 0.03,        // lighter than before so the larger space reads
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
-  DEBUG_ZONE: true,       // true → force the small debug arena instead of zone1/2/3
+  DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
 };
 
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).
