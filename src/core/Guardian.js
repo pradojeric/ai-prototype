@@ -21,6 +21,7 @@ export class Guardian {
     this.world = world;            // provides spawnNodes + collidesAt
     this.variant = variant;
     this.roaming = false;          // teleport timer only runs while seeking
+    this.teleportedThisFrame = false; // set when the roam timer blinks; read+cleared by Game (audio cue)
     this.alive = true;
     this._teleTimer = 0;
     this._fade = 1;                // 0..1 visibility (eased toward _fadeTarget)
@@ -85,7 +86,10 @@ export class Guardian {
   // --- placement -------------------------------------------------------------
 
   _placeInitial() {
-    const p = this._pickSpot(null);
+    // Wait at the zone's authored start spot (in front of the player's dock) so
+    // the player can walk up and engage it. Falls back to a random valid spot.
+    const start = this.world.zone.guardianStart;
+    const p = start ? { x: start.x, z: start.z } : this._pickSpot(null);
     this.group.position.set(p.x, 0, p.z);
   }
 
@@ -170,6 +174,8 @@ export class Guardian {
   // Per-frame. Returns distance from the guardian to the player (Infinity once
   // defeated so the encounter never re-triggers).
   update(dt, t, playerPos) {
+    this.teleportedThisFrame = false;   // per-frame; the roam path below sets it
+
     // Advance the teleport puff regardless of alive state.
     if (this._poofLife > 0) {
       this._poofLife = Math.max(0, this._poofLife - dt * 1.6);
@@ -201,6 +207,7 @@ export class Guardian {
       if (this._teleTimer >= GUARDIAN.TELEPORT_INTERVAL) {
         this._teleTimer = 0;
         this.teleport(playerPos);
+        this.teleportedThisFrame = true;   // let Game play the teleport SFX
       }
     }
 

@@ -41,6 +41,13 @@ export const zone2 = {
   name: 'Flood Basin (placeholder)',
   label: 'Zone 2 — Flood Basin',   // descend-screen heading
   seed: 20260702,
+  guardianStart: { x: 0, z: 16 },   // waits ahead of the dock in the open arena
+  guardianRebuke: 'Not yet. The basin will not yield its drowned things to the unready.',   // shown on a wrong riddle answer
+  // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
+  introDialogue: [
+    '[Zone 2 — Flood Basin] The current pulls deeper here.',
+    '[Zone 2 placeholder] Whatever sank in this basin has not finished speaking.',
+  ],
   background: 0x0a2417,
   fog: { color: 0x113a26, density: CONFIG.FOG_DENSITY },
   palette: {},

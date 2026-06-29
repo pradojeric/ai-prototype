@@ -178,6 +178,49 @@ export class AudioManager {
     });
   }
 
+  // ---- one-shot guardian teleport ------------------------------------------
+  // Fired whenever the guardian blinks away (periodic roam OR wrong-answer flee).
+  // Flat full volume on the master bus so the player hears it from anywhere in
+  // the zone: a deep sub "boom" on the vanish + a small high sparkle on reappear,
+  // both sent into the echo tail so they ring out underwater.
+  playTeleport() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+
+    // Sub boom: a sine swept downward, fast attack and a fat decay.
+    const dur = 0.7;
+    const o = ctx.createOscillator();
+    const env = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t0);
+    o.frequency.exponentialRampToValueAtTime(34, t0 + dur);
+    env.gain.setValueAtTime(0.0001, t0);
+    env.gain.exponentialRampToValueAtTime(0.6, t0 + 0.02);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(env).connect(this.master);
+    env.connect(this.delay);
+    o.start(t0);
+    o.stop(t0 + dur);
+
+    // Sparkle: a few quick high bells as it reappears elsewhere.
+    const run = [1046.5, 1318.5, 1568.0]; // C6 E6 G6
+    run.forEach((freq, i) => {
+      const at = t0 + 0.16 + i * 0.05;
+      const so = ctx.createOscillator();
+      const senv = ctx.createGain();
+      so.type = 'triangle';
+      so.frequency.value = freq;
+      senv.gain.setValueAtTime(0.0001, at);
+      senv.gain.exponentialRampToValueAtTime(0.2, at + 0.01);
+      senv.gain.exponentialRampToValueAtTime(0.0001, at + 0.5);
+      so.connect(senv).connect(this.master);
+      senv.connect(this.delay);
+      so.start(at);
+      so.stop(at + 0.55);
+    });
+  }
+
   // ---- string hum (unchanged behavior) -------------------------------------
   setProximity(dist) {
     if (!this.ready) return;

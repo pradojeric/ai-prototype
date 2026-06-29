@@ -7,7 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
-  CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS,
+  CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
   RIDDLE_COUNT, mulberry32, wait,
 } from '../config.js';
 import { drawRiddles } from '../data.js';
@@ -22,6 +22,7 @@ import { RiddleScreen } from '../ui/RiddleScreen.js';
 import { Museum } from '../museum/Museum.js';
 import { IntroCutscene } from '../cutscene/IntroCutscene.js';
 import { DefeatCutscene } from '../cutscene/DefeatCutscene.js';
+import { FaintCutscene } from '../cutscene/FaintCutscene.js';
 
 const HOLD_TIME = 2.5;          // seconds to hold E to collect an artifact
 const HOLD_DRAIN = 1.8;         // progress units/sec lost when you release early
@@ -57,6 +58,7 @@ export class Game {
     this.museum = new Museum();                    // reusable digital-museum scene (future hub)
     this.cutscene = new IntroCutscene(this.museum); // scripted intro over the museum
     this.defeatCutscene = new DefeatCutscene();      // scripted guardian-defeat over the world
+    this.faintCutscene = new FaintCutscene();         // scripted black-out on a wrong answer
 
     // post-processing: bloom for the string glow. We keep the RenderPass so the
     // intro cutscene can borrow it to render the museum scene/camera.
@@ -100,6 +102,9 @@ export class Game {
     this.elStartZone = document.getElementById('start-zone');   // descend-screen zone heading
     this.elResume = document.getElementById('resume');
     this.elFlash = document.getElementById('flash');
+    this.elFaint = document.getElementById('faint');     // black-out overlay for the faint
+    this.elGspeak = document.getElementById('gspeak');   // guardian rebuke subtitle
+    this.elZintro = document.getElementById('zintro');   // per-zone entry dialogue subtitle
     this.elZoneDone = document.getElementById('zonecomplete');
     this.elSkipMuseum = document.getElementById('skipmuseum');
     this.elRingWrap = document.getElementById('holdring');
@@ -125,11 +130,14 @@ export class Game {
     this.player.controls.addEventListener('lock', () => {
       this.elStart.style.display = 'none';
       this.elResume.style.display = 'none';
-      // The defeat cinematic re-locks mid-sequence and manages its own UI; don't
-      // let this async lock event flip on the crosshair or end the cutscene early.
-      if (this.phase === 'defeat') return;
+      // The defeat/faint cinematics re-lock mid-sequence and manage their own UI;
+      // don't let this async lock event flip on the crosshair or end them early.
+      if (this.phase === 'defeat' || this.phase === 'faint') return;
       this.elCross.classList.add('active');
+      // A fresh descend into the zone (vs. an ESC-resume) plays the zone-intro dialogue.
+      const wasDescending = this.phase === 'descend';
       if (this.phase !== 'museum') this._startGameplayPhase();
+      if (wasDescending) this._playZoneIntro();
     });
     this.player.controls.addEventListener('unlock', () => {
       if (this.phase === 'museum') {
@@ -142,13 +150,18 @@ export class Game {
         this.elCross.classList.remove('active');
       }
     });
-    document.addEventListener('keydown', (e) => { if (e.code === 'KeyE') this.holdKey = true; });
+    document.addEventListener('keydown', (e) => {
+      if (e.code !== 'KeyE') return;
+      if (!this.holdKey) this._ePressed = true;   // rising edge: a single tap (consumed by the loop)
+      this.holdKey = true;
+    });
     document.addEventListener('keyup',   (e) => { if (e.code === 'KeyE') this.holdKey = false; });
     addEventListener('resize', () => {
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
       this.cutscene.resize(innerWidth, innerHeight);
       this.defeatCutscene.resize(innerWidth, innerHeight);
+      this.faintCutscene.resize(innerWidth, innerHeight);
       this.renderer.setSize(innerWidth, innerHeight);
       this.composer.setSize(innerWidth, innerHeight);
       this.artifacts.setResolution(innerWidth, innerHeight); // fat-line thickness
@@ -209,13 +222,9 @@ export class Game {
     for (let i = 0; i < riddles.length; i++) {
       const ok = await this.riddleScreen.show(riddles[i], i + 1, riddles.length);
       if (!ok) {
-        // Wrong: the guardian vanishes and the whole sequence resets to riddle 1.
-        const playerPos = this.player.controls.getObject().position;
-        this.guardian.teleport(playerPos);
-        this.guardian.setRoaming(true);
-        this.elGhint.classList.add('active');
-        this.busy = false;
-        this.player.controls.lock();
+        // Wrong: the guardian rebukes the player, vanishes, and the player faints
+        // and wakes back at the dock. The whole sequence resets to riddle 1.
+        await this._faintAndRespawn();
         return;
       }
     }
@@ -260,6 +269,64 @@ export class Game {
     this._startGameplayPhase();                       // phase='playing', crosshair + HUD on
   }
 
+  // Wrong answer: the guardian rebukes the player and teleports away, then the
+  // player faints (scripted camera droop under a black fade) and wakes at the
+  // dock. A scripted camera over the live world, mirroring _defeatGuardian.
+  async _faintAndRespawn() {
+    // 1. The guardian speaks its (per-zone) rebuke, still visible at its spot.
+    this.elGspeak.textContent =
+      this.world.zone.guardianRebuke || 'You are not worthy. Begone.';
+    this.elGspeak.classList.add('active');
+    await wait(FAINT.SPEAK * 1000);
+    this.elGspeak.classList.remove('active');
+
+    // 2. It flees — vanish + poof, audible from across the zone.
+    const playerPos = this.player.controls.getObject().position;
+    this.guardian.teleport(playerPos);
+    this.audio.playTeleport();
+
+    // 3. The player faints. Frame the droop with the cutscene camera and fade to
+    //    black. Re-lock NOW (last answer-click activation still valid) and hold it
+    //    through the cinematic so mouse-look is retained on waking — locking after
+    //    the async gap would silently fail and trap the player (see _defeatGuardian).
+    const camPos = this.camera.position.clone();
+    this._faintLook ||= new THREE.Vector3();
+    this.camera.getWorldDirection(this._faintLook);
+    const lookAt = camPos.clone().addScaledVector(this._faintLook, 5);
+
+    this.phase = 'faint';
+    this.elCross.classList.remove('active');
+    this.viewmodel.group.visible = false;
+    this.renderPass.camera = this.faintCutscene.camera;
+    this.player.controls.lock();
+    this.elFaint.classList.add('active');             // CSS fades to black
+
+    await this.faintCutscene.play(camPos, lookAt);
+    await wait(FAINT.BLACK_HOLD * 1000);              // unconscious in the dark
+
+    // 4. Wake at the dock (under the black), then fade back in.
+    this._spawnAtDock();
+    this._levelCamera();
+    this.renderPass.camera = this.camera;
+    this.viewmodel.group.visible = true;
+    this.elFaint.classList.remove('active');          // CSS fades from black
+
+    // 5. Resume seeking: the guardian roams again and the hint returns.
+    this.guardian.setRoaming(true);
+    this.busy = false;
+    this._startGameplayPhase();                        // phase='playing', crosshair + ghint
+  }
+
+  // Place the player on the raised dock spawn (south edge), facing north, at rest.
+  // Shared by zone entry (_loadZone) and the faint respawn.
+  _spawnAtDock() {
+    const obj = this.player.controls.getObject();
+    obj.position.set(0, CONFIG.DOCK_TOP + CONFIG.EYE_HEIGHT, 35);
+    this.camera.rotation.set(0, 0, 0);
+    this.player.velocity.set(0, 0, 0);
+    this.player.eyeBase = CONFIG.DOCK_TOP;
+  }
+
   // Reset the player camera to a level gaze (no up/down tilt or roll) while
   // preserving the current facing direction. Used to hand control back cleanly.
   _levelCamera() {
@@ -289,6 +356,15 @@ export class Game {
     return inRange;
   }
 
+  // Swap the interaction-prompt copy only when it actually changes (the loop
+  // calls this every frame; setting innerHTML unconditionally would reparse the
+  // node each frame — against this project's no-per-frame-churn convention).
+  _setPrompt(html) {
+    if (this._promptHtml === html) return;
+    this._promptHtml = html;
+    this.elPrompt.innerHTML = html;
+  }
+
   // Show the Descend screen for the currently-built zone: label it with the
   // active zone and reveal the overlay. Used both after the intro and on every
   // zone entry from the hub, so the player always reads which zone they're
@@ -312,7 +388,25 @@ export class Game {
     } else {
       this.elGhint.classList.add('active');   // still seeking the guardian
       this.elHud.classList.remove('active');
-      this.guardian.setRoaming(true);
+      // The guardian now WAITS at its start spot; roaming only begins after a
+      // wrong answer (see _startEncounter). So no setRoaming(true) here.
+    }
+  }
+
+  // Play the active zone's intro dialogue as a subtitle, one line at a time, over
+  // live gameplay (non-blocking — the player can wade while it reads). The token
+  // guard cancels a still-running intro if the player leaves/re-enters a zone.
+  async _playZoneIntro() {
+    const lines = this.world.zone.introDialogue;
+    if (!lines || !lines.length) return;
+    const token = (this._introToken = (this._introToken || 0) + 1);
+    for (const line of lines) {
+      if (token !== this._introToken) return;        // superseded by a newer entry
+      this.elZintro.textContent = line;
+      this.elZintro.classList.add('active');
+      await wait(ZONE_INTRO.LINE * 1000);
+      this.elZintro.classList.remove('active');
+      await wait(ZONE_INTRO.GAP * 1000);             // fade out before the next line
     }
   }
 
@@ -424,11 +518,7 @@ export class Game {
 
     // Leave the hub lighting behind and spawn on the dock like Zone 1.
     this.museum.setHubLighting(false);
-    const obj = this.player.controls.getObject();
-    obj.position.set(0, CONFIG.DOCK_TOP + CONFIG.EYE_HEIGHT, 35);
-    this.camera.rotation.set(0, 0, 0);
-    this.player.velocity.set(0, 0, 0);
-    this.player.eyeBase = CONFIG.DOCK_TOP;
+    this._spawnAtDock();
 
     // Always pause on the Descend screen for the active zone (first entry and
     // replays alike). Coming from the hub the player is pointer-locked, so unlock
@@ -488,6 +578,16 @@ export class Game {
       return;
     }
 
+    // Faint cinematic owns the camera; the world/guardian keep updating so the
+    // guardian's flee-poof plays out under the scripted droop (no artifacts yet).
+    if (this.phase === 'faint') {
+      this.world.update(dt, t);
+      this.guardian.update(dt, t, this.faintCutscene.camera.position);
+      this.faintCutscene.update(dt);
+      this.composer.render();
+      return;
+    }
+
     this.world.update(dt, t);
     if (!this.busy) this.player.update(dt);
     this.viewmodel.update(dt, !this.busy && this.player.moving);
@@ -495,14 +595,22 @@ export class Game {
     const playerPos = this.player.controls.getObject().position;
 
     // The guardian keeps animating every frame (so its defeat dissolve + puff
-    // still play out after it's beaten). Before it's beaten it roams and the
-    // player seeks it: walking into range auto-starts the riddle, and no
-    // artifacts exist yet.
+    // still play out after it's beaten). Before it's beaten the player walks up
+    // to it and TAPS E within range to start the riddle (no artifacts exist yet).
+    // It only begins roaming/teleporting after a wrong answer (see _startEncounter).
     const gdist = this.guardian.update(dt, t, playerPos);
+    if (this.guardian.teleportedThisFrame) this.audio.playTeleport();   // roam blink: heard from anywhere
     if (!this.bossDefeated) {
-      if (!this.busy && this.player.controls.isLocked && gdist <= GUARDIAN.ENCOUNTER_RANGE) {
-        this._startEncounter();
+      const inRange = !this.busy && this.player.controls.isLocked &&
+                      gdist <= GUARDIAN.ENCOUNTER_RANGE;
+      if (inRange) {
+        this._setPrompt('Press <b>E</b> to face the Guardian');
+        this.elPrompt.classList.add('active');
+        if (this._ePressed) this._startEncounter();
+      } else {
+        this.elPrompt.classList.remove('active');
       }
+      this._ePressed = false;   // consume the tap each frame
       this.composer.render();
       return;
     }
@@ -528,7 +636,9 @@ export class Game {
 
     const inRange = this._updateHold(dt);
 
-    // "Hold E" prompt: shown in range, hidden once the ring starts filling
+    // "Hold E" prompt: shown in range, hidden once the ring starts filling. Set
+    // the copy explicitly so it doesn't inherit the guardian's "Press E" text.
+    this._setPrompt('Hold <b>E</b> to reach toward it');
     this.elPrompt.classList.toggle('active', inRange && this.holdProgress < 0.02);
 
     this.composer.render();

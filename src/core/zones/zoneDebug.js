@@ -44,6 +44,13 @@ export const zoneDebug = {
   label: 'Debug Arena',   // descend-screen heading
 
   seed: 1337,
+  guardianStart: { x: 0, z: 16 },   // waits ahead of the dock (arena nodes cluster z≈6..20)
+  guardianRebuke: 'Wrong. You are not worthy. (debug rebuke)',   // shown on a wrong riddle answer
+  // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
+  introDialogue: [
+    '[Debug Arena] Zone-entry dialogue line 1 (placeholder).',
+    '[Debug Arena] Zone-entry dialogue line 2 (placeholder).',
+  ],
   background: 0x0c2b2c,
   fog: { color: 0x123c3a, density: CONFIG.FOG_DENSITY },
   palette: {},   // default flooded-market materials
