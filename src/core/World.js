@@ -1,12 +1,13 @@
 // ============================================================
-// WORLD — submerged Pantal Market District (GDD §3/§13)
-// Layout mirrors the reference district map ("The Flooded Memories"):
-//   map-North → -Z (far)   map-South → +Z (near, player dock spawn)
-//   Memories Alley (W) · Silent Auction Square (center-N) · Ruined Fish
-//   Warehouse (center-right N) · Lost Boatyard (E) · Drowning Stalls (center) ·
-//   Foggy Overlook (SE) · Player Dock (S). Open water lanes run between clusters.
-// Owns the scene, terrain, every structure, floating debris, and the
-// circle-vs-AABB collision registry.
+// WORLD — reusable submerged-zone engine (GDD §3/§13)
+// Owns the scene, atmosphere (lights/fog/water/floor/particles), the
+// circle-vs-AABB collision registry, support-height (dock/ladder), and a set of
+// reusable building PRIMITIVES (buildings, stalls, mangroves, the spawn dock,
+// floating debris). It is intentionally zone-agnostic: the actual district
+// layout, palette overrides, fog, seed, and spawn nodes come from a *zone
+// definition* (see src/core/zones/) whose `build(world)` runs against this
+// engine. Add a zone by writing one zone module + registering it — no changes
+// here. Create instances via `createWorld(zoneId)` from src/core/zones/index.js.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, mulberry32 } from '../config.js';
@@ -14,34 +15,30 @@ import { CONFIG, mulberry32 } from '../config.js';
 const W = CONFIG.WATER_LEVEL;
 
 export class World {
-  constructor() {
+  // `zone` is a zone definition: { id, name, seed, background, fog:{color,density},
+  // palette, build(world) }. The build hook constructs the districts in a fixed
+  // order (it drives the seeded RNG, so order is layout-significant).
+  constructor(zone) {
+    this.zone = zone;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0c2b2c);
-    this.scene.fog = new THREE.FogExp2(0x123c3a, CONFIG.FOG_DENSITY);
+    this.scene.background = new THREE.Color(zone.background);
+    this.scene.fog = new THREE.FogExp2(zone.fog.color, zone.fog.density);
 
     this.colliders = [];   // XZ footprints {minX,maxX,minZ,maxZ} for solid props
     this.debris = [];      // floating props that bob in update()
+    this.shafts = [];      // additive god-ray cones that shimmer in update()
     this.moundSpots = [];  // rubble mound centers (elevated_rubble spawn anchors)
     this.spawnNodes = { near_wall: [], submerged_interior: [], elevated_rubble: [], open_water: [] };
-    this.rng = mulberry32(20260618);
+    this.rng = mulberry32(zone.seed);
 
-    this._materials();
+    this._materials(zone.palette);
     this._lights();
     this._floor();
     this._water();
-    this._perimeter();        // bounding street edge (with gaps for lanes + dock)
-    this._memoriesAlley();    // west: dense small buildings + alleys
-    this._auctionSquare();    // center-north: open plaza + dais + columns
-    this._fishWarehouse();    // center-right north: big ruined landmark
-    this._boatyard();         // east: scattered boats + cradles + shed
-    this._drowningStalls();   // center: diagonal market rows
-    this._foggyOverlook();    // southeast: raised platform
-    this._dock();             // south: player start dock
-    this._mangroves();        // solid mangrove ring marking the level boundary
-    this._rubble();
-    this._debris();
-    this._particles();
-    this._spawnNodes();
+    // Zone content: districts, dock, mangrove boundary, rubble, debris, spawn
+    // nodes. RNG-driven, so the zone is responsible for a stable call order.
+    zone.build(this);
+    this._particles();     // uses Math.random (not the seeded rng) — order-safe
   }
 
   // ---- Collision registry --------------------------------------------------
@@ -67,7 +64,9 @@ export class World {
   }
 
   // ---- Atmosphere ----------------------------------------------------------
-  _materials() {
+  // Base flooded-market palette. A zone may shallow-merge overrides via its
+  // `palette` def to recolour any entry without forking the engine.
+  _materials(palette = {}) {
     this.mat = {
       wood:        new THREE.MeshStandardMaterial({ color: 0x3a2e22, roughness: .9 }),
       cloth:       new THREE.MeshStandardMaterial({ color: 0x53635a, roughness: 1, side: THREE.DoubleSide }),
@@ -85,6 +84,10 @@ export class World {
       bark:        new THREE.MeshStandardMaterial({ color: 0x2c2418, roughness: 1 }),
       foliage:     new THREE.MeshStandardMaterial({ color: 0x2f4a39, roughness: 1, flatShading: true }),
     };
+    // Apply per-zone colour overrides (key → hex) onto the base materials.
+    for (const [key, color] of Object.entries(palette)) {
+      if (this.mat[key]) this.mat[key].color.set(color);
+    }
   }
 
   _lights() {
@@ -143,6 +146,7 @@ export class World {
     this.scene.add(this.water);
   }
 
+  // ---- Reusable building primitives ----------------------------------------
   // Generic flooded building shell with dark inset windows on its +z face.
   // Returns the group; registers a collider unless solid:false.
   _building(x, z, w, d, h, rot = 0, opts = {}) {
@@ -174,124 +178,7 @@ export class World {
     return g;
   }
 
-  // ---- Perimeter: bounding street edge (gaps left for lanes + the S dock) --
-  _perimeter() {
-    const R = 45;
-    const h = () => 6 + this.rng() * 4;
-    // north edge (behind the warehouse / square)
-    for (const x of [-34, -18, 2, 18, 34]) this._building(x, -R, 13, 7, h(), 0);
-    // west edge (behind Memories Alley)
-    for (const z of [-12, 8, 28]) this._building(-R, z, 13, 7, h(), Math.PI / 2);
-    // east edge (behind the boatyard)
-    for (const z of [-22, -2, 22]) this._building(R, z, 13, 7, h(), -Math.PI / 2);
-    // south corners only — leave the center open for the dock
-    this._building(-38, R, 13, 7, h(), Math.PI);
-    this._building(38, R, 13, 7, h(), Math.PI);
-  }
-
-  // ---- Memories Alley: dense small buildings split by narrow alleys (W) ----
-  _memoriesAlley() {
-    // Three north-south rows of buildings; gaps between rows read as alleys.
-    const rows = [-40, -31, -22];
-    const zs = [-36, -27, -18, -9, 0];
-    for (const bx of rows) {
-      for (const bz of zs) {
-        if (this.rng() < 0.22) continue;               // missing house → pocket
-        const w = 4.5 + this.rng() * 2.5;
-        const d = 4.5 + this.rng() * 2.5;
-        const bh = 4.5 + this.rng() * 4.5;
-        this._building(bx + (this.rng() - 0.5), bz + (this.rng() - 0.5) * 1.5, w, d, bh);
-      }
-    }
-  }
-
-  // ---- The Silent Auction Square: open plaza, dais, ring of short columns --
-  _auctionSquare() {
-    const cx = -2, cz = -29;
-    // low stone dais (walkable, breaks the surface)
-    const dais = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.8, 0.5, 16), this.mat.concrete);
-    dais.position.set(cx, W - 0.1, cz);
-    this.scene.add(dais);
-    // ring of short broken columns around it (solid)
-    const ringN = 8;
-    for (let i = 0; i < ringN; i++) {
-      const a = (i / ringN) * Math.PI * 2;
-      const px = cx + Math.cos(a) * 6, pz = cz + Math.sin(a) * 6;
-      const ph = 2 + this.rng() * 1.8;                  // uneven, ruined heights
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, ph, 8), this.mat.concrete);
-      col.position.set(px, ph / 2, pz);
-      this.scene.add(col);
-      this.addCollider(px, pz, 0.35, 0.35);
-    }
-    // auctioneer's frame + hanging anchor (the map's anchor icon for this square)
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 0.2), this.mat.metal);
-    post.position.set(cx + 3.6, 2, cz); this.scene.add(post);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 2.4), this.mat.metal);
-    arm.position.set(cx + 3.6, 3.8, cz - 1); this.scene.add(arm);
-    const anchor = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.12, 8, 16), this.mat.rust);
-    anchor.position.set(cx + 3.6, 2.6, cz - 2); anchor.rotation.x = Math.PI / 2;
-    this.scene.add(anchor);
-    this.addCollider(cx + 3.6, cz, 0.3, 0.3);
-  }
-
-  // ---- The Ruined Fish Warehouse: large open shell landmark (center-right) -
-  _fishWarehouse() {
-    const cx = 23, cz = -34, hw = 9, hd = 7, wh = 8;   // half-extents + wall height
-    const wallMat = this.mat.rust;
-    const wall = (x, z, w, d, h) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-      m.position.set(x, h / 2, z); this.scene.add(m);
-      this.addCollider(x, z, w / 2, d / 2);
-    };
-    wall(cx - hw, cz, 0.6, hd * 2, wh);                 // left wall
-    wall(cx + hw, cz, 0.6, hd * 2, wh);                 // right wall
-    wall(cx, cz - hd, hw * 2, 0.6, wh);                 // back wall
-    // front wall: two stubs leaving a 4m entrance facing the player (+z)
-    wall(cx - 5.5, cz + hd, 7, 0.6, wh);
-    wall(cx + 5.5, cz + hd, 7, 0.6, wh);
-    // broken roof beams across the top (decor, non-colliding)
-    for (let i = -1; i <= 1; i++) {
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 0.3, 0.4), this.mat.metal);
-      beam.position.set(cx, wh + 0.2 + this.rng() * 0.4, cz + i * 4.5);
-      beam.rotation.z = (this.rng() - 0.5) * 0.25;       // sagging / fallen-in
-      this.scene.add(beam);
-    }
-    // fallen crates inside (decor, kept off the open interior center)
-    for (const [ox, oz] of [[-6, -4], [6, 3], [-5, 4]]) {
-      const c = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.8), this.mat.wood);
-      c.position.set(cx + ox, W + 0.3, cz + oz); c.rotation.y = this.rng();
-      this.scene.add(c);
-    }
-  }
-
-  // ---- The Lost Boatyard: scattered bangkâs, A-frame cradles, a shed (E) ---
-  _boatyard() {
-    const shed = this._building(40, 12, 7, 6, 4.5, -Math.PI / 2.4, { windows: false });
-    shed; // (placement only)
-    const boats = [[34, -2, 0.3], [38, 4, -0.6], [33, 10, 1.4], [40, 16, 0.1]];
-    for (const [x, z, rot] of boats) {
-      const hull = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 3.2, 4, 8), this.mat.metal);
-      hull.rotation.z = Math.PI / 2;
-      hull.rotation.y = rot;
-      hull.scale.set(1, 1, 0.55);
-      hull.position.set(x, W, z);
-      this.scene.add(hull);
-      const [fw, fd] = this._footprint(2.0, 0.7, rot);
-      this.addCollider(x, z, fw, fd);
-    }
-    // A-frame dry-dock cradles
-    for (const [x, z] of [[30, 6], [36, -6]]) {
-      const g = new THREE.Group();
-      for (const s of [-1, 1]) {
-        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 3, 0.18), this.mat.wood);
-        leg.position.set(s * 0.7, 1.5, 0); leg.rotation.z = -s * 0.4; g.add(leg);
-      }
-      g.position.set(x, 0, z); this.scene.add(g);
-      this.addCollider(x, z, 1.0, 0.4);
-    }
-  }
-
-  // ---- The Drowning Stalls: diagonal market rows (center) ------------------
+  // A market stall: posts, optional canopy + sign, a counter and loose wares.
   _stall(x, z, rot, opts = {}) {
     const { scale = 1, broken = false, tilt = 0 } = opts;
     const g = new THREE.Group();
@@ -327,47 +214,15 @@ export class World {
     this.addCollider(x, z, hw, hd);
   }
 
-  _drowningStalls() {
-    // Two facing rows running on a NW→SE diagonal across the market center,
-    // leaving a walkable aisle down the middle (the map's "Drowning Stalls").
-    const steps = 6;
-    for (let i = 0; i < steps; i++) {
-      const t = i / (steps - 1);
-      const cx = -12 + t * 26;             // -12 → 14
-      const cz = 16 - t * 22;              //  16 → -6
-      const broken = this.rng() < 0.3;
-      const tilt = (this.rng() - 0.5) * 0.16;
-      // left row faces +X (toward aisle), right row faces -X
-      this._stall(cx - 3, cz - 1.2, Math.PI / 2, { broken, tilt });
-      this._stall(cx + 3, cz + 1.2, -Math.PI / 2, { scale: 0.95 + this.rng() * 0.2 });
-    }
-  }
-
-  // ---- The Foggy Overlook: raised platform breaking the waterline (SE) -----
-  _foggyOverlook() {
-    const cx = 33, cz = 30;
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(8, 1.6, 8), this.mat.concrete);
-    slab.position.set(cx, W + 0.1, cz);
-    this.scene.add(slab);
-    this.addCollider(cx, cz, 4, 4);
-    // corner railing posts
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.2, 0.16), this.mat.metal);
-      post.position.set(cx + sx * 3.4, W + 1.4, cz + sz * 3.4);
-      this.scene.add(post);
-    }
-    this.moundSpots.push([cx, cz]);        // doubles as an elevated_rubble anchor
-  }
-
   // ---- Player Dock: RAISED platform you stand on, with a two-way ladder ----
   // The deck is dry (above the water) and walkable via height-following rather
   // than a collider. Railings wall off three sides so the only way down is the
   // north-center ladder, whose strip ramps the player between deck top and the
-  // water (see groundHeightAt). Footprint constants are mirrored there.
-  _dock() {
-    const cx = 0, cz = 34, top = CONFIG.DOCK_TOP;
-    this.dock = { cx, cz, halfX: 3.5, zBack: 38, zFront: 30, top,
-                  ladHalfX: 1.2, ladTop: 30, ladBot: 27 };
+  // water (see groundHeightAt). Sets `this.dock`, consumed by groundHeightAt.
+  _dock(opts = {}) {
+    const { cx = 0, cz = 34, top = CONFIG.DOCK_TOP } = opts;
+    this.dock = { cx, cz, halfX: 3.5, zBack: cz + 4, zFront: cz - 4, top,
+                  ladHalfX: 1.2, ladTop: cz - 4, ladBot: cz - 7 };
 
     // deck slab (top surface at `top`)
     const deck = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 8), this.mat.plank);
@@ -406,14 +261,14 @@ export class World {
     const lcx = cx, top2 = top, bot = W - 0.2;
     for (const sx of [-1, 1]) {
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 3.6), this.mat.wood);
-      rail.position.set(lcx + sx * 0.9, (top2 + bot) / 2, 28.5);
+      rail.position.set(lcx + sx * 0.9, (top2 + bot) / 2, cz - 5.5);
       rail.rotation.x = Math.atan2(top2 - bot, 3) - Math.PI / 2;
       this.scene.add(rail);
     }
     for (let i = 0; i < 5; i++) {
       const t = i / 4;
       const rung = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.07, 0.07), this.mat.wood);
-      rung.position.set(lcx, top2 - t * (top2 - bot), 30 - t * 3);
+      rung.position.set(lcx, top2 - t * (top2 - bot), (cz - 4) - t * 3);
       this.scene.add(rung);
     }
 
@@ -436,7 +291,7 @@ export class World {
     return 0;
   }
 
-  // ---- Mangroves: solid boundary ring marking the edge of the level --------
+  // ---- Mangroves: solid boundary marking the edge of the level -------------
   // A stylized mangrove: a tapered trunk, arching stilt roots splaying to the
   // waterline, and a few sparse dark canopy clumps. Each registers a collider.
   _mangrove(x, z) {
@@ -469,9 +324,11 @@ export class World {
     this.addCollider(x, z, 1.5, 1.5);   // dense footprints → a solid wall
   }
 
-  _mangroves() {
-    const E = 47;          // ring radius (just inside the ZONE_HALF=48 clamp)
-    const step = 3.6;      // close spacing so footprints overlap into a wall
+  // Square ring of mangroves walling off the level edge. Close spacing makes
+  // the overlapping footprints read as one solid boundary.
+  _mangroveRing(opts = {}) {
+    const { radius = 47, step = 3.6 } = opts;
+    const E = radius;
     for (let v = -E; v <= E; v += step) {
       const j = () => (this.rng() - 0.5) * 1.1;
       this._mangrove(v + j(), -E + j());   // north edge
@@ -481,35 +338,104 @@ export class World {
     }
   }
 
-  // ---- Terrain props: rubble mounds (decor) + elevated slabs (solid) -------
-  _rubble() {
-    const spots = [[-30, 20], [16, -20], [-8, 8], [26, -28]];
-    for (const [mx, mz] of spots) {
-      this.moundSpots.push([mx, mz]);
-      const n = 4 + Math.floor(this.rng() * 3);
-      for (let i = 0; i < n; i++) {
-        const s = 0.4 + this.rng() * 0.7;
-        const box = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), this.mat.rubble);
-        box.position.set(
-          mx + (this.rng() - 0.5) * 2.5,
-          W - 0.3 + s / 2 + this.rng() * 0.2,
-          mz + (this.rng() - 0.5) * 2.5,
-        );
-        box.rotation.set(this.rng(), this.rng(), this.rng());
-        this.scene.add(box);  // low + non-colliding so artifacts on them stay reachable
-      }
+  // ---- Vertical landmark: a tall, tapering ruined tower --------------------
+  // Reads through the fog from across the zone, giving the player a fixed point
+  // to navigate by (legibility). Built from stacked, slightly offset cylinder
+  // drums with a broken crown; only the base footprint is solid.
+  _tower(x, z, opts = {}) {
+    const { height = 16, baseR = 1.8, mat = this.mat.concrete } = opts;
+    const g = new THREE.Group();
+    const drums = Math.max(3, Math.round(height / 3));
+    let y = 0;
+    for (let i = 0; i < drums; i++) {
+      const t0 = i / drums, t1 = (i + 1) / drums;
+      const r0 = baseR * (1 - t0 * 0.55);
+      const r1 = baseR * (1 - t1 * 0.55);
+      const dh = height / drums;
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, dh, 8), mat);
+      // jitter each drum so the stack looks weathered / settled
+      drum.position.set((this.rng() - 0.5) * 0.25, y + dh / 2, (this.rng() - 0.5) * 0.25);
+      drum.rotation.y = this.rng() * Math.PI;
+      g.add(drum);
+      y += dh;
     }
+    // broken crown: a few leaning shards at the top
+    const shards = 3 + Math.floor(this.rng() * 3);
+    const topR = baseR * 0.45;
+    for (let i = 0; i < shards; i++) {
+      const a = (i / shards) * Math.PI * 2 + this.rng();
+      const sh = 0.8 + this.rng() * 1.4;
+      const shard = new THREE.Mesh(new THREE.BoxGeometry(0.3, sh, 0.3), mat);
+      shard.position.set(Math.cos(a) * topR, y + sh / 2 - 0.2, Math.sin(a) * topR);
+      shard.rotation.z = (this.rng() - 0.5) * 0.5;
+      g.add(shard);
+    }
+    g.position.set(x, 0, z);
+    this.scene.add(g);
+    this.addCollider(x, z, baseR, baseR);
+    return g;
+  }
+
+  // ---- Threshold: a broken stone gateway marking a district entrance --------
+  // Two leaning piers carry a sagging lintel; the walk-through center is open.
+  // `rot` aligns the opening across a path. Piers are solid, lintel is decor.
+  _ruinArch(x, z, rot = 0, opts = {}) {
+    const { span = 5, height = 4.5, mat = this.mat.concrete } = opts;
+    const g = new THREE.Group();
+    const pierW = 0.9, half = span / 2;
+    for (const s of [-1, 1]) {
+      const ph = height * (0.85 + this.rng() * 0.25);
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(pierW, ph, pierW), mat);
+      pier.position.set(s * half, ph / 2, 0);
+      pier.rotation.z = -s * (0.04 + this.rng() * 0.06);   // lean inward, ruined
+      g.add(pier);
+    }
+    // sagging lintel across the top (decor, non-colliding so it never blocks)
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(span + pierW, 0.7, pierW * 1.1), mat);
+    lintel.position.set(0, height + 0.1, 0);
+    lintel.rotation.z = (this.rng() - 0.5) * 0.08;
+    g.add(lintel);
+    g.position.set(x, 0, z);
+    g.rotation.y = rot;
+    this.scene.add(g);
+    // colliders for the two piers only (rotated footprint), opening stays clear
+    const ox = Math.cos(rot) * half, oz = -Math.sin(rot) * half;
+    const [hw, hd] = this._footprint(pierW / 2, pierW / 2, rot);
+    this.addCollider(x + ox, z + oz, hw, hd);
+    this.addCollider(x - ox, z - oz, hw, hd);
+    return g;
+  }
+
+  // ---- Atmosphere: a volumetric god-ray cone descending through the water ---
+  // Additive, non-colliding; framed over landmarks to add depth through fog and
+  // draw the eye. Registered in `this.shafts` so update() can shimmer opacity.
+  _lightShaft(x, z, opts = {}) {
+    const { topR = 3.2, botR = 0.6, height = CONFIG.WATER_LEVEL + 14, color = 0xbfe9e2, opacity = 0.07 } = opts;
+    const mat = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(botR, topR, height, 12, 1, true), mat);
+    cone.position.set(x, height / 2, z);   // wide end at the surface, narrow below
+    cone.frustumCulled = false;
+    this.scene.add(cone);
+    this.shafts.push({ mat, base: opacity, phase: this.rng() * Math.PI * 2 });
+    return cone;
   }
 
   // ---- Floating debris (bobs in update; large pieces are solid) ------------
-  _debris() {
-    for (let i = 0; i < 30; i++) {
-      // Keep debris off the dock + spawn: resample until clear of (0, 36).
+  // `clear` is a {x,z,r} keep-out disc (the spawn dock) so nothing traps the
+  // player; `count` controls density.
+  _debris(opts = {}) {
+    const { count = 30, clear = { x: 0, z: 36, r: 7 } } = opts;
+    const clr2 = clear.r * clear.r;
+    for (let i = 0; i < count; i++) {
+      // Keep debris off the dock + spawn: resample until clear.
       let x, z;
       do {
         x = (this.rng() - 0.5) * 80;
         z = (this.rng() - 0.5) * 80;
-      } while (x * x + (z - 36) * (z - 36) < 49);   // 7 m clear radius
+      } while ((x - clear.x) * (x - clear.x) + (z - clear.z) * (z - clear.z) < clr2);
       const kind = Math.floor(this.rng() * 5);
       let mesh, big = false;
       if (kind === 0)      { mesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.5), this.mat.wood); big = true; }      // crate
@@ -523,8 +449,8 @@ export class World {
         mesh, baseY: mesh.position.y, phase: this.rng() * Math.PI * 2,
         spin: (this.rng() - 0.5) * 0.3, amp: 0.04 + this.rng() * 0.05,
       });
-      // Solid only if it won't trap the player's spawn point (0, 36).
-      const dsx = x, dsz = z - 36;
+      // Solid only if it won't trap the player's spawn point.
+      const dsx = x - clear.x, dsz = z - clear.z;
       if (big && dsx * dsx + dsz * dsz > 9) this.addCollider(x, z, 0.5, 0.5);
     }
   }
@@ -547,21 +473,20 @@ export class World {
     this.scene.add(this.particles);
   }
 
-  // Spawn nodes anchored to the new districts (consumed by ArtifactManager).
-  _spawnNodes() {
-    this.spawnNodes.near_wall = [
-      [-30, -10], [-22, 2],          // Memories Alley building faces
-      [23, -26], [-2, -23],          // warehouse front, auction square edge
-      [40, 8],                       // boatyard shed
-    ];
-    this.spawnNodes.submerged_interior = [
-      [23, -34], [20, -32], [26, -36],   // inside the Fish Warehouse shell
-      [-2, -29],                          // on the auction dais
-    ];
-    this.spawnNodes.elevated_rubble = this.moundSpots.slice();   // overlook + mounds
-    this.spawnNodes.open_water = [
-      [-15, 6], [8, 4], [4, 22], [-18, -22],   // lanes between clusters
-    ];
+  // Tear down the whole zone scene so a zone-swap doesn't leak GPU resources.
+  // Disposes every geometry/material under the scene (water shader included) and
+  // drops the references the update loop walks. The player rig is re-parented by
+  // Game before this runs, so it isn't disposed here.
+  dispose() {
+    this.scene.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const m = o.material;
+      if (Array.isArray(m)) m.forEach((mm) => mm.dispose());
+      else if (m) m.dispose();
+    });
+    this.debris.length = 0;
+    this.shafts.length = 0;
+    this.colliders.length = 0;
   }
 
   update(dt, t) {
@@ -574,6 +499,10 @@ export class World {
       if (p.array[i] > 6) p.array[i] = 0;
     }
     p.needsUpdate = true;
+    // god-ray shafts breathe gently in intensity
+    for (const s of this.shafts) {
+      s.mat.opacity = s.base * (0.7 + Math.sin(t * 0.5 + s.phase) * 0.3);
+    }
     // floating debris bob + slow spin
     for (const d of this.debris) {
       d.mesh.position.y = d.baseY + Math.sin(t * 0.8 + d.phase) * d.amp;

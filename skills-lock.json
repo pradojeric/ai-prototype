@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "threejs-game": {
+      "source": "natea/fitfinder",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/threejs-game/SKILL.md",
+      "computedHash": "fba39006bdf9a3023c1ffc7dd9cc8095cf7da934c4360b6678e235cc5ab2d4db"
+    }
+  }
+}

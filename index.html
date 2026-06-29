@@ -51,6 +51,28 @@
   #hud .label { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--teal); opacity: .8; }
   #hud .count { font-size: 30px; font-weight: bold; letter-spacing: 2px; }
 
+  /* ---- Stamina bar (bottom-left) ---- */
+  #stamina {
+    position: fixed; bottom: 26px; left: 26px;
+    width: 180px; pointer-events: none;
+    opacity: 0; transition: opacity .4s;
+    text-shadow: 0 2px 10px rgba(0,0,0,.7);
+  }
+  #stamina.active { opacity: 1; }
+  #stamina .label { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--teal); opacity: .7; margin-bottom: 6px; }
+  #stamina .track {
+    height: 8px; border-radius: 6px; overflow: hidden;
+    background: rgba(234, 246, 244, 0.12);
+    border: 1px solid rgba(111,216,208,.25);
+  }
+  #stamina .fill {
+    height: 100%; width: 100%;
+    background: var(--teal);
+    box-shadow: 0 0 8px rgba(111,216,208,.7);
+    transition: width .1s linear, background .3s;
+  }
+  #stamina.low .fill { background: #d98a6f; box-shadow: 0 0 8px rgba(217,138,111,.7); }
+
   /* ---- Interact prompt ---- */
   #prompt {
     position: fixed; bottom: 18%; left: 50%; transform: translateX(-50%);
@@ -62,29 +84,80 @@
   #prompt.active { opacity: 1; }
   #prompt b { color: var(--amber); }
 
-  /* ---- Start overlay ---- */
-  #start, #discovery, #zonecomplete {
+  /* ---- Guardian hint (shown while seeking the guardian) ---- */
+  #ghint {
+    position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
+    text-align: center; pointer-events: none;
+    opacity: 0; transition: opacity .6s;
+    text-shadow: 0 2px 12px rgba(0,0,0,.7);
+  }
+  #ghint.active { opacity: 1; }
+  #ghint .label { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--teal); opacity: .85; }
+  #ghint .sub { font-size: 14px; font-style: italic; opacity: .6; margin-top: 4px; }
+
+  /* ---- Riddle (bugtong) overlay ---- */
+  #riddle {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(circle at 50% 40%, rgba(13,42,46,.96) 0%, rgba(4,9,11,.98) 85%);
+    opacity: 0; pointer-events: none; transition: opacity .55s ease; z-index: 24; padding: 5vw;
+  }
+  #riddle.active { opacity: 1; pointer-events: auto; }
+  #riddle .card { max-width: 640px; }
+  #riddle .step { font-size: 12px; letter-spacing: 4px; text-transform: uppercase; color: var(--amber); opacity: .85; }
+  #riddle .fil { margin-top: 14px; font-size: 30px; letter-spacing: 1px; color: var(--teal); }
+  #riddle .eng { font-size: 14px; font-style: italic; opacity: .55; margin-top: 4px; }
+  #riddle hr { width: 60px; border: none; border-top: 2px solid rgba(201,161,107,.6); margin: 24px auto; }
+  #riddle .prompt { font-size: 22px; line-height: 1.7; }
+  #riddle .prompt-eng { font-size: 14px; font-style: italic; opacity: .5; margin-top: 8px; }
+  #riddle .answers { margin-top: 34px; display: flex; flex-direction: column; gap: 14px; align-items: stretch; }
+  #riddle .answer {
+    font-family: inherit; color: #eaf6f4; background: rgba(10,21,24,.55);
+    border: 1px solid rgba(111,216,208,.4); border-radius: 12px;
+    padding: 16px 24px; font-size: 17px; letter-spacing: .5px; cursor: pointer;
+    transition: background .2s, border-color .2s, opacity .3s; backdrop-filter: blur(3px);
+  }
+  #riddle .answer:hover { background: rgba(111,216,208,.16); border-color: var(--teal); }
+  #riddle .answer.correct { background: rgba(42,125,114,.55); border-color: #2a7d72; color: #d6fff5; }
+  #riddle .answer.wrong { background: rgba(150,52,52,.5); border-color: #b85c5c; color: #ffe2e2; }
+  #riddle .answer.dim { opacity: .35; }
+
+  /* ---- Title + Start overlays ---- */
+  #title, #start, #resume, #discovery, #zonecomplete {
     position: fixed; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center;
     z-index: 10;
   }
-  #start {
+  #title, #start, #resume {
     background: radial-gradient(circle at 50% 40%, #0d2a2e 0%, #04090b 80%);
     cursor: pointer;
   }
-  #start h1 {
+  #resume { z-index: 23; }
+  #title h1, #start h1 {
     font-size: 64px; letter-spacing: 14px; font-weight: normal;
     color: var(--teal); text-shadow: 0 0 40px rgba(111,216,208,.5);
   }
-  #start .sub { margin-top: 14px; font-style: italic; opacity: .65; font-size: 17px; }
+  #title .sub, #start .sub, #resume .sub { margin-top: 14px; font-style: italic; opacity: .65; font-size: 17px; }
   #start .zone { margin-top: 40px; font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: var(--amber); opacity: .8; }
-  #start .enter {
+  #title .enter, #start .enter, #resume .enter, #zonecomplete .enter {
     margin-top: 44px; padding: 14px 34px; border: 1px solid var(--teal);
     border-radius: 40px; font-size: 15px; letter-spacing: 3px; text-transform: uppercase;
     animation: pulse 2.6s ease-in-out infinite;
   }
   #start .controls { margin-top: 34px; font-size: 12px; opacity: .45; letter-spacing: 1px; line-height: 1.9; }
+  #title .skip {
+    margin-top: 20px; padding: 8px 22px; border: 1px solid rgba(111,216,208,.35);
+    border-radius: 30px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    opacity: .5; cursor: pointer; transition: opacity .2s;
+  }
+  #title .skip:hover { opacity: 1; }
   @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
+
+  /* ---- Wake (eyes-open) black fade for the intro cutscene ---- */
+  #wake {
+    position: fixed; inset: 0; background: #04090b; opacity: 0;
+    pointer-events: none; z-index: 15; transition: opacity 2.4s ease;
+  }
 
   /* ---- White flash + Discovery ---- */
   #flash {
@@ -121,7 +194,7 @@
     background: radial-gradient(circle at 50% 45%, #173b3a 0%, #04090b 85%);
     opacity: 0; pointer-events: none; transition: opacity 1.6s ease; z-index: 22;
   }
-  #zonecomplete.active { opacity: 1; pointer-events: auto; }
+  #zonecomplete.active { opacity: 1; pointer-events: auto; cursor: pointer; }
   #zonecomplete h2 { font-size: 30px; letter-spacing: 6px; color: var(--teal); font-weight: normal; }
   #zonecomplete .quote { margin-top: 28px; font-size: 20px; font-style: italic; max-width: 560px; line-height: 1.7; }
   #zonecomplete .trans { margin-top: 12px; font-size: 14px; opacity: .55; }
@@ -145,16 +218,34 @@
     <div class="count"><span id="found">0</span> / 3</div>
   </div>
 
+  <div id="stamina">
+    <div class="label">Stamina</div>
+    <div class="track"><div class="fill" id="stamina-fill"></div></div>
+  </div>
+
   <div id="prompt">Hold <b>E</b> to reach toward it</div>
+
+  <div id="ghint">
+    <div class="label">Find the Guardian</div>
+    <div class="sub">Follow the light. Answer its bugtong to free the memories.</div>
+  </div>
+
+  <div id="title" style="display:none">
+    <h1>STRINGS</h1>
+    <div class="sub">"You wake where the art has not yet arrived."</div>
+    <div class="enter">Click to Awaken</div>
+    <div class="skip" id="skipmuseum">Skip to Museum</div>
+  </div>
 
   <div id="start" style="display:none">
     <h1>STRINGS</h1>
     <div class="sub">"Beneath the water, the city still breathes."</div>
-    <div class="zone">Zone 1 — Pantal Market</div>
+    <div class="zone" id="start-zone">Zone 1 — Pantal Market</div>
     <div class="enter">Click to Descend</div>
-    <div class="controls">WASD — Wade · MOUSE — Look · E — Reach · ESC — Release</div>
+    <div class="controls">WASD — Wade · SHIFT — Sprint · MOUSE — Look · E — Reach · ESC — Release</div>
   </div>
 
+  <div id="wake"></div>
   <div id="flash"></div>
 
   <div id="discovery">
@@ -171,10 +262,28 @@
     </div>
   </div>
 
+  <div id="riddle">
+    <div class="card">
+      <div class="step" id="r-step"></div>
+      <div class="fil" id="r-fil"></div>
+      <div class="eng" id="r-eng"></div>
+      <hr />
+      <div class="prompt" id="r-prompt"></div>
+      <div class="prompt-eng" id="r-prompt-eng"></div>
+      <div class="answers" id="r-answers"></div>
+    </div>
+  </div>
+
   <div id="zonecomplete">
     <h2>ZONE 1 COMPLETE</h2>
     <div class="quote">"Hindi natin malilimutan ang isang bagay na ating minahal."</div>
     <div class="trans">(We cannot forget something we have loved.)</div>
+    <div class="enter">Return to your Museum</div>
+  </div>
+
+  <div id="resume" style="display:none">
+    <div class="sub">"The gallery waits in the quiet."</div>
+    <div class="enter">Click to keep looking</div>
   </div>
 
 <script type="importmap">

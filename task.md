@@ -44,6 +44,58 @@ random artifacts · keep south spawn (0,36). Orientation: map-N → -Z (far).
 - [x] Static verify: ES-module syntax OK, serves 200, World.js 470 lines
 - [ ] User in-browser verify: districts read like the map, loop + 3/3 intact
 
+## Level-Design Overhaul Pass (spine + landmarks + atmosphere)
+Goals: navigation/legibility · exploration pacing · guardian encounter flow · atmosphere.
+Restructure districts; engine changes to World.js allowed.
+- [x] Add `_tower`, `_ruinArch`, `_lightShaft` primitives to World.js (+ shaft shimmer hook)
+- [x] Restructure zone1.js around a central N-S avenue + terminal landmark
+- [x] Re-route Drowning Stalls to line the avenue
+- [x] Promote Auction Square with tower + arch gateway
+- [x] Add ruin-arch gateways to district entrances; light shafts over landmarks
+- [x] Rewrite setSpawnNodes() for spread + avenue sightline
+- [x] Fix build() call order (RNG determinism); syntax-checked, both files < 1000 lines
+- [ ] User in-browser verify: legibility, encounter, scatter, collision, atmosphere
+
+## Multi-Zone Loop Pass (hub-and-spoke + placeholder Zones 2 & 3)
+Goal: complete the game loop across three zones via the museum hub. Decisions (user):
+hub-and-spoke · sequential unlock · NO reload (completed zones stay re-enterable,
+free-roam hub) · bare-minimum placeholder zones · distinct guardian per zone.
+- [x] `zones/zone2.js`, `zones/zone3.js` — bare arenas (dock + mangrove ring + a few
+      cover boxes + debris), distinct bg/fog/seed, spawn nodes for every artifact tag
+- [x] `guardians/zone2Guardian.js` (amber-green spire-wisp), `zone3Guardian.js`
+      (violet-blue many-eyed mound) — distinct silhouettes, shared builder contract
+- [x] Register zones in `zones/index.js`, builders in `guardians/index.js`
+- [x] `Museum.js` — per-portal barrier Group + panel mat + corridor entry point;
+      `unlockPortal(zone)`; generalized panel breathing; `setHallLit` via `hallPortal`
+- [x] `World.dispose()` — lightweight scene teardown for zone swaps
+- [x] `Game.js` — `_loadZone(id)` (rebuild world/guardian/artifacts, re-wire physics,
+      reset state, spawn on dock), `_enterZoneFromHub` (white-flash swap),
+      `_startGameplayPhase` (start when already pointer-locked from the hub),
+      `_zoneComplete` marks done + unlocks next, museum loop enters zone per portal;
+      removed reload-to-title `_exitToTitle`
+- [x] Static verify: `node --check` passes all touched/new modules
+- [ ] User in-browser verify: Z1→hub(Z2 open)→Z2→hub(Z3 open)→Z3→hub all open;
+      re-enter a finished zone; locked corridors stay sealed; console clean over swaps
+
+## Artifact "Echo" audio locator + procedural theme music
+Goal: a sound emitted from each artifact, audible from a WIDER area than the string
+(~28m vs the line's ~13m), that helps the player locate it by ear and makes the
+theme music swell on approach. Decisions (user): procedural Web Audio (no assets) ·
+detectable farther out than the string · music swells near the echo.
+- [x] `config.js` — `ECHO` (RANGE/REF_DIST/PING_INTERVAL/GAIN) + `MUSIC_SWELL_RANGE`
+- [x] `audio/EchoVoice.js` (new) — per-artifact spatialized PannerNode (HRTF, inverse
+      distance, maxDistance=ECHO.RANGE) emitting a phased pentatonic bell ping
+- [x] `audio/AudioManager.js` — master bus + feedback-delay echo tail; ambient drone
+      bed (LFO-swept lowpass); sparse pentatonic melody (swell target); camera-driven
+      AudioListener; `addEcho/removeEcho/clearEchoes`, `setSwell`, `updateListener`;
+      kept the original string hum/`setProximity`
+- [x] `Game.js` — register echoes on scatter, `removeEcho` on collect, `clearEchoes`
+      on zone reload, `updateListener`+`setSwell` each playing frame
+- [x] Static verify: `node --check` passes all touched/new modules
+- [ ] User in-browser verify: defeat guardian → echoes ping from beyond the string &
+      pan with the camera; approach swells the music; collect silences that echo;
+      zone reload leaves no stuck pings
+
 ## Module layout
 - `index.html` — shell (HTML/CSS/importmap) → `src/main.js`
 - `src/config.js`, `src/data.js` — config/utils, artifact data + mock API

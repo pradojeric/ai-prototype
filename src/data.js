@@ -39,3 +39,106 @@ export function fetchArtifactData(id) {
     setTimeout(() => resolve(data), 120); // simulate latency
   });
 }
+
+// ------------------------------------------------------------
+// GUARDIAN — flavour text for the riddle screen header.
+// ------------------------------------------------------------
+export const GUARDIAN_TEXT = {
+  fil: 'Bantay ng Pantal',
+  eng: 'Guardian of the Market',
+  intro: 'Sagutin ang aking bugtong upang palayain ang mga alaala.',
+  introEng: 'Answer my riddle to free the memories.',
+};
+
+// ------------------------------------------------------------
+// RIDDLE POOL ("bugtong") — PLACEHOLDER content. Each riddle has exactly three
+// choices; mark the correct one with `correct: true`. The encounter draws
+// RIDDLE_COUNT distinct riddles from this pool, so keep the pool larger than
+// that count for variety on retries. Preserve Filipino/Pangasinan diacritics.
+// ------------------------------------------------------------
+export const RIDDLE_POOL = [
+  {
+    id: 'bugtong_001',
+    fil: 'Bugtong',
+    eng: 'Riddle',
+    prompt: '[PLACEHOLDER] Palitan ng tunay na bugtong dito.',
+    promptEng: '[PLACEHOLDER] Replace with a real riddle here.',
+    choices: [
+      { text: 'Sagot A (tama)', correct: true },
+      { text: 'Sagot B', correct: false },
+      { text: 'Sagot C', correct: false },
+    ],
+  },
+  {
+    id: 'bugtong_002',
+    fil: 'Bugtong',
+    eng: 'Riddle',
+    prompt: '[PLACEHOLDER] Pangalawang bugtong.',
+    promptEng: '[PLACEHOLDER] Second riddle.',
+    choices: [
+      { text: 'Sagot A', correct: false },
+      { text: 'Sagot B (tama)', correct: true },
+      { text: 'Sagot C', correct: false },
+    ],
+  },
+  {
+    id: 'bugtong_003',
+    fil: 'Bugtong',
+    eng: 'Riddle',
+    prompt: '[PLACEHOLDER] Pangatlong bugtong.',
+    promptEng: '[PLACEHOLDER] Third riddle.',
+    choices: [
+      { text: 'Sagot A', correct: false },
+      { text: 'Sagot B', correct: false },
+      { text: 'Sagot C (tama)', correct: true },
+    ],
+  },
+  {
+    id: 'bugtong_004',
+    fil: 'Bugtong',
+    eng: 'Riddle',
+    prompt: '[PLACEHOLDER] Pang-apat na bugtong.',
+    promptEng: '[PLACEHOLDER] Fourth riddle.',
+    choices: [
+      { text: 'Sagot A (tama)', correct: true },
+      { text: 'Sagot B', correct: false },
+      { text: 'Sagot C', correct: false },
+    ],
+  },
+  {
+    id: 'bugtong_005',
+    fil: 'Bugtong',
+    eng: 'Riddle',
+    prompt: '[PLACEHOLDER] Panlimang bugtong.',
+    promptEng: '[PLACEHOLDER] Fifth riddle.',
+    choices: [
+      { text: 'Sagot A', correct: false },
+      { text: 'Sagot B (tama)', correct: true },
+      { text: 'Sagot C', correct: false },
+    ],
+  },
+  {
+    id: 'bugtong_006',
+    fil: 'Bugtong',
+    eng: 'Riddle',
+    prompt: '[PLACEHOLDER] Pang-anim na bugtong.',
+    promptEng: '[PLACEHOLDER] Sixth riddle.',
+    choices: [
+      { text: 'Sagot A', correct: false },
+      { text: 'Sagot B', correct: false },
+      { text: 'Sagot C (tama)', correct: true },
+    ],
+  },
+];
+
+// Draw `n` distinct riddles from the pool using a seeded PRNG (`rng` from
+// mulberry32). Returns a fresh array; the pool itself is never mutated.
+export function drawRiddles(n, rng) {
+  const pool = RIDDLE_POOL.slice();
+  // Fisher–Yates shuffle driven by the seeded rng.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, Math.min(n, pool.length));
+}
