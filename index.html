@@ -557,11 +557,12 @@
     }
 
     #discovery .icon {
-      width: 120px;
-      height: 120px;
+      width: 160px;
+      height: 160px;
       margin: 0 auto 30px;
       border-radius: 12px;
       background: linear-gradient(135deg, #2a4f52, #6fd8d0);
+      object-fit: contain;
       box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
       animation: float 4s ease-in-out infinite;
     }
@@ -702,7 +703,7 @@
 
   <div id="hud">
     <div class="label">Artifacts Recovered</div>
-    <div class="count"><span id="found">0</span> / 3</div>
+    <div class="count"><span id="found">0</span> / <span id="total">3</span></div>
   </div>
 
   <div id="stamina">
@@ -742,7 +743,7 @@
 
   <div id="discovery">
     <div class="card">
-      <div class="icon"></div>
+      <img class="icon" id="d-img" alt="" />
       <div class="fil" id="d-fil"></div>
       <div class="eng" id="d-eng"></div>
       <hr />
@@ -767,10 +768,10 @@
   </div>
 
   <div id="zonecomplete">
-    <h2>ZONE 1 COMPLETE</h2>
-    <div class="quote">"Hindi natin malilimutan ang isang bagay na ating minahal."</div>
-    <div class="trans">(We cannot forget something we have loved.)</div>
-    <div class="enter">Return to your Museum</div>
+    <h2 id="zc-title">ZONE 1 COMPLETE</h2>
+    <div class="quote" id="zc-quote">"Hindi natin malilimutan ang isang bagay na ating minahal."</div>
+    <div class="trans" id="zc-trans">(We cannot forget something we have loved.)</div>
+    <div class="enter" id="zc-enter">Return to your Museum</div>
   </div>
 
   <div id="resume" style="display:none">

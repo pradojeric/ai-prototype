@@ -16,7 +16,7 @@ export const CONFIG = {
   FOG_DENSITY: 0.03,        // lighter than before so the larger space reads
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
-  DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
+  DEBUG_ZONE: true,       // true → force the small debug arena instead of zone1/2/3
 };
 
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).
@@ -93,6 +93,7 @@ export const RIDDLE_COUNT = 3;
 
 // Artifact scatter (post-defeat): artifacts burst from the guardian's spot and
 // arc out to spread-out landing points.
+export const ARTIFACT_BATCH = 3;      // uncollected artifacts revealed per zone visit
 export const ARTIFACT_MIN_SEP = 14;   // min distance between two landed artifacts
 export const SCATTER_DURATION = 1.3;  // seconds of flight from origin to landing
 export const SCATTER_ARC_HEIGHT = 4;  // apex height added to the flight arc
