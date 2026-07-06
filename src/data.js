@@ -3,12 +3,14 @@
 // ============================================================
 import { shuffle } from './config.js';
 
+// Zone-1 provenance label. Per-zone discovery cards read the active zone's
+// name (world.zone.name) instead; this remains the fallback / Zone-1 default.
 export const ZONE_NAME = 'Pantal Market';
 
 // Mock "City-Wide Portal API" payloads — local, no network. Zone 1's set is the
-// "Ponsia" collection: ten Pangasinan delicacies recovered from the submerged
+// "Ponsia" collection: eleven Pangasinan delicacies recovered from the submerged
 // Pantal Market. Players surface them three at a time, returning across visits
-// until all ten are restored to the Digital Museum. `image` points at the
+// until all eleven are restored to the Digital Museum. `image` points at the
 // artwork served from assets/ (see ArtifactManager + DiscoveryScreen + Museum).
 export const ARTIFACT_DATA = [
   {
@@ -110,6 +112,185 @@ export const ARTIFACT_DATA = [
     spawnTag: 'open_water',
     image: 'assets/artifacts/zone1/tupig.png',
     zone: 1,
+  },
+  {
+    id: 'bangus_011',
+    fil: 'Bangus',
+    eng: 'Milkfish',
+    fact: 'The silver milkfish raised in the brackish ponds of Dagupan — celebrated as the sweetest, most tender bangus in the country. The famed Bonuan bangus feeds on natural pond algae, giving its flesh a clean, delicate flavor that made Dagupan the "Bangus Capital of the Philippines."',
+    note: 'Bangus is Pangasinan pride made flesh — an entire city’s livelihood, festival (the Bangus Festival), and identity swimming in one fish. To lose it to the flood is to lose the province’s very namesake dish.',
+    spawnTag: 'submerged_interior',
+    image: 'assets/artifacts/zone1/bangus.png',
+    zone: 1,
+  },
+
+  // ---- ZONE 2 — "Liket" collection: nine Pangasinan festivals (LIKET, the
+  // Festival Zone). Liket is joy; each artifact is a celebration the flood
+  // silenced, waiting to be danced back to life in the Digital Museum. ----
+  {
+    id: 'bagoong_festival_012',
+    fil: 'Piyestang Bagoong',
+    eng: 'Bagoong Festival',
+    fact: 'Lingayen and the fishing towns along the gulf honor bagoong — the salted, sun-fermented fish paste that has flavored Pangasinan cooking for centuries. Streets fill with street-dancing, floats, and stalls of freshly jarred bagoong and its amber fish sauce, patís.',
+    note: 'A festival for a humble condiment is really a festival for the sea and the patient labor that preserves its gifts. Liket — joy — is found in giving thanks for what quietly sustains the everyday table.',
+    spawnTag: 'near_wall',
+    image: 'assets/artifacts/zone2/bagoong-festival.jpg',
+    zone: 2,
+  },
+  {
+    id: 'bangus_festival_013',
+    fil: 'Piyestang Bangus',
+    eng: 'Milkfish Festival',
+    fact: 'Dagupan City’s grandest celebration, honoring the sweet Bonuan bangus that made the city the Bangus Capital of the Philippines. Its highlights include the "Gilon" street dance, the bangus rodeo, and a record-breaking grill that stretches down the boulevard in clouds of fragrant smoke.',
+    note: 'When a city throws a festival for a single fish, the fish has become far more than food — it is livelihood, identity, and civic pride, all served on one banana leaf.',
+    spawnTag: 'open_water',
+    image: 'assets/artifacts/zone2/bangus-festival.jpg',
+    zone: 2,
+  },
+  {
+    id: 'binungey_festival_014',
+    fil: 'Piyestang Binungey',
+    eng: 'Bamboo Rice Festival',
+    fact: 'Bolinao’s town fiesta built around binungey — glutinous rice and coconut milk roasted inside a length of bamboo until the cane chars and the rice steams sweet within. The festival lines the streets with smoking bamboo and dancers in coastal costume.',
+    note: 'Binungey needs only bamboo, fire, and know-how, and so its festival is a quiet boast: this town can conjure a feast from the land itself.',
+    spawnTag: 'submerged_interior',
+    image: 'assets/artifacts/zone2/binungey-festival.jpg',
+    zone: 2,
+  },
+  {
+    id: 'galicayo_festival_015',
+    fil: 'Piyestang Galicayo',
+    eng: 'Galicayo Festival',
+    fact: 'A vibrant Pangasinan town festival of thanksgiving, marked by ground-shaking street-dance competitions, ornate floats, and offerings drawn from the season’s harvest. Colour and rhythm turn the whole plaza into a single moving crowd.',
+    note: 'The particular steps may fade from memory, but the impulse behind them endures — a community pausing its labour to dance its gratitude in the open air.',
+    spawnTag: 'elevated_rubble',
+    image: 'assets/artifacts/zone2/galicayo-festival.jpg',
+    zone: 2,
+  },
+  {
+    id: 'mangunguna_festival_016',
+    fil: 'Piyestang Mangunguna',
+    eng: 'Pioneers’ Festival',
+    fact: 'A festival honouring the mangunguna — the "first ones," the pioneers and forebears whose labour founded and fed a Pangasinan town. Processions, tributes, and communal feasting retell the story of those who came before.',
+    note: 'To name a festival for the pioneers is to admit a debt: every harvest and every home rests on the hands of people whose names the tide has almost taken.',
+    spawnTag: 'near_wall',
+    image: 'assets/artifacts/zone2/mangunguna-festival.jpg',
+    zone: 2,
+  },
+  {
+    id: 'patupat_festival_017',
+    fil: 'Piyestang Patupat',
+    eng: 'Patupat Festival',
+    fact: 'San Manuel celebrates patupat — glutinous rice packed into diamond pouches woven from palm leaves, boiled and steeped in thick coconut-sugar syrup. The town square fills with the craft of leaf-weaving passed from mother to child.',
+    note: 'Each woven pouch is a small act of patience folded around the harvest; a festival of patupat is a festival of the hands that still remember how.',
+    spawnTag: 'open_water',
+    image: 'assets/artifacts/zone2/patupat-festival.png',
+    zone: 2,
+  },
+  {
+    id: 'pindang_festival_018',
+    fil: 'Piyestang Pindang',
+    eng: 'Cured Meat Festival',
+    fact: 'A festival built around pindang — beef or carabao cured with salt and garlic and dried under the Pangasinan sun into a tangy, savoury staple. Grills glow along the streets as the town shares its signature preserved meat.',
+    note: 'Before ice and cold storage, drying and curing were how a town banked its meat against lean days; pindang’s festival celebrates thrift turned into flavour.',
+    spawnTag: 'submerged_interior',
+    image: 'assets/artifacts/zone2/pindang-festival.jpg',
+    zone: 2,
+  },
+  {
+    id: 'pistay_dayat_019',
+    fil: 'Pista’y Dayat',
+    eng: 'Feast of the Sea',
+    fact: 'A thanksgiving festival of the coastal towns — Lingayen chief among them — held to honour the sea and pray for a bountiful, gentle harvest of fish. Fluvial parades, beach rites, and offerings carried out over the water mark the first of May.',
+    note: 'Pista’y Dayat bows to the same gulf that gives and takes; its gratitude and its plea are the two halves of every fishing life along this shore.',
+    spawnTag: 'elevated_rubble',
+    image: 'assets/artifacts/zone2/pistay-dayat.webp',
+    zone: 2,
+  },
+  {
+    id: 'talong_festival_020',
+    fil: 'Piyestang Talong',
+    eng: 'Eggplant Festival',
+    fact: 'Villasis, the eggplant capital of Pangasinan, honours the humble talong with street-dancing, cooking contests, and towering displays of the glossy purple harvest. Farmers parade the crop that anchors the town’s fields and market.',
+    note: 'A whole festival for the eggplant is a farming town’s love letter to its own soil — proof that pride can grow in the most ordinary furrow.',
+    spawnTag: 'near_wall',
+    image: 'assets/artifacts/zone2/talong-festival.jpeg',
+    zone: 2,
+  },
+
+  // ---- ZONE 3 — "Pananisia" collection: seven drowned landmarks of
+  // Pangasinan. Where zones 1–2 recover food and festival, Pananisia recovers
+  // place itself — the monuments, shrines, and shores that hold the province’s
+  // memory. ----
+  {
+    id: 'hundred_islands_021',
+    fil: 'Sandaang Isla',
+    eng: 'Hundred Islands',
+    fact: 'The scattered green-capped islets of the Lingayen Gulf off Alaminos City — some one hundred and twenty-four at low tide — form Pangasinan’s most famous seascape and its first national park. Ancient coral, thought to be thousands of years old, shaped each mushroom-stemmed island.',
+    note: 'The islands have watched over the gulf far longer than any town; to see them drowned is to feel how even the oldest, steadiest landmarks are not beyond the reach of the water.',
+    spawnTag: 'open_water',
+    image: 'assets/artifacts/zone3/hundred-islands.jpg',
+    zone: 3,
+  },
+  {
+    id: 'st_james_church_022',
+    fil: 'Simbahan ni Santiago Apostol',
+    eng: 'St. James the Great Parish Church',
+    fact: 'Bolinao’s centuries-old church, raised from coral stone in the early 1600s, its weathered façade carved with folk-Baroque saints and figures. It has stood through storms, fire, and war on the edge of the West Philippine Sea.',
+    note: 'Coral hauled from the sea built these walls, and now the sea has come to reclaim them — a landmark returning, stone by stone, to where it began.',
+    spawnTag: 'submerged_interior',
+    image: 'assets/artifacts/zone3/st-james-church.jpg',
+    zone: 3,
+  },
+  {
+    id: 'banaan_023',
+    fil: 'Banáan',
+    eng: 'Banaan Shore',
+    fact: 'A quiet coastal stretch of Pangasinan where pale sand meets the open gulf, long treasured by fishing families and travellers for its calm water and unhurried horizon. Its shoreline gathers the light of every sunset over the sea.',
+    note: 'Not every landmark is grand; some are simply the shore a community grew up beside — and their loss is measured in remembered afternoons, not in guidebooks.',
+    spawnTag: 'elevated_rubble',
+    image: 'assets/artifacts/zone3/banaan.webp',
+    zone: 3,
+  },
+  {
+    id: 'bolinao_lighthouse_024',
+    fil: 'Parola ng Bolinao',
+    eng: 'Cape Bolinao Lighthouse',
+    fact: 'Perched on Punta Piedra Point and lit since the early 1900s, the Cape Bolinao Lighthouse is among the tallest in the country, its beam long guiding ships past the rocky western cape. Generations climbed its spiral stair for the view over the sea.',
+    note: 'A lighthouse exists to keep others from the deep; there is a hard irony in finding one swallowed by the very water it once warned against.',
+    spawnTag: 'near_wall',
+    image: 'assets/artifacts/zone3/bolinao-lighthouse.jpg',
+    zone: 3,
+  },
+  {
+    id: 'capitol_025',
+    fil: 'Kapitolyo ng Pangasinan',
+    eng: 'Pangasinan Provincial Capitol',
+    fact: 'The stately neoclassical seat of the provincial government in Lingayen, its long colonnade and dome a landmark of civic Pangasinan for over a century. Its grounds face the gulf and the historic Lingayen beach.',
+    note: 'The capitol is where a province keeps its records and its self-image; drowned, it becomes an archive of governance the strings must remember on its behalf.',
+    spawnTag: 'open_water',
+    image: 'assets/artifacts/zone3/capitol.webp',
+    zone: 3,
+  },
+  {
+    id: 'manaoag_church_026',
+    fil: 'Basílica ng Birhen ng Manaoag',
+    eng: 'Basilica of Our Lady of Manaoag',
+    fact: 'One of the country’s most visited pilgrimage sites, the Manaoag basilica shelters the centuries-old ivory image of Our Lady of the Rosary, drawing the faithful from across the islands. Its bells and candle-lit shrine have answered prayers for generations.',
+    note: 'Manaoag holds the weight of countless whispered petitions; of all the drowned places, a shrine may carry the most memory — every prayer still hanging on the strings.',
+    spawnTag: 'submerged_interior',
+    image: 'assets/artifacts/zone3/manaoag-church.webp',
+    zone: 3,
+  },
+  {
+    id: 'sison_auditorium_027',
+    fil: 'Awditoryum ng Sison',
+    eng: 'Sison Auditorium',
+    fact: 'A landmark Art Deco hall in the Lingayen capitol complex, long the province’s stage for assemblies, ceremonies, and celebrations. Its clean pre-war lines make it one of Pangasinan’s most recognizable public buildings.',
+    note: 'An auditorium is a vessel built to be filled with gathered voices; silent and submerged, its emptiness is its own kind of memory.',
+    spawnTag: 'elevated_rubble',
+    image: 'assets/artifacts/zone3/sison-auditorium.webp',
+    zone: 3,
   },
 ];
 

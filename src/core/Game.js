@@ -11,7 +11,7 @@ import {
   RIDDLE_COUNT, mulberry32, wait,
 } from '../config.js';
 import { drawRiddles, ARTIFACT_DATA } from '../data.js';
-import { createWorld } from './zones/index.js';
+import { createWorld, ZONES } from './zones/index.js';
 import { PlayerController } from './PlayerController.js';
 import { ArtifactManager } from './ArtifactManager.js';
 import { Guardian } from './Guardian.js';
@@ -207,15 +207,15 @@ export class Game {
     this.busy = true;
     this.holdProgress = 0;
     this.player.controls.unlock();
-    await this.discovery.show(nearest.data, () => {
+    await this.discovery.show(nearest.data, this.world.zone.name, () => {
       this.artifacts.collect(nearest);
       this.audio.removeEcho(nearest);   // silence this artifact's echo on pickup
-      this._updateArtifactCount();      // whole-zone progress (e.g. 4 / 10)
+      this._updateArtifactCount();      // whole-zone progress (e.g. 4 / 11)
     });
     this.busy = false;
 
     if (this.artifacts.zoneComplete) {
-      this._zoneComplete();             // all 10 recovered: unlock next zone
+      this._zoneComplete();             // all 11 recovered: unlock next zone
     } else if (this.artifacts.batchComplete) {
       this._batchComplete();            // this visit's batch done; more remain
     } else {
@@ -231,7 +231,10 @@ export class Game {
     this.busy = true;
     this.elPrompt.classList.remove('active');
     this.player.controls.unlock();
-    await this.discovery.show(data);
+    // In the museum this.world is the hub, so derive provenance from the
+    // artifact's own zone number via the zone registry.
+    const zoneName = ZONES['zone' + data.zone]?.name;
+    await this.discovery.show(data, zoneName);   // no onSaved — view-only
     this.busy = false;
     this.player.controls.lock();
   }
@@ -306,7 +309,7 @@ export class Game {
         this.audio.playScatter();                     // whoosh + sparkle as they burst out
         // Each loose artifact starts emitting its spatialized "echo" locator.
         this.artifacts.artifacts.forEach((a) => this.audio.addEcho(a, a.pos));
-        this._updateArtifactCount();                  // whole-zone progress (e.g. 4 / 10)
+        this._updateArtifactCount();                  // whole-zone progress (e.g. 4 / 11)
         this.elHud.classList.add('active');
       },
     });

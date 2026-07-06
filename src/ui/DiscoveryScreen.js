@@ -13,7 +13,9 @@ export class DiscoveryScreen {
     this._resolveDismiss = null;
   }
 
-  async show(artifactData, onSaved) {
+  // `zoneName` is the active zone's display name (Game passes world.zone.name);
+  // it falls back to ZONE_NAME so older/direct callers still read "Pantal Market".
+  async show(artifactData, zoneName, onSaved) {
     this.active = true;
     this.flash.style.opacity = '1';            // fade to white
     await wait(1100);
@@ -24,7 +26,7 @@ export class DiscoveryScreen {
     document.getElementById('d-eng').textContent = d.eng;
     document.getElementById('d-fact').textContent = d.fact;
     document.getElementById('d-note').textContent = d.note;
-    document.getElementById('d-zone').textContent = 'Found in — ' + ZONE_NAME;
+    document.getElementById('d-zone').textContent = 'Found in — ' + (zoneName || ZONE_NAME);
     this.panel.classList.add('active');
     onSaved && onSaved();
 

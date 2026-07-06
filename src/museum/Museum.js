@@ -31,9 +31,9 @@ export class Museum {
     // Three zone portals on the -Z wall (physical left -> right). Zone 1 sits in the
     // center and is the only one open; the others are locked until those zones exist.
     this.portals = [
-      { x: MUSEUM.PORTAL_X[0], zone: 2, locked: true, name: '???' },
+      { x: MUSEUM.PORTAL_X[0], zone: 2, locked: true, name: 'LIKET' },
       { x: MUSEUM.PORTAL_X[1], zone: 1, locked: false, name: 'Pantal Market' },
-      { x: MUSEUM.PORTAL_X[2], zone: 3, locked: true, name: '???' },
+      { x: MUSEUM.PORTAL_X[2], zone: 3, locked: true, name: 'Pananisia' },
     ];
 
     // The player wakes at the +Z end and the open (Zone 1) portal sits past the

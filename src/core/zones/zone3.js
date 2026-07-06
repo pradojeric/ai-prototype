@@ -266,15 +266,15 @@ function setSpawnNodes(world) {
 
 export const zone3 = {
   id: 'zone3',
-  name: 'The Drowned Cathedral',
-  label: 'Zone 3 — The Drowned Cathedral',   // descend-screen heading
+  name: 'Pananisia',
+  label: 'Zone 3 — Pananisia (Drowned Landmarks)',   // descend-screen heading
   seed: 20260714,
   guardianStart: { x: 0, z: 15 },   // center of the nave, just before the altar
   guardianRebuke: 'The archive does not open for a clouded mind. Kneel with the stones a while longer, and return.',
   // Spoken (as a subtitle) one line at a time right after the player descends.
   introDialogue: [
-    '[Zone 3 — The Drowned Cathedral] The bells of St. John fell silent beneath the flood.',
-    'Every prayer ever whispered here still hangs on the strings. The Keeper counts them, one by one.',
+    '[Zone 3 — Pananisia] Here the flood took not food nor festival, but place itself — the shrines, the shores, the landmarks of Pangasinan.',
+    'Every prayer, every homecoming, every monument still hangs on the strings. The Keeper counts them, one by one.',
   ],
   background: 0x050b14,   // deep abyss blue — the edges of the map fall into it
   fog: { color: 0x08121f, density: CONFIG.FOG_DENSITY * 1.5 },   // denser: isolate the ruins
