@@ -60,6 +60,9 @@ export class Game {
     this.discovery = new DiscoveryScreen();
     this.riddleScreen = new RiddleScreen();        // bugtong multiple-choice
     this.museum = new Museum();                    // reusable digital-museum scene (future hub)
+    // Debug: open every portal up front so the hub's sequential unlock (see
+    // _zoneComplete) can be skipped entirely while testing zone content.
+    if (CONFIG.DEBUG_UNLOCK_ALL_ZONES) { this.museum.unlockPortal(2); this.museum.unlockPortal(3); }
     this.cutscene = new IntroCutscene(this.museum); // scripted intro over the museum
     this.defeatCutscene = new DefeatCutscene();      // scripted guardian-defeat over the world
     this.faintCutscene = new FaintCutscene();         // scripted black-out on a wrong answer
@@ -155,7 +158,7 @@ export class Game {
         if (this.busy) return;
         this.elResume.style.display = 'flex';
         this.elCross.classList.remove('active');
-      } else if (!this.busy && this.artifacts.zoneFoundCount < this.artifacts.zoneTotal) {
+      } else if (!this.busy && this.phase === 'playing') {
         this.elStart.style.display = 'flex';
         this.elHud.classList.remove('active');
         this.elGhint.classList.remove('active');
@@ -239,12 +242,18 @@ export class Game {
     this.elTotal.textContent = this.artifacts.zoneTotal;
   }
 
-  // The artifact-data objects the player has recovered (any zone), in stable
-  // ARTIFACT_DATA order so museum frames keep consistent slots as more arrive.
+  // Recovered artifact-data objects grouped by zone number ({ 1: [...], ... }),
+  // each zone's list in stable ARTIFACT_DATA order so museum frames keep
+  // consistent slots within their zone section as more arrive.
   _collectedArtifacts() {
     const ids = new Set();
     for (const set of Object.values(this.collectedByZone)) for (const id of set) ids.add(id);
-    return ARTIFACT_DATA.filter((d) => ids.has(d.id));
+    const byZone = {};
+    for (const d of ARTIFACT_DATA) {
+      if (!ids.has(d.id)) continue;
+      (byZone[d.zone] ||= []).push(d);
+    }
+    return byZone;
   }
 
   // Walking within range of the guardian starts the bugtong challenge. The

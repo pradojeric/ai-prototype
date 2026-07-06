@@ -51,6 +51,48 @@ export function buildPot(matPot, matGlow, sphereGeo) {
   return pot;
 }
 
+// A glowing spiral "core" — a bright ring + backing disc + a logarithmic spiral
+// arm of emissive motes. Reused as the focal chest bloom on multiple guardians
+// (the coral-whisperer's market swirl, the keeper's memory galaxy). Returns the
+// group plus refs the caller rotates + pulses each frame (see `swirl` / `motes`).
+//   opts: { radius, arms, motesPerArm, moteGeo, turns }
+export function spiralCore(matGlow, opts = {}) {
+  const {
+    radius = 0.7, arms = 2, motesPerArm = 7, turns = 1.4,
+    moteGeo = new THREE.SphereGeometry(0.07, 8, 6),
+  } = opts;
+
+  const group = new THREE.Group();          // faces +Z; caller positions it
+  const swirl = new THREE.Group();           // spun each frame
+  group.add(swirl);
+
+  // Bright rim + a dim backing disc so the swirl reads against the dark body.
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, radius * 0.09, 10, 28), matGlow);
+  group.add(ring);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.94, 28), matGlow);
+  disc.position.z = -0.03;
+  disc.scale.setScalar(0.5);                 // dimmer core face (opacity handled by matGlow)
+  group.add(disc);
+
+  // Spiral arms of motes, shrinking toward the rim.
+  const motes = [];
+  for (let a = 0; a < arms; a++) {
+    const a0 = (a / arms) * Math.PI * 2;
+    for (let i = 0; i < motesPerArm; i++) {
+      const f = (i + 1) / motesPerArm;       // 0..1 outward
+      const ang = a0 + f * turns * Math.PI * 2;
+      const rad = f * radius * 0.92;
+      const m = new THREE.Mesh(moteGeo, matGlow);
+      m.position.set(Math.cos(ang) * rad, Math.sin(ang) * rad, 0.02);
+      m.scale.setScalar(1.2 - f * 0.7);
+      swirl.add(m);
+      motes.push(m);
+    }
+  }
+
+  return { group, swirl, ring, motes };
+}
+
 // Shortest signed angle from a to b (radians) — used for smooth "face player".
 export function angDelta(a, b) {
   let d = b - a;

@@ -1,6 +1,7 @@
 // ============================================================
 // DATA — artifact payloads + mock City-Wide Portal API (GDD §7/§8)
 // ============================================================
+import { shuffle } from './config.js';
 
 export const ZONE_NAME = 'Pantal Market';
 
@@ -18,6 +19,7 @@ export const ARTIFACT_DATA = [
     note: 'Every town in Pangasinan guards its own longganisa recipe like a family name. To taste Alaminos’ is to taste a place that refused to sweeten itself to please outsiders.',
     spawnTag: 'near_wall',
     image: 'assets/artifacts/zone1/alaminos-longganisa.png',
+    zone: 1,
   },
   {
     id: 'dasol_salt_002',
@@ -27,6 +29,7 @@ export const ARTIFACT_DATA = [
     note: 'Before refrigeration, salt was survival — it preserved the catch that fed Pangasinan inland. Dasol’s salt beds are a quiet inheritance, worked by hand against cheaper industrial competition.',
     spawnTag: 'open_water',
     image: 'assets/artifacts/zone1/dasol-salt.png',
+    zone: 1,
   },
   {
     id: 'kaleskes_003',
@@ -36,6 +39,7 @@ export const ARTIFACT_DATA = [
     note: 'Dishes like kaleskes were born of thrift and respect — wasting no part of a costly animal. Its richness is the resourcefulness of a market town made delicious.',
     spawnTag: 'submerged_interior',
     image: 'assets/artifacts/zone1/kaleskes.png',
+    zone: 1,
   },
   {
     id: 'pigar_pigar_004',
@@ -45,6 +49,7 @@ export const ARTIFACT_DATA = [
     note: 'Pigar-pigar remains a living tradition; to eat it sizzling at a roadside stall is to taste a piece of Dagupan that never quite went to sleep.',
     spawnTag: 'elevated_rubble',
     image: 'assets/artifacts/zone1/pigar-pigar.png',
+    zone: 1,
   },
   {
     id: 'calasiao_puto_005',
@@ -54,6 +59,7 @@ export const ARTIFACT_DATA = [
     note: 'Calasiao’s puto carries a geographic pride so strong the town is simply called the "Puto Capital." A humble cake became a whole municipality’s signature.',
     spawnTag: 'near_wall',
     image: 'assets/artifacts/zone1/calasiao-puto.png',
+    zone: 1,
   },
   {
     id: 'patupat_006',
@@ -63,6 +69,7 @@ export const ARTIFACT_DATA = [
     note: 'Patupat is as much craft as cooking; the leaf-weaving is a skill passed mother to child. Each pouch is a small act of patience folded around the harvest.',
     spawnTag: 'submerged_interior',
     image: 'assets/artifacts/zone1/patupat.png',
+    zone: 1,
   },
   {
     id: 'bagoong_007',
@@ -72,6 +79,7 @@ export const ARTIFACT_DATA = [
     note: 'Bagoong ties the sea to the table and the present to the past: the same slow fermentation that fed pre-colonial villages still seasons the family meal today.',
     spawnTag: 'open_water',
     image: 'assets/artifacts/zone1/bagoong.png',
+    zone: 1,
   },
   {
     id: 'burong_isda_008',
@@ -81,6 +89,7 @@ export const ARTIFACT_DATA = [
     note: 'Buro is preservation as artistry — a way the riverside towns of Pangasinan banked the river’s bounty against leaner days, one earthen jar at a time.',
     spawnTag: 'elevated_rubble',
     image: 'assets/artifacts/zone1/burong-isda.png',
+    zone: 1,
   },
   {
     id: 'binungey_009',
@@ -90,6 +99,7 @@ export const ARTIFACT_DATA = [
     note: 'Binungey needs no pot and no oven — only bamboo, fire, and know-how. It is fiesta food and field food at once, cooked the way the land itself provides.',
     spawnTag: 'near_wall',
     image: 'assets/artifacts/zone1/binungey.png',
+    zone: 1,
   },
   {
     id: 'tupig_010',
@@ -99,6 +109,7 @@ export const ARTIFACT_DATA = [
     note: 'The banana-leaf char and woodsmoke are half the flavor — a reminder that in this province even the wrapping and the fire carry tradition.',
     spawnTag: 'open_water',
     image: 'assets/artifacts/zone1/tupig.png',
+    zone: 1,
   },
 ];
 
@@ -204,11 +215,6 @@ export const RIDDLE_POOL = [
 // Draw `n` distinct riddles from the pool using a seeded PRNG (`rng` from
 // mulberry32). Returns a fresh array; the pool itself is never mutated.
 export function drawRiddles(n, rng) {
-  const pool = RIDDLE_POOL.slice();
-  // Fisher–Yates shuffle driven by the seeded rng.
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
+  const pool = shuffle(RIDDLE_POOL.slice(), rng);
   return pool.slice(0, Math.min(n, pool.length));
 }

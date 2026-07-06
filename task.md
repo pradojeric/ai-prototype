@@ -105,3 +105,111 @@ detectable farther out than the string · music swells near the echo.
 ## Decisions (from user)
 - Scope: Core loop · Setup: CDN importmap (now multi-file ES modules over http) · API: Mock local
 - Visuals: Placeholder primitives · Zone: ~2× · Collisions: props+walls (slide) · Assets: procedural only
+
+## Perimeter Spawns Redesign (2026-07-04)
+- [x] Game.js: `_pickSpawn()` + `_spawnPlayer()` (random per run via Math.random; legacy dock fallback for zones 2/3/debug); wired into intro, zone load, and faint respawn
+- [x] World.js: `_mangroveArc`, `_bambooPole`, `_poleWall`, `_bambooTunnel` primitives; `_debris` accepts multiple `clears` discs
+- [x] zone1.js rewrite: central hub (tower h26 + dais + 4 gate arches), Vendor Avenues (S), Sunken Kitchens (N), Bangus Pens serpentine maze (E), Bumbong Overpass tunnels (W), 4 rim spawn pockets, fog eased to 0.024 for landmark legibility
+- [x] Spawn nodes rebalanced: 1 easy open_water node per spawn exit + harder clusters (stove backs, tunnel interiors, maze dead-ends)
+- [x] Static verify: ES-module syntax check passes; zone1 349 lines, World 597 lines
+- [ ] User in-browser verify: all 4 spawns face the tower, maze solvable, tunnels walkable, faint respawn re-picks
+
+## Museum Hub Expansion — 36 zone-grouped frames via side wings (2026-07-04)
+- [x] config.js: `MUSEUM.WING` (DOOR_HALF/DOOR_Z/LEN/HALF_W) + `SLOTS_PER_ZONE: 12`
+- [x] data.js: `zone: 1` field on all 10 ARTIFACT_DATA entries
+- [x] Game.js: `_collectedArtifacts()` now returns a per-zone map `{ 1:[...], ... }` (zone origin preserved for grouped hanging)
+- [x] Museum.js: ±X walls split around new wing doorways (`_sideWall`); two wing galleries (`_wings`/`_wing`, Zone 2 = -X, Zone 3 = +X) with shell, 12 frames each, lintel zone signs; main room re-laid as Zone 1's 12 frames; `slotsByZone` index; `populate(byZone)` + `_setSlot` (replaces `setArtifact`); wing walkability in `collidesAt`; `unlockPortal` also reveals the wing sign; hub hanging bulbs extended into wings
+- [x] IntroCutscene.js: zero changes (spawn/hallway points + ROOM_HALF untouched)
+- [x] Static verify: `node --check` passes all touched files
+- [ ] User in-browser verify: intro plays clean, wings walkable w/ collision, collected Zone-1 art hangs in the main room, empty wing frames lit under hub lighting
+- Perf watch-point: hub picture lights are per-slot SpotLights (now 36) — if the hub frame-rate dips, consolidate to per-wall spots
+
+## Museum Hub Perf Fix (2026-07-04)
+- [x] Museum.js `_hubLights`: removed the 36 per-slot picture SpotLights (forward renderer shades every light per fragment — this was the lag); gallery now lit by ambient+hemi+key fill and the 8 distance-limited hanging PointLights; picture bulbs kept as one cosmetic emissive InstancedMesh (1 draw call, zero lights)
+- [x] Museum.js `_addSlot`: frame/interior material+geometry shared across all 36 slots (was 72 duplicate mats + 72 geos)
+- [x] Museum.js `_setSlot`/`clear`: shared pooled art-plane geometry; clear() now frees only the per-slot material/texture; dispose() frees the bulb instance buffer
+- [x] Static verify: node --check passes
+- [ ] User in-browser verify: hub frame-rate smooth; frames/bulbs look right under hub lighting; art hangs/clears without errors
+
+## Zone 2 Redesign — LIKET (Festival Zone) (2026-07-04)
+Goal: replace the bare zone2 placeholder with a real district map for the theme
+"an underwater festival frozen in time — colorful banners drift with the
+current, lanterns glow, echoes of music and dancing fill submerged plazas."
+Reuses zone1's proven spine layout/collision footprints; all-new dressing on top.
+Decisions (user): map + a zone-aware artifact filter fix, no new zone-2 artifact
+content authored this pass (data.js/zone2Guardian.js untouched).
+- [x] World.js: new festival primitives — `_sagLine` (internal sagging-rope
+      helper), `_lantern` (glowing paper lantern, no THREE.Light — additive
+      glow geometry + bloom), `_lanternString`, `_lanternCluster`, `_bunting`
+      (pennant garland, cloth only, no glow), `_parulMast` (zone-2 terminus
+      landmark: mast + giant glowing star lantern + radiating lantern guy-lines).
+      Motion reuses the existing `debris`(bob/spin)/`shafts`(breathing opacity)
+      update loops — no new per-frame loop added.
+- [x] zone2.js full rewrite: Gong Circle (W), Bandstand Plaza + Parul Mast
+      (terminus, N), Ballroom Shell (E, ruined dance hall), Float Graveyard
+      (far E, sunken parade floats), Parade Stalls + overhead lantern/bunting
+      Parade Avenue (spine), Lantern Overlook (SE), festooned gateway arches;
+      warm brass/festival-cloth palette override (contrasts zone2Guardian's
+      cool amber-green); dock fixed at (0,34) — unchanged, matches Game.js's
+      hardcoded respawn for every zone
+- [x] ArtifactManager.js: `zoneNumOf(id)` + `zoneArtifacts` (computed once in
+      the constructor from `world.zone.id`) so `_pickBatch`/`zoneTotal` only
+      draw from the active zone's ARTIFACT_DATA entries instead of the global
+      pool; `zoneDebug`/unrecognized ids fall back to unfiltered (preserves
+      today's debug-arena behavior). No Game.js changes needed — `world.zone.id`
+      was already reachable.
+- [x] Static verify: `node --check` passes World.js (668 lines)/zone2.js (307
+      lines)/ArtifactManager.js (293 lines); all well under the 1000-line cap
+- [ ] User in-browser verify: dock→avenue→plaza sightline reads the parul
+      mast's glow through fog; collision holds against every new prop (stalls,
+      gateway piers, ballroom walls, float hulls, gong-stand posts, mast pole,
+      benches) while lanterns/bunting/glow never block movement; Guardian
+      spawns/roams/beacon reads through fog; defeating it now correctly shows
+      a 0/0 completion card (no zone-2 artifact content yet — a follow-up
+      content pass); zone1/zone3/zoneDebug unaffected. (Not verified by Claude
+      this pass — an in-browser check via Playwright was started, then aborted
+      per your "don't install playwright" instruction; see chat for what to
+      manually check.)
+
+## Debug: Unlock All Zones (2026-07-04)
+
+Goal: a debug-only way to walk the museum hub into any of the three zones without
+grinding the sequential artifact/guardian progression. Decisions (user): reachable
+via the museum hub portals (not a direct zone-jump shortcut) · each zone's guardian
+riddle gate stays intact (only zone *access* is unlocked, not artifact collection) ·
+kept independent of the existing `DEBUG_ZONE` flag (that one swaps every zone for
+the small `zoneDebug` arena; the two aren't meant to be on at the same time).
+
+- [x] config.js: `CONFIG.DEBUG_UNLOCK_ALL_ZONES` (default false)
+- [x] Game.js: constructor calls `museum.unlockPortal(2)`/`(3)` right after building
+      the Museum when the flag is set (zone1's portal is already unlocked by default)
+- [x] Static verify: `node --check` passes config.js/Game.js
+- [ ] User in-browser verify: with the flag on, all 3 portal signs read their zone
+      name (no "LOCKED") from the first museum visit, and walking into any corridor
+      loads that zone; each zone's guardian still gates its artifacts as normal
+
+## Zone 3 Redesign — The Drowned Cathedral (2026-07-05)
+
+Goal: replace the bare zone3 placeholder with a solemn underwater memory archive
+inspired by St. John the Evangelist Cathedral (downtown Dagupan). Decisions (user):
+content-only, no engine changes · guardian stays at water level (no y:4 hover) ·
+floating platforms are decorative, non-walkable · placeholder guardian body kept ·
+center glow via additive emissive meshes only (no PointLight).
+
+- [x] zone3.js full rewrite: narthex (dock entrance + shattered portal arch),
+      nave colonnade (broken `_tower` pillars at x±6), half-torus vault ribs
+      (upright over tall pairs + collapsed in the aisle), transept chapel shells,
+      altar/apse (dais + altar block + stump semicircle + cold votive lantern
+      clusters + breathing additive Keeper orb at the guardian spot), bell-tower
+      terminus (N), sparse cloister ruins, 11 floating stone slabs bobbing via
+      `world.debris`, glowing pale-cyan memory strings (`_sagLine` weave down the
+      colonnade), diagonal god-rays (tilted `_lightShaft` cones), rubble mounds,
+      spawn nodes for all four tags; abyss background 0x050b14 + 1.5× fog density
+      so map edges dissolve; cold drowned-limestone palette override; guardianStart
+      (0,15) mid-nave before the altar; dock kept at (0,34) per hardcoded spawn
+- [x] Static verify: `node --check` passes; zone3.js 306 lines (< 1000 cap)
+- [ ] User in-browser verify: spawn on the dock looking down the nave through the
+      portal arch; fog swallows the map edges into the abyss; Keeper waits in the
+      glow at nave center; diagonal shafts + memory strings + drifting slabs read;
+      collision holds on pillars/arch piers/walls/altar while ribs/strings/slabs
+      never block; artifacts spawn reachable; zones 1/2 unaffected

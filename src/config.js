@@ -17,6 +17,9 @@ export const CONFIG = {
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
   DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
+  DEBUG_UNLOCK_ALL_ZONES: true, // true → all 3 museum portals start unlocked (walk the hub into
+  // zone1/2/3 in any order); each zone's guardian gate is untouched.
+  // Independent of DEBUG_ZONE — leave that false to actually see them.
 };
 
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).
@@ -72,6 +75,15 @@ export const MUSEUM = {
   PORTAL_X: [-5.5, 0, 5.5], // doorway center X offsets on the -Z wall (Zone 2 / Zone 1 / Zone 3)
   HALL_LEN: 5,             // hallway depth past the -Z wall to the portal panel
   EXIT_RADIUS: 1.4,        // walk within this of an unlocked portal's corridor end -> enter that zone
+  // Side-wing galleries off the ±X walls (Zone 2 = -X, Zone 3 = +X). Each wing
+  // is a rectangular room entered through a doorway cut into the main room wall.
+  WING: {
+    DOOR_HALF: 1.2,        // half-width of the wing doorway (geometry + collision)
+    DOOR_Z: 2.0,           // doorway center Z on the ±X walls
+    LEN: 12,               // wing depth outward from the main-room wall (x extent)
+    HALF_W: 3.5,           // wing half-width (z extent about DOOR_Z)
+  },
+  SLOTS_PER_ZONE: 12,      // pre-built frame slots per zone section (main room + each wing)
 };
 
 // Guardian encounter — a roaming "bantay" that gates the artifacts behind a
@@ -125,4 +137,14 @@ export function mulberry32(a) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+// Fisher–Yates shuffle driven by a seeded `rng` (from mulberry32). Mutates
+// and returns `arr` — pass a copy if the caller needs the original order kept.
+export function shuffle(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }

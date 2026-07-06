@@ -21,7 +21,8 @@ export class Museum {
     this.scene.background = new THREE.Color(0x05080a);
     this.scene.fog = new THREE.Fog(0x05080a, 6, 26);
 
-    this.slots = [];              // { group, frameMesh, artMesh, anchor, data }
+    this.slots = [];              // { group, frameMesh, artMesh, anchor, data, zone }
+    this.slotsByZone = { 1: [], 2: [], 3: [] }; // same slot objects, indexed by zone section
     this._mats = [];              // tracked for dispose()
     this._geos = [];
     this._texs = [];              // canvas textures (portal signs) tracked for dispose()
@@ -43,6 +44,7 @@ export class Museum {
     this._lights();
     this._shell();
     this._frames();
+    this._wings();
     this._portalSigns();
     this._pedestals();
     this._hallway();
@@ -109,14 +111,30 @@ export class Museum {
     ceil.position.y = Y;
     this.scene.add(ceil);
 
-    // Solid walls: +Z (behind spawn), +X, -X. The -Z wall is split for three
-    // doorways. Each plane's front face must point INTO the room — single-sided
-    // geometry shows nothing (the black background) from its back side.
+    // Solid walls: +Z (behind spawn) is a single plane; the ±X walls are split
+    // around their wing doorways; the -Z wall is split for three portal doorways.
+    // Each plane's front face must point INTO the room — single-sided geometry
+    // shows nothing (the black background) from its back side.
     this._wall(wallMat, 0, Y / 2, H, H * 2, Y, Math.PI);      // +Z back wall, faces -Z
-    this._wall(wallMat, H, Y / 2, 0, H * 2, Y, -Math.PI / 2); // +X wall, faces -X
-    this._wall(wallMat, -H, Y / 2, 0, H * 2, Y, Math.PI / 2); // -X wall, faces +X
+    this._sideWall(wallMat, 1);                               // +X wall, faces -X
+    this._sideWall(wallMat, -1);                              // -X wall, faces +X
 
     this._frontWall(wallMat);
+  }
+
+  // A ±X main-room wall split around its wing doorway: solid segments on either
+  // side of the opening plus a lintel above it. `side` = +1 (+X wall) or -1.
+  _sideWall(wallMat, side) {
+    const H = MUSEUM.ROOM_HALF, Y = MUSEUM.ROOM_HEIGHT;
+    const W = MUSEUM.WING;
+    const doorH = 3.0;                       // matches the portal doorway height
+    const ry = side > 0 ? -Math.PI / 2 : Math.PI / 2;  // face into the room
+    const x = side * H;
+    const zMin = W.DOOR_Z - W.DOOR_HALF, zMax = W.DOOR_Z + W.DOOR_HALF;
+    // segment from -H to the opening, lintel over it, segment to +H
+    this._wall(wallMat, x, Y / 2, (-H + zMin) / 2, zMin + H, Y, ry);
+    this._wall(wallMat, x, doorH + (Y - doorH) / 2, W.DOOR_Z, W.DOOR_HALF * 2, Y - doorH, ry);
+    this._wall(wallMat, x, Y / 2, (zMax + H) / 2, H - zMax, Y, ry);
   }
 
   // The -Z wall carrying the three zone doorways: solid panels filling the gaps
@@ -243,31 +261,105 @@ export class Museum {
   _frames() {
     const H = MUSEUM.ROOM_HALF;
     const y = 2.0;
-    // Nine empty frames spread evenly across the three doorway-free walls (the -Z
-    // wall is full of portals), each facing inward and filled in discovery order.
-    const placements = [];
-    for (const s of [-5, 0, 5]) {
-      placements.push({ x: s, z: H - 0.04, ry: Math.PI });      // +Z back wall
-      placements.push({ x: H - 0.04, z: s, ry: -Math.PI / 2 }); // +X wall
-      placements.push({ x: -H + 0.04, z: s, ry: Math.PI / 2 });  // -X wall
+    // Main room = Zone 1's section: 12 empty frames across the three portal-free
+    // walls, filled per-zone in discovery order (see populate). Four across the
+    // +Z back wall; four on each ±X wall placed clear of the wing doorway
+    // (opening z ∈ [WING.DOOR_Z ± WING.DOOR_HALF] = [0.8, 3.2] at frame width 1.5).
+    for (const s of [-6.75, -2.25, 2.25, 6.75]) {
+      this._addSlot(s, y, H - 0.04, Math.PI, 1);                // +Z back wall
     }
-    for (const p of placements) this._addSlot(p.x, y, p.z, p.ry);
+    for (const s of [-7.5, -4.5, -1.5, 6.0]) {
+      this._addSlot(H - 0.04, y, s, -Math.PI / 2, 1);           // +X wall
+      this._addSlot(-H + 0.04, y, s, Math.PI / 2, 1);           // -X wall
+    }
+  }
+
+  // The two wing galleries (Zone 2 = -X, Zone 3 = +X): a rectangular room past
+  // the ±X wall's wing doorway, its own frame slots, and a zone sign over the
+  // doorway on the main-room side. Wings share the room shell materials so
+  // setHubLighting repaints them along with the main gallery.
+  _wings() {
+    this._wing(-1, 2);
+    this._wing(1, 3);
+  }
+
+  _wing(side, zone) {
+    const H = MUSEUM.ROOM_HALF, Y = MUSEUM.ROOM_HEIGHT;
+    const W = MUSEUM.WING;
+    const doorH = 3.0;
+    const zMin = W.DOOR_Z - W.HALF_W, zMax = W.DOOR_Z + W.HALF_W;
+    const cx = side * (H + W.LEN / 2);       // wing center x
+    const far = side * (H + W.LEN);          // far wall plane
+
+    // Shell — floor, ceiling, far wall, two long walls, and the near-wall panels
+    // that close the plane x=±H as seen FROM the wing (the main room's wall
+    // planes are single-sided and invisible from behind).
+    const floor = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(W.LEN, W.HALF_W * 2)), this.floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(cx, 0, W.DOOR_Z);
+    this.scene.add(floor);
+    const ceil = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(W.LEN, W.HALF_W * 2)), this.ceilMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.set(cx, Y, W.DOOR_Z);
+    this.scene.add(ceil);
+
+    const inward = side > 0 ? -Math.PI / 2 : Math.PI / 2;   // faces back toward the room
+    const outward = side > 0 ? Math.PI / 2 : -Math.PI / 2;  // faces into the wing
+    this._wall(this.wallMat, far, Y / 2, W.DOOR_Z, W.HALF_W * 2, Y, inward);  // far wall
+    this._wall(this.wallMat, cx, Y / 2, zMin, W.LEN, Y, 0);                   // -z long wall, faces +Z
+    this._wall(this.wallMat, cx, Y / 2, zMax, W.LEN, Y, Math.PI);             // +z long wall, faces -Z
+    // near-wall panels around the doorway, facing into the wing
+    const dMin = W.DOOR_Z - W.DOOR_HALF, dMax = W.DOOR_Z + W.DOOR_HALF;
+    this._wall(this.wallMat, side * H, Y / 2, (zMin + dMin) / 2, dMin - zMin, Y, outward);
+    this._wall(this.wallMat, side * H, doorH + (Y - doorH) / 2, W.DOOR_Z, W.DOOR_HALF * 2, Y - doorH, outward);
+    this._wall(this.wallMat, side * H, Y / 2, (dMax + zMax) / 2, zMax - dMax, Y, outward);
+
+    // 12 frames: five down each long wall, two on the far wall.
+    const y = 2.0;
+    for (const off of [1.8, 3.9, 6.0, 8.1, 10.2]) {
+      const fx = side * (H + off);
+      this._addSlot(fx, y, zMin + 0.04, 0, zone);              // -z wall, faces +Z
+      this._addSlot(fx, y, zMax - 0.04, Math.PI, zone);        // +z wall, faces -Z
+    }
+    for (const dz of [-1.75, 1.75]) {
+      this._addSlot(far - side * 0.04, y, W.DOOR_Z + dz, inward, zone);
+    }
+
+    // Zone sign over the doorway lintel on the main-room side; tracked on the
+    // matching portal so unlockPortal can reveal the district name here too.
+    const p = this.portals.find((pp) => pp.zone === zone);
+    const mat = new THREE.MeshBasicMaterial({
+      map: this._signTexture(zone, p ? p.name : '???', p ? p.locked : true),
+      transparent: true,
+      depthWrite: false,
+    });
+    this._mats.push(mat);
+    const sign = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(2.4, 0.75)), mat);
+    sign.position.set(side * (H - 0.06), doorH + (Y - doorH) / 2, W.DOOR_Z);
+    sign.rotation.y = inward;
+    this.scene.add(sign);
+    if (p) p.wingSignMat = mat;
   }
 
   // One empty frame: a border box with a recessed dark interior. The interior
-  // mesh is where collected art will later be swapped in (see setArtifact).
-  _addSlot(x, y, z, ry) {
+  // mesh is where collected art will later be swapped in (see _setSlot).
+  _addSlot(x, y, z, ry, zone) {
     const group = new THREE.Group();
     group.position.set(x, y, z);
     group.rotation.y = ry;
 
     const w = 1.5, h = 1.9, d = 0.12;
-    const frameMat = this._mat({ color: FRAME_COLOR, roughness: 0.6, metalness: 0.3 });
-    const frameMesh = new THREE.Mesh(this._geo(new THREE.BoxGeometry(w, h, d)), frameMat);
+    // All 36 frames are identical — share one material/geometry set across every
+    // slot (perf: fewer GPU state changes; before this each slot built its own).
+    this._frameMat ||= this._mat({ color: FRAME_COLOR, roughness: 0.6, metalness: 0.3 });
+    this._frameGeo ||= this._geo(new THREE.BoxGeometry(w, h, d));
+    this._emptyMat ||= this._mat({ color: EMPTY_COLOR, roughness: 1 });
+    this._emptyGeo ||= this._geo(new THREE.PlaneGeometry(w - 0.22, h - 0.22));
+
+    const frameMesh = new THREE.Mesh(this._frameGeo, this._frameMat);
     group.add(frameMesh);
 
-    const emptyMat = this._mat({ color: EMPTY_COLOR, roughness: 1 });
-    const empty = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(w - 0.22, h - 0.22)), emptyMat);
+    const empty = new THREE.Mesh(this._emptyGeo, this._emptyMat);
     empty.position.z = d / 2 + 0.001;
     group.add(empty);
 
@@ -276,7 +368,9 @@ export class Museum {
     const anchor = new THREE.Vector3(x, y, z).add(
       new THREE.Vector3(Math.sin(ry), 0, Math.cos(ry)).multiplyScalar(0.4),
     );
-    this.slots.push({ group, frameMesh, artMesh: null, anchor, data: null });
+    const slot = { group, frameMesh, artMesh: null, anchor, data: null, zone };
+    this.slots.push(slot);
+    (this.slotsByZone[zone] ||= []).push(slot);
   }
 
   _pedestals() {
@@ -352,17 +446,24 @@ export class Museum {
     }
   }
 
-  // Bright-gallery lighting for the walkable hub: a picture light over every
-  // frame plus a few hanging ceiling bulbs. Built into an UNATTACHED group so it
-  // contributes nothing until setHubLighting(true) adds it (keeping the intro dark).
+  // Bright-gallery lighting for the walkable hub. Built into an UNATTACHED group
+  // so it contributes nothing until setHubLighting(true) adds it (keeping the
+  // intro dark).
+  //
+  // PERF: forward rendering evaluates EVERY light for EVERY fragment, so light
+  // count is the hub's frame-rate budget. The old per-frame picture SpotLights
+  // (one per slot = 36 after the wings) tanked it. Instead the gallery is carried
+  // by three fill lights + a few distance-limited hanging PointLights, and the
+  // per-frame "picture light" is purely cosmetic: an emissive bulb (no light)
+  // drawn as ONE InstancedMesh for all slots — a single draw call, zero shading cost.
   _hubLights() {
     const g = this.hubGroup = new THREE.Group();
 
-    // Clean base fill — kept moderate so the gallery reads as softly lit rather
-    // than washed out (the picture lights + lamps add the highlights on top).
-    g.add(new THREE.AmbientLight(0xffffff, 0.5));
-    g.add(new THREE.HemisphereLight(0xf3f7ff, 0x3a4046, 0.5));
-    const key = new THREE.DirectionalLight(0xffffff, 0.5);
+    // Base fill does the real lighting work now that the picture spots are gone:
+    // warm-tinted key + hemisphere read as gallery lighting without per-fragment cost.
+    g.add(new THREE.AmbientLight(0xffffff, 0.75));
+    g.add(new THREE.HemisphereLight(0xf3f7ff, 0x3a4046, 0.65));
+    const key = new THREE.DirectionalLight(0xfff4e0, 0.7);
     key.position.set(0, 8, 3);
     g.add(key);
 
@@ -372,35 +473,37 @@ export class Museum {
     const bulbGeo = this._geo(new THREE.SphereGeometry(0.07, 12, 12));
     const cordMat = this._mat({ color: 0x0c0f10, roughness: 1 });
 
-    // Picture light: a small bulb above each frame, aimed down at it.
-    for (const slot of this.slots) {
+    // Cosmetic picture bulb above each frame — one instanced draw, no light source.
+    const bulbs = new THREE.InstancedMesh(bulbGeo, bulbMat, this.slots.length);
+    const m = new THREE.Matrix4();
+    this.slots.forEach((slot, i) => {
       const p = slot.group.position;
       const ry = slot.group.rotation.y;
-      const dx = Math.sin(ry), dz = Math.cos(ry);          // inward facing dir
-      const bx = p.x + dx * 0.35, by = p.y + 1.0, bz = p.z + dz * 0.35;
+      m.makeTranslation(p.x + Math.sin(ry) * 0.35, p.y + 1.0, p.z + Math.cos(ry) * 0.35);
+      bulbs.setMatrixAt(i, m);
+    });
+    bulbs.instanceMatrix.needsUpdate = true;
+    g.add(bulbs);
+    this._bulbInst = bulbs;       // dispose() frees its instance buffer
 
-      const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-      bulb.position.set(bx, by, bz);
-      g.add(bulb);
-
-      const spot = new THREE.SpotLight(0xfff4e0, 7, 7, Math.PI / 5, 0.55, 1.2);
-      spot.position.set(bx, by, bz);
-      spot.target.position.set(p.x, p.y - 0.35, p.z);
-      g.add(spot);
-      g.add(spot.target);
+    // Hanging warm bulbs for ambience + bloom: down the main-room centerline,
+    // plus two along each wing's centerline.
+    const hangs = [[0, -6], [0, -2], [0, 2], [0, 6]];
+    const H = MUSEUM.ROOM_HALF, W = MUSEUM.WING;
+    for (const side of [-1, 1]) {
+      hangs.push([side * (H + W.LEN * 0.3), W.DOOR_Z]);
+      hangs.push([side * (H + W.LEN * 0.7), W.DOOR_Z]);
     }
-
-    // Hanging warm bulbs down the centerline for ambience + bloom.
-    for (const cz of [-6, -2, 2, 6]) {
+    for (const [cx, cz] of hangs) {
       const y = MUSEUM.ROOM_HEIGHT - 0.5;
       const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-      bulb.position.set(0, y, cz);
+      bulb.position.set(cx, y, cz);
       g.add(bulb);
       const cord = new THREE.Mesh(this._geo(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 6)), cordMat);
-      cord.position.set(0, y + 0.25, cz);
+      cord.position.set(cx, y + 0.25, cz);
       g.add(cord);
       const pl = new THREE.PointLight(0xffe6c0, 1.6, 12, 1.6);
-      pl.position.set(0, y, cz);
+      pl.position.set(cx, y, cz);
       g.add(pl);
     }
   }
@@ -440,11 +543,13 @@ export class Museum {
       p.panelMat.emissiveIntensity = 1.6;
       p.lit = true;
     }
-    // Repaint the lintel sign: drop "LOCKED", reveal the district name in glow.
-    if (p.signMat) {
-      const old = p.signMat.map;
-      p.signMat.map = this._signTexture(p.zone, p.name, false);
-      p.signMat.needsUpdate = true;
+    // Repaint the lintel signs (portal doorway + this zone's wing doorway):
+    // drop "LOCKED", reveal the district name in glow.
+    for (const mat of [p.signMat, p.wingSignMat]) {
+      if (!mat) continue;
+      const old = mat.map;
+      mat.map = this._signTexture(p.zone, p.name, false);
+      mat.needsUpdate = true;
       if (old) { old.dispose(); this._texs = this._texs.filter((t) => t !== old); }
     }
   }
@@ -505,8 +610,23 @@ export class Museum {
       return false;
     }
 
+    // Is z within a wing doorway's opening on the ±X walls? (Both wings share
+    // the same doorway z-span; wings are always walkable — locked zones only
+    // seal their -Z portal, not their gallery wing.)
+    const W = MUSEUM.WING;
+    const inWingDoor = Math.abs(z - W.DOOR_Z) < W.DOOR_HALF - r;
+
+    if (Math.abs(x) > H) {
+      // Beyond a ±X wall: only the wing rectangle is walkable.
+      if (Math.abs(x) > H + W.LEN - r) return true;          // wing far wall
+      if (Math.abs(z - W.DOOR_Z) > W.HALF_W - r) return true; // wing long walls
+      if (Math.abs(x) < H + r && !inWingDoor) return true;    // near-wall panels around the doorway
+      return false;
+    }
+
     // Inside the gallery room.
-    if (Math.abs(x) > H - r || z > H - r) return true;       // +X/-X/+Z walls
+    if (z > H - r) return true;                              // +Z wall
+    if (Math.abs(x) > H - r && !inWingDoor) return true;     // ±X walls minus wing doorways
     if (z < -H + r && !inOpenDoor) return true;              // solid wall + locked-door barriers
     return false;
   }
@@ -514,8 +634,7 @@ export class Museum {
   // ---- hub API (stubbed for the intro; used when the museum becomes a hub) ---
 
   // Swap a glowing art plane into an empty frame slot.
-  setArtifact(slotIndex, data) {
-    const slot = this.slots[slotIndex];
+  _setSlot(slot, data) {
     if (!slot || slot.artMesh) return;
     // Art resources are owned by the slot (not the global _geos/_mats pools) so
     // clear() can fully free them on every hub repopulate without leaking or
@@ -545,16 +664,24 @@ export class Museum {
         roughness: 0.5,
       });
     }
-    const art = new THREE.Mesh(new THREE.PlaneGeometry(1.18, 1.58), mat);
+    // Shared art-plane geometry (pooled in _geos; clear() only frees the per-slot
+    // material/texture). Materials stay per-slot — each holds its own artwork map.
+    this._artGeo ||= this._geo(new THREE.PlaneGeometry(1.18, 1.58));
+    const art = new THREE.Mesh(this._artGeo, mat);
     art.position.z = 0.08;
     slot.group.add(art);
     slot.artMesh = art;
     slot.data = data;
   }
 
-  // Fill slots from a list of collected artifacts (order = discovery order).
-  populate(collected) {
-    collected.forEach((data, i) => this.setArtifact(i, data));
+  // Fill each zone section's slots from `byZone` ({ zoneNumber: [artifactData] },
+  // each list in stable order). Idempotent — filled slots are skipped, so calling
+  // this on every hub entry only hangs the newly collected pieces.
+  populate(byZone) {
+    for (const [zone, list] of Object.entries(byZone)) {
+      const slots = this.slotsByZone[zone] || [];
+      list.forEach((data, i) => this._setSlot(slots[i], data));
+    }
   }
 
   // Nearest hung-artwork slot within `range` of `pos` (for "press E to revisit").
@@ -573,7 +700,7 @@ export class Museum {
     for (const slot of this.slots) {
       if (slot.artMesh) {
         slot.group.remove(slot.artMesh);
-        slot.artMesh.geometry.dispose();
+        // geometry is the shared pooled _artGeo — only the per-slot mat/tex is freed
         slot.artMesh.material.dispose();
         if (slot.artTex) { slot.artTex.dispose(); slot.artTex = null; }
         slot.artMesh = null;
@@ -583,7 +710,8 @@ export class Museum {
   }
 
   dispose() {
-    this.clear();                 // free any slot-owned art geo/mat first
+    this.clear();                 // free any slot-owned art mat/tex first
+    if (this._bulbInst) this._bulbInst.dispose();
     for (const g of this._geos) g.dispose();
     for (const m of this._mats) m.dispose();
     for (const t of this._texs) t.dispose();

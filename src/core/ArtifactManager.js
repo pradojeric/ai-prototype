@@ -7,7 +7,7 @@
 // ============================================================
 import * as THREE from 'three';
 import {
-  CONFIG, mulberry32, clamp01, PLAYER_RADIUS,
+  CONFIG, mulberry32, shuffle, clamp01, PLAYER_RADIUS,
   ARTIFACT_BATCH, ARTIFACT_MIN_SEP, SCATTER_DURATION, SCATTER_ARC_HEIGHT,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
@@ -16,32 +16,46 @@ import { StringBundle } from './StringSystem.js';
 const SPAWN_CLEARANCE = PLAYER_RADIUS + 0.4;  // keep artifacts reachable
 const TRAIL_N = 12;                            // points in each flight trail
 
+// Extracts the numeric zone id from a zone-def id ('zone2' -> 2). Returns null
+// for anything that doesn't match (e.g. 'zoneDebug') so callers can fall back
+// to showing the unfiltered ARTIFACT_DATA pool for the debug arena.
+function zoneNumOf(id) {
+  const m = /^zone(\d+)$/.exec(id || '');
+  return m ? Number(m[1]) : null;
+}
+
 export class ArtifactManager {
   // `collectedIds` is a Set of artifact ids already recovered in this zone across
   // earlier visits (owned by Game, persists across zone reloads). Only the next
   // ARTIFACT_BATCH uncollected artifacts are revealed per visit; the zone is done
-  // once every ARTIFACT_DATA id is in the set.
+  // once every ARTIFACT_DATA id for this zone is in the set.
   constructor(scene, world, collectedIds = new Set()) {
     this.scene = scene;
     this.world = world;          // provides spawnNodes + collidesAt
     this.collectedIds = collectedIds;
+    // Artifacts belonging to the active zone only (null zoneNum, e.g. zoneDebug,
+    // is left unfiltered so the debug arena keeps surfacing every artifact).
+    const zoneNum = zoneNumOf(world.zone.id);
+    this.zoneArtifacts = zoneNum == null ? ARTIFACT_DATA : ARTIFACT_DATA.filter((d) => d.zone === zoneNum);
     this.artifacts = [];
     this.scattered = false;      // becomes true once scatter() has run
     this._v = new THREE.Vector3();
   }
 
-  // The next up-to-ARTIFACT_BATCH artifacts not yet collected in this zone.
-  get batchData() {
-    return ARTIFACT_DATA
-      .filter((d) => !this.collectedIds.has(d.id))
-      .slice(0, ARTIFACT_BATCH);
+  // Draw up-to-ARTIFACT_BATCH artifacts not yet collected in this zone, in a
+  // shuffled order so repeat visits don't always surface the first N
+  // uncollected entries in the same sequence.
+  _pickBatch(rng) {
+    const uncollected = this.zoneArtifacts.filter((d) => !this.collectedIds.has(d.id));
+    return shuffle(uncollected, rng).slice(0, ARTIFACT_BATCH);
   }
 
   // Compute spread-out, collision-safe landing points (one per batch artifact).
-  _computePlacements() {
-    const rng = mulberry32((Date.now() & 0xffff) ^ 0x9e37); // per-session
+  // Each artifact still lands within its own authored spawnTag group — only
+  // batch selection/order and the exact jittered spot are randomized.
+  _computePlacements(rng) {
     const used = [];
-    return this.batchData.map((data) => {
+    return this._pickBatch(rng).map((data) => {
       const nodes = this.world.spawnNodes[data.spawnTag] || this.world.spawnNodes.open_water;
       // Pick a jittered node that isn't crowding another artifact or stuck in a wall.
       let x = 0, z = 0, tries = 0;
@@ -68,7 +82,10 @@ export class ArtifactManager {
     if (this.scattered) return;
     this.scattered = true;
 
-    const placements = this._computePlacements();
+    // One seeded RNG for the whole visit, shared by batch selection and
+    // placement, so a given seed reproduces the whole layout for debugging.
+    const rng = mulberry32((Date.now() & 0xffff) ^ 0x9e37);
+    const placements = this._computePlacements(rng);
     placements.forEach(({ data, pos }) => {
       const mesh = new THREE.Mesh(
         new THREE.IcosahedronGeometry(0.32, 0),
@@ -270,7 +287,7 @@ export class ArtifactManager {
   get batchComplete() { return this.artifacts.length > 0 && this.foundCount >= this.total; }
 
   // Whole-zone progress, persisting across visits (drives final completion + HUD).
-  get zoneTotal() { return ARTIFACT_DATA.length; }
+  get zoneTotal() { return this.zoneArtifacts.length; }
   get zoneFoundCount() { return this.collectedIds.size; }
   get zoneComplete() { return this.zoneFoundCount >= this.zoneTotal; }
 }
