@@ -42,6 +42,24 @@ export const CUTSCENE_DEFEAT = {
   LOOK_UP_HEIGHT: 3,  // gaze rises just to the artifacts' arc apex (~chest height), not a full crane
 };
 
+// Wrong-answer "faint" cinematic: the guardian rebukes the player, teleports
+// away, then the player's vision droops + fades to black before waking at the
+// dock. DROOP runs the scripted camera sink under the black fade (~0.8s CSS),
+// BLACK_HOLD keeps the screen dark before the respawn snaps in.
+export const FAINT = {
+  SPEAK: 3,        // seconds the guardian's rebuke holds on screen
+  DROOP: 0.9,        // camera sinks/tilts as vision goes (under the black fade)
+  SINK: 1.2,         // how far the camera drops while fainting (world units)
+  BLACK_HOLD: 1.0,   // unconscious in the dark before waking (user: ~1s)
+};
+
+// Zone-entry dialogue: per-zone lines shown one at a time as a subtitle right
+// after the player clicks to descend (see Game._playZoneIntro / zone.introDialogue).
+export const ZONE_INTRO = {
+  LINE: 3.4,   // seconds each line holds on screen
+  GAP: 0.45,   // seconds between lines (covers the fade out/in)
+};
+
 // Museum (reusable hub) layout + lighting. Warm hall light matches the
 // artifact-glow amber so bloom reads consistently across scenes.
 export const MUSEUM = {
@@ -75,6 +93,7 @@ export const RIDDLE_COUNT = 3;
 
 // Artifact scatter (post-defeat): artifacts burst from the guardian's spot and
 // arc out to spread-out landing points.
+export const ARTIFACT_BATCH = 3;      // uncollected artifacts revealed per zone visit
 export const ARTIFACT_MIN_SEP = 14;   // min distance between two landed artifacts
 export const SCATTER_DURATION = 1.3;  // seconds of flight from origin to landing
 export const SCATTER_ARC_HEIGHT = 4;  // apex height added to the flight arc

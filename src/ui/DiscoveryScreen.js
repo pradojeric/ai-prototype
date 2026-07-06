@@ -19,6 +19,7 @@ export class DiscoveryScreen {
     await wait(1100);
 
     const d = await fetchArtifactData(artifactData.id); // mock API
+    document.getElementById('d-img').setAttribute('src', d.image || '');
     document.getElementById('d-fil').textContent = d.fil;
     document.getElementById('d-eng').textContent = d.eng;
     document.getElementById('d-fact').textContent = d.fact;

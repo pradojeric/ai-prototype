@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import {
   CONFIG, mulberry32, clamp01, PLAYER_RADIUS,
-  ARTIFACT_MIN_SEP, SCATTER_DURATION, SCATTER_ARC_HEIGHT,
+  ARTIFACT_BATCH, ARTIFACT_MIN_SEP, SCATTER_DURATION, SCATTER_ARC_HEIGHT,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { StringBundle } from './StringSystem.js';
@@ -17,19 +17,31 @@ const SPAWN_CLEARANCE = PLAYER_RADIUS + 0.4;  // keep artifacts reachable
 const TRAIL_N = 12;                            // points in each flight trail
 
 export class ArtifactManager {
-  constructor(scene, world) {
+  // `collectedIds` is a Set of artifact ids already recovered in this zone across
+  // earlier visits (owned by Game, persists across zone reloads). Only the next
+  // ARTIFACT_BATCH uncollected artifacts are revealed per visit; the zone is done
+  // once every ARTIFACT_DATA id is in the set.
+  constructor(scene, world, collectedIds = new Set()) {
     this.scene = scene;
     this.world = world;          // provides spawnNodes + collidesAt
+    this.collectedIds = collectedIds;
     this.artifacts = [];
     this.scattered = false;      // becomes true once scatter() has run
     this._v = new THREE.Vector3();
   }
 
-  // Compute spread-out, collision-safe landing points (one per artifact data).
+  // The next up-to-ARTIFACT_BATCH artifacts not yet collected in this zone.
+  get batchData() {
+    return ARTIFACT_DATA
+      .filter((d) => !this.collectedIds.has(d.id))
+      .slice(0, ARTIFACT_BATCH);
+  }
+
+  // Compute spread-out, collision-safe landing points (one per batch artifact).
   _computePlacements() {
     const rng = mulberry32((Date.now() & 0xffff) ^ 0x9e37); // per-session
     const used = [];
-    return ARTIFACT_DATA.map((data) => {
+    return this.batchData.map((data) => {
       const nodes = this.world.spawnNodes[data.spawnTag] || this.world.spawnNodes.open_water;
       // Pick a jittered node that isn't crowding another artifact or stuck in a wall.
       let x = 0, z = 0, tries = 0;
@@ -236,6 +248,7 @@ export class ArtifactManager {
 
   collect(artifact) {
     artifact.found = true;
+    this.collectedIds.add(artifact.data.id);   // persist across zone reloads
     this.scene.remove(artifact.mesh);
     artifact.strings.dispose(this.scene);
     if (artifact.trail) {
@@ -250,6 +263,14 @@ export class ArtifactManager {
     for (const a of this.artifacts) a.strings.setResolution(w, h);
   }
 
+  // This visit's batch progress (drives "keep collecting vs. batch done").
   get foundCount() { return this.artifacts.filter((a) => a.found).length; }
-  get total() { return ARTIFACT_DATA.length; }
+  get total() { return this.artifacts.length; }
+  // True once every revealed artifact this visit has been collected.
+  get batchComplete() { return this.artifacts.length > 0 && this.foundCount >= this.total; }
+
+  // Whole-zone progress, persisting across visits (drives final completion + HUD).
+  get zoneTotal() { return ARTIFACT_DATA.length; }
+  get zoneFoundCount() { return this.collectedIds.size; }
+  get zoneComplete() { return this.zoneFoundCount >= this.zoneTotal; }
 }

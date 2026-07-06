@@ -38,6 +38,13 @@ export const zone3 = {
   name: 'Deep Channel (placeholder)',
   label: 'Zone 3 — Deep Channel',   // descend-screen heading
   seed: 20260714,
+  guardianStart: { x: 0, z: 16 },   // waits ahead of the dock in the open arena
+  guardianRebuke: 'You falter, and the deep channel claims you. Return when your mind is clear.',   // shown on a wrong riddle answer
+  // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
+  introDialogue: [
+    '[Zone 3 — Deep Channel] No light reaches this far down.',
+    '[Zone 3 placeholder] The deep channel remembers everything it swallowed.',
+  ],
   background: 0x081826,
   fog: { color: 0x0e2740, density: CONFIG.FOG_DENSITY },
   palette: {},

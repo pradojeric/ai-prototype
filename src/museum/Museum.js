@@ -10,6 +10,10 @@ import { MUSEUM } from '../config.js';
 
 const FRAME_COLOR = 0x0a0e10;     // near-black frame border
 const EMPTY_COLOR = 0x12181b;     // recessed "no art yet" interior
+// Brightness multiplier on framed artwork. <1 keeps the (unlit) art below the
+// scene's bloom threshold so only its highlights faintly glow instead of washing
+// out. Raise toward 0xffffff for brighter art + more bloom; lower to dim it.
+const ART_TINT = 0x9a9a9a;
 
 export class Museum {
   constructor() {
@@ -20,14 +24,15 @@ export class Museum {
     this.slots = [];              // { group, frameMesh, artMesh, anchor, data }
     this._mats = [];              // tracked for dispose()
     this._geos = [];
+    this._texs = [];              // canvas textures (portal signs) tracked for dispose()
     this.hallLit = false;         // the hallway light is off until ignited
 
     // Three zone portals on the -Z wall (physical left -> right). Zone 1 sits in the
     // center and is the only one open; the others are locked until those zones exist.
     this.portals = [
-      { x: MUSEUM.PORTAL_X[0], zone: 2, locked: true },
-      { x: MUSEUM.PORTAL_X[1], zone: 1, locked: false },
-      { x: MUSEUM.PORTAL_X[2], zone: 3, locked: true },
+      { x: MUSEUM.PORTAL_X[0], zone: 2, locked: true, name: '???' },
+      { x: MUSEUM.PORTAL_X[1], zone: 1, locked: false, name: 'Pantal Market' },
+      { x: MUSEUM.PORTAL_X[2], zone: 3, locked: true, name: '???' },
     ];
 
     // The player wakes at the +Z end and the open (Zone 1) portal sits past the
@@ -38,6 +43,7 @@ export class Museum {
     this._lights();
     this._shell();
     this._frames();
+    this._portalSigns();
     this._pedestals();
     this._hallway();
     this._hubLights();    // built but kept off-scene until the hub visit
@@ -175,6 +181,63 @@ export class Museum {
     m.rotation.y = ry;
     this.scene.add(m);
     return m;
+  }
+
+  // A lit signboard on each doorway lintel telling the player which zone lies
+  // beyond. Open zones read "ZONE N" + district name in warm glow; locked zones
+  // hide the name and read "LOCKED" dimmed until unlockPortal() reveals them.
+  _portalSigns() {
+    const H = MUSEUM.ROOM_HALF, Y = MUSEUM.ROOM_HEIGHT;
+    const doorH = 3.0;                       // matches the doorway opening height in _frontWall
+    const signW = 2.4, signH = 0.75;         // 3.2:1 ratio == the sign canvas aspect
+    const y = doorH + (Y - doorH) / 2;       // centered on the lintel above the opening
+    const geo = this._geo(new THREE.PlaneGeometry(signW, signH));
+
+    for (const p of this.portals) {
+      // Unlit (MeshBasic) so the lettering stays legible regardless of room
+      // lighting and reads as a glowing sign once bloom runs.
+      const mat = new THREE.MeshBasicMaterial({
+        map: this._signTexture(p.zone, p.name, p.locked),
+        transparent: true,
+        depthWrite: false,
+      });
+      this._mats.push(mat);
+      const sign = new THREE.Mesh(geo, mat);  // default +Z normal faces into the room
+      sign.position.set(p.x, y, -H + 0.06);   // just in front of the lintel plane
+      this.scene.add(sign);
+      p.signMesh = sign;
+      p.signMat = mat;
+    }
+  }
+
+  // Render a two-line portal sign to a canvas and return it as a texture. Open
+  // signs glow warm amber (matching the artifact/hall palette); locked signs are
+  // muted and say "LOCKED" in place of the hidden district name.
+  _signTexture(zone, name, locked) {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 160;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const accent = locked ? '#7c8b93' : '#ffe6b0';
+    ctx.fillStyle = accent;
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = locked ? 0 : 18;
+    ctx.font = 'bold 64px Georgia, serif';
+    ctx.fillText(`ZONE ${zone}`, c.width / 2, 54);
+
+    ctx.shadowBlur = locked ? 0 : 10;
+    ctx.fillStyle = locked ? '#9c6b6b' : '#d3e8ec';
+    ctx.font = locked ? 'bold 40px Georgia, serif' : '38px Georgia, serif';
+    ctx.fillText(locked ? 'LOCKED' : name, c.width / 2, 120);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    this._texs.push(tex);
+    return tex;
   }
 
   _frames() {
@@ -377,6 +440,13 @@ export class Museum {
       p.panelMat.emissiveIntensity = 1.6;
       p.lit = true;
     }
+    // Repaint the lintel sign: drop "LOCKED", reveal the district name in glow.
+    if (p.signMat) {
+      const old = p.signMat.map;
+      p.signMat.map = this._signTexture(p.zone, p.name, false);
+      p.signMat.needsUpdate = true;
+      if (old) { old.dispose(); this._texs = this._texs.filter((t) => t !== old); }
+    }
   }
 
   // Brighten the gallery for the walkable hub: attach the hub light group and
@@ -450,12 +520,31 @@ export class Museum {
     // Art resources are owned by the slot (not the global _geos/_mats pools) so
     // clear() can fully free them on every hub repopulate without leaking or
     // double-disposing — see clear()/dispose().
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x2a4f52,
-      emissive: new THREE.Color(0xffe6b0),
-      emissiveIntensity: 0.6,
-      roughness: 0.5,
-    });
+    // Art material is owned by the slot (not the global _geos/_mats pools) so
+    // clear() can fully free it on every hub repopulate without leaking or
+    // double-disposing — see clear()/dispose().
+    let mat;
+    if (data && data.image) {
+      // Unlit artwork: MeshBasicMaterial shows the PNG at its true colors,
+      // immune to the gallery lighting. Because the scene runs a low-threshold
+      // bloom pass (for the string glow), a full-brightness image would blow out
+      // (see the white-washed frame bug). ART_TINT dims the texture just enough
+      // that only its brightest highlights cross the bloom threshold — yielding a
+      // FAINT glow instead of a wash. Lower ART_TINT = dimmer art + less glow.
+      this._texLoader ||= new THREE.TextureLoader();
+      const tex = this._texLoader.load(data.image);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      mat = new THREE.MeshBasicMaterial({ map: tex, color: ART_TINT, toneMapped: true });
+      slot.artTex = tex;
+    } else {
+      // No artwork (shouldn't happen in practice): fall back to the old glowing panel.
+      mat = new THREE.MeshStandardMaterial({
+        color: 0x2a4f52,
+        emissive: new THREE.Color(0xffe6b0),
+        emissiveIntensity: 0.6,
+        roughness: 0.5,
+      });
+    }
     const art = new THREE.Mesh(new THREE.PlaneGeometry(1.18, 1.58), mat);
     art.position.z = 0.08;
     slot.group.add(art);
@@ -468,12 +557,25 @@ export class Museum {
     collected.forEach((data, i) => this.setArtifact(i, data));
   }
 
+  // Nearest hung-artwork slot within `range` of `pos` (for "press E to revisit").
+  // Returns { data, dist } or null. Measured to the frame's in-front anchor.
+  nearestArtifact(pos, range) {
+    let best = null, bestDist = range;
+    for (const slot of this.slots) {
+      if (!slot.data) continue;
+      const d = pos.distanceTo(slot.anchor);
+      if (d < bestDist) { bestDist = d; best = slot; }
+    }
+    return best ? { data: best.data, dist: bestDist } : null;
+  }
+
   clear() {
     for (const slot of this.slots) {
       if (slot.artMesh) {
         slot.group.remove(slot.artMesh);
         slot.artMesh.geometry.dispose();
         slot.artMesh.material.dispose();
+        if (slot.artTex) { slot.artTex.dispose(); slot.artTex = null; }
         slot.artMesh = null;
         slot.data = null;
       }
@@ -484,7 +586,9 @@ export class Museum {
     this.clear();                 // free any slot-owned art geo/mat first
     for (const g of this._geos) g.dispose();
     for (const m of this._mats) m.dispose();
+    for (const t of this._texs) t.dispose();
     this._geos.length = 0;
     this._mats.length = 0;
+    this._texs.length = 0;
   }
 }
