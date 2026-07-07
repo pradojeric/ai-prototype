@@ -49,7 +49,9 @@ function narthex(world) {
 // vault ribs. Heights come from the seeded RNG but the tall ones are pinned
 // so ribs always have believable supports.
 const PILLAR_ROWS = [22, 16, 10, 4, -2, -8];   // z stations, S → N
-const TALL_ROWS = new Set([16, 4, -8]);        // rows that keep tall pairs
+// Tall rows carry the vault ribs. Note z=16 must stay short: the Guardian
+// waits at (0, 15) and a rib there cuts across it in the encounter framing.
+const TALL_ROWS = new Set([22, 4, -8]);        // rows that keep tall pairs
 
 function naveColonnade(world) {
   world._pillarTops = {};   // z → [leftTopY, rightTopY], read by vaultRibs()

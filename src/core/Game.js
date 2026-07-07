@@ -668,8 +668,8 @@ export class Game {
     // Guardian-defeat cinematic owns the camera; the world/guardian/artifacts keep
     // updating so the explosion + scatter flight play out under the scripted shot.
     if (this.phase === 'defeat') {
-      this.world.update(dt, t);
       const camPos = this.defeatCutscene.camera.position;
+      this.world.update(dt, t, camPos);
       this.guardian.update(dt, t, camPos);   // guardian faces the cinematic camera
       // String-anchor basis from the cutscene camera (each artifact owns a StringBundle).
       this._gather ||= new THREE.Vector3();   this._camDir ||= new THREE.Vector3();
@@ -687,14 +687,14 @@ export class Game {
     // Faint cinematic owns the camera; the world/guardian keep updating so the
     // guardian's flee-poof plays out under the scripted droop (no artifacts yet).
     if (this.phase === 'faint') {
-      this.world.update(dt, t);
+      this.world.update(dt, t, this.faintCutscene.camera.position);
       this.guardian.update(dt, t, this.faintCutscene.camera.position);
       this.faintCutscene.update(dt);
       this.composer.render();
       return;
     }
 
-    this.world.update(dt, t);
+    this.world.update(dt, t, this.player.controls.getObject().position);
     if (!this.busy) this.player.update(dt);
     this.viewmodel.update(dt, !this.busy && this.player.moving);
 

@@ -575,7 +575,9 @@ export class World {
     cone.position.set(x, height / 2, z);   // wide end at the surface, narrow below
     cone.frustumCulled = false;
     this.scene.add(cone);
-    this.shafts.push({ mat, base: opacity, phase: this.rng() * Math.PI * 2 });
+    // x/z/r let update() fade the cone as the camera nears it (anti-blinding);
+    // base is trimmed slightly so stacked shafts + bloom never overdrive.
+    this.shafts.push({ mat, base: opacity * 0.75, phase: this.rng() * Math.PI * 2, x, z, r: topR });
     return cone;
   }
 
@@ -645,7 +647,7 @@ export class World {
     this.colliders.length = 0;
   }
 
-  update(dt, t) {
+  update(dt, t, camPos = null) {
     this.waterMat.uniforms.uTime.value = t;
     // gentle sediment drift
     this.particles.rotation.y = t * 0.01;
@@ -655,9 +657,19 @@ export class World {
       if (p.array[i] > 6) p.array[i] = 0;
     }
     p.needsUpdate = true;
-    // god-ray shafts breathe gently in intensity
+    // god-ray shafts breathe gently in intensity; cones (entries with a
+    // radius) also fade toward ~20% as the camera approaches/enters them so
+    // an additive shaft filling the view never whites out with bloom.
     for (const s of this.shafts) {
-      s.mat.opacity = s.base * (0.7 + Math.sin(t * 0.5 + s.phase) * 0.3);
+      let k = 0.7 + Math.sin(t * 0.5 + s.phase) * 0.3;
+      if (camPos && s.r !== undefined) {
+        const dx = camPos.x - s.x, dz = camPos.z - s.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        const inner = s.r * 0.5, outer = s.r + 4;   // fully dim inside, full past the rim
+        const fade = Math.min(1, Math.max(0, (d - inner) / (outer - inner)));
+        k *= 0.2 + 0.8 * fade;
+      }
+      s.mat.opacity = s.base * k;
     }
     // floating debris bob + slow spin
     for (const d of this.debris) {

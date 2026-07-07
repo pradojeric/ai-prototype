@@ -7,6 +7,7 @@
 // with the player walking and the frames populated by collected artifacts.
 import * as THREE from 'three';
 import { MUSEUM } from '../config.js';
+import { createVortexMaterial } from './PortalVortex.js';
 
 const FRAME_COLOR = 0x0a0e10;     // near-black frame border
 const EMPTY_COLOR = 0x12181b;     // recessed "no art yet" interior
@@ -14,6 +15,11 @@ const EMPTY_COLOR = 0x12181b;     // recessed "no art yet" interior
 // scene's bloom threshold so only its highlights faintly glow instead of washing
 // out. Raise toward 0xffffff for brighter art + more bloom; lower to dim it.
 const ART_TINT = 0x9a9a9a;
+// Same idea for the portal signs: unlit MeshBasic at full white crosses the
+// bloom threshold and the lettering smears into a blob. Tinting the material
+// keeps the canvas text crisp with only a faint glow, in both the dark intro
+// and the bright hub. Raise toward 0xffffff for more glow.
+const SIGN_TINT = 0x8f8f8f;
 
 export class Museum {
   constructor() {
@@ -216,6 +222,7 @@ export class Museum {
       // lighting and reads as a glowing sign once bloom runs.
       const mat = new THREE.MeshBasicMaterial({
         map: this._signTexture(p.zone, p.name, p.locked),
+        color: SIGN_TINT,
         transparent: true,
         depthWrite: false,
       });
@@ -330,6 +337,7 @@ export class Museum {
     const p = this.portals.find((pp) => pp.zone === zone);
     const mat = new THREE.MeshBasicMaterial({
       map: this._signTexture(zone, p ? p.name : '???', p ? p.locked : true),
+      color: SIGN_TINT,
       transparent: true,
       depthWrite: false,
     });
@@ -437,6 +445,20 @@ export class Museum {
       panel.position.set(p.x, Y / 2, -H - len + 0.03);   // sit just in front of the back wall
       this.scene.add(panel);
 
+      // Swirling blue vortex overlaying the panel — hidden until the walkable
+      // hub (setHubLighting) reveals it on open portals. One shared shader
+      // material (single uTime); the intro keeps the plain warm/cold panels.
+      this._vortexMat ||= (() => {
+        const vm = createVortexMaterial((d * 2 + 0.4) / Y);
+        this._mats.push(vm);
+        return vm;
+      })();
+      const vortex = new THREE.Mesh(panelGeo, this._vortexMat);
+      vortex.position.set(p.x, Y / 2, -H - len + 0.05);  // just in front of the panel
+      vortex.visible = false;
+      this.scene.add(vortex);
+      p.vortexMesh = vortex;
+
       // Per-portal handles used by the hub: the panel material (lit/breathed when
       // open), the corridor-end point Game detects to enter the zone, and a lit flag.
       p.panelMat = mat;
@@ -511,8 +533,13 @@ export class Museum {
   // ---- per-frame ------------------------------------------------------------
 
   update(dt, t) {
-    // Once lit, breathe each open portal's emissive panel so the glow feels alive.
-    // Unlit panels (still-locked corridors) stay at their static dim glow.
+    if (this.hubMode) {
+      // Hub: the vortices carry the portal look — just spin them.
+      if (this._vortexMat) this._vortexMat.uniforms.uTime.value = t;
+      return;
+    }
+    // Intro: once lit, breathe each open portal's emissive panel so the glow
+    // feels alive. Unlit panels (still-locked corridors) stay at their dim glow.
     for (const p of this.portals) {
       if (p.lit && p.panelMat) p.panelMat.emissiveIntensity = 1.6 + Math.sin(t * 1.7) * 0.2;
     }
@@ -543,6 +570,11 @@ export class Museum {
       p.panelMat.emissiveIntensity = 1.6;
       p.lit = true;
     }
+    // In the hub the open-portal look is the blue vortex, not the warm panel.
+    if (this.hubMode && p.vortexMesh) {
+      p.vortexMesh.visible = true;
+      p.panelMat.emissiveIntensity = 0;
+    }
     // Repaint the lintel signs (portal doorway + this zone's wing doorway):
     // drop "LOCKED", reveal the district name in glow.
     for (const mat of [p.signMat, p.wingSignMat]) {
@@ -559,6 +591,16 @@ export class Museum {
   // white fade in Game._enterMuseum hides the change). Only ever called after
   // the intro, so mutating the shared room materials here is safe.
   setHubLighting(on) {
+    this.hubMode = on;
+    // Hub: open portals trade the warm emissive panel for the blue vortex;
+    // leaving the hub restores the intro's warm panels. Locked corridors keep
+    // their dim cold panel either way.
+    for (const p of this.portals) {
+      if (!p.vortexMesh) continue;
+      const swirl = on && !p.locked;
+      p.vortexMesh.visible = swirl;
+      if (!p.locked && p.panelMat) p.panelMat.emissiveIntensity = swirl ? 0 : (p.lit ? 1.6 : 0);
+    }
     if (on) {
       if (this.hubGroup.parent !== this.scene) this.scene.add(this.hubGroup);
       this.floorMat.color.setHex(0x4d555a);
