@@ -119,16 +119,19 @@ export class Game {
     this.elZcTrans = document.getElementById('zc-trans');
     this.elZcEnter = document.getElementById('zc-enter');
     this.elSkipMuseum = document.getElementById('skipmuseum');
+    this.elAwaken = document.getElementById('btn-awaken');
+    this.elSettings = document.getElementById('settings');
     this.elRingWrap = document.getElementById('holdring');
     this.elRing = this.elRingWrap.querySelector('.prog');
   }
 
   _events() {
-    // Title -> play the intro cutscene -> reveal the Descend screen.
-    // stopPropagation so this same click doesn't reach the skip handler below.
-    this.elTitle.addEventListener('click', (e) => { e.stopPropagation(); this._runIntro(); });
+    // Title menu -> play the intro cutscene -> reveal the Descend screen.
+    // stopPropagation so these clicks don't reach the cutscene-skip handler below.
+    this.elAwaken.addEventListener('click', (e) => { e.stopPropagation(); this._runIntro(); });
     // Skip the intro + gameplay and drop straight into the walkable museum hub.
     this.elSkipMuseum.addEventListener('click', (e) => { e.stopPropagation(); this._skipToMuseum(); });
+    this._wireSettings();
     // A click during the cutscene skips to the white fade.
     addEventListener('click', () => { if (this.phase === 'cutscene') this.cutscene.skip(); });
 
@@ -181,6 +184,48 @@ export class Game {
       this.composer.setSize(innerWidth, innerHeight);
       this.artifacts.setResolution(innerWidth, innerHeight); // fat-line thickness
     });
+  }
+
+  // Settings modal: volume slider drives the audio master bus and persists
+  // across sessions. Openers: the title menu button + the gear on the
+  // Descend/Resume screens (those screens are whole-surface click targets,
+  // so gear clicks must not propagate).
+  _wireSettings() {
+    // Restore + wire one volume slider; setters are pre-init safe on AudioManager.
+    // Falls back to the legacy single-volume key so older saves carry over.
+    const readSaved = (key, fallback) => {
+      try {
+        const raw = localStorage.getItem(key) ?? localStorage.getItem('strings.volume');
+        const v = parseFloat(raw);
+        if (raw !== null && !Number.isNaN(v)) return v;
+      } catch (e) { /* storage optional (private mode) */ }
+      return fallback;
+    };
+    const wireSlider = (sliderId, valId, storageKey, apply) => {
+      const slider = document.getElementById(sliderId);
+      const val = document.getElementById(valId);
+      const saved = readSaved(storageKey, 0.9);
+      apply(saved);
+      slider.value = Math.round(saved * 100);
+      val.textContent = `${Math.round(saved * 100)}%`;
+      slider.addEventListener('input', () => {
+        const v = slider.value / 100;
+        apply(v);
+        val.textContent = `${slider.value}%`;
+        try { localStorage.setItem(storageKey, String(v)); } catch (e) { /* ignore */ }
+      });
+    };
+    wireSlider('music-slider', 'music-val', 'strings.musicVolume', (v) => this.audio.setMusicVolume(v));
+    wireSlider('sfx-slider', 'sfx-val', 'strings.sfxVolume', (v) => this.audio.setSfxVolume(v));
+
+    const open = (e) => { e.stopPropagation(); this.elSettings.classList.add('active'); };
+    document.getElementById('btn-settings').addEventListener('click', open);
+    document.querySelectorAll('.gear').forEach((g) => g.addEventListener('click', open));
+
+    const close = (e) => { e.stopPropagation(); this.elSettings.classList.remove('active'); };
+    document.getElementById('settings-close').addEventListener('click', close);
+    // Clicking the dim backdrop (not the panel) also closes.
+    this.elSettings.addEventListener('click', (e) => { if (e.target === this.elSettings) close(e); });
   }
 
   // Play the intro cutscene over the museum, then reveal the Descend screen.

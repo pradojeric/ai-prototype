@@ -46,13 +46,13 @@ export function buildZone2Guardian(figure) {
   // boolean-sphere mask, lavender-gray mantle fins, pink/violet coral accents,
   // cyan eye/tip glow, warm tide-pool gold in the chest.
   const glow = 0x9fe8ff;                    // icy cyan halo/beacon mood tint
-  const matBody  = fadeMat(0x4a6b66, 0x6fd8d0, 0.2, 0.9, 0.65, 0.1);   // coral lattice
-  const matMask  = fadeMat(0xbfdce8, 0x9fe8ff, 0.35, 0.92, 0.5, 0.1);  // pale ice-blue
-  const matCoral = fadeMat(0xb478a8, 0xe8a0d8, 0.5, 0.9, 0.55, 0.1);   // pink coral
-  const matFin   = fadeMat(0x8a8098, 0xb8a8d8, 0.5, 0.5, 0.65, 0.05);  // lavender-gray mantle
+  const matBody  = fadeMat(0x4a6b66, 0x6fd8d0, 0, 0.9, 0.65, 0.1);     // coral lattice
+  const matMask  = fadeMat(0xbfdce8, 0x9fe8ff, 0, 0.92, 0.5, 0.1);     // pale ice-blue
+  const matCoral = fadeMat(0xb478a8, 0xe8a0d8, 0, 0.9, 0.55, 0.1);     // pink coral
+  const matFin   = fadeMat(0x8a8098, 0xb8a8d8, 0, 0.5, 0.65, 0.05);    // lavender-gray mantle
   matFin.side = THREE.DoubleSide;                                      // fins visible from both faces
-  const matCyan  = fadeMat(0x9fe8ff, 0x9fe8ff, 2.0, 0.96, 0.3, 0.1);   // eyes / tentacle tips
-  const matGlow  = fadeMat(0xffb066, 0xffb066, 2.2, 0.96, 0.3, 0.1);   // warm tide-pool core
+  const matCyan  = fadeMat(0x9fe8ff, 0x9fe8ff, 0, 0.96, 0.3, 0.1);     // eyes / tentacle tips
+  const matGlow  = fadeMat(0xffb066, 0xffb066, 0, 0.96, 0.3, 0.1);     // warm tide-pool core
   const fadeMats = [
     [matBody, 0.9], [matMask, 0.92], [matCoral, 0.9], [matFin, 0.5],
     [matCyan, 0.96], [matGlow, 0.96],
@@ -341,7 +341,7 @@ export function buildZone2Guardian(figure) {
     chestY: 3.55,
     glowColor: glow,
     animate(dt, t, f, playerPos, groupPos) {
-      // Bob, face the player, wave tentacles + fins, spin/pulse the core, orbit relics.
+      // Bob, face the player, wave tentacles + fins, spin the core, orbit relics.
       figure.position.y = CONFIG.WATER_LEVEL + Math.sin(t * 1.0) * 0.14;
       const yaw = Math.atan2(playerPos.x - groupPos.x, playerPos.z - groupPos.z);
       figure.rotation.y += angDelta(figure.rotation.y, yaw) * Math.min(1, dt * 2.2);
@@ -356,8 +356,6 @@ export function buildZone2Guardian(figure) {
       }
 
       core.swirl.rotation.z += dt * 0.7;
-      matGlow.emissiveIntensity = (2.0 + Math.sin(t * 2.3) * 0.6) * f;
-      matCyan.emissiveIntensity = (1.8 + Math.sin(t * 2.8 + 1) * 0.5) * f;
 
       for (const o of orbits) {
         o.ang += dt * o.speed;

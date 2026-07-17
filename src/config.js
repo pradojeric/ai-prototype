@@ -113,7 +113,8 @@ export const SCATTER_ARC_HEIGHT = 4;  // apex height added to the flight arc
 // Artifact "Echo" — a spatialized audio locator that reaches farther than the
 // string, so players home in on a buried artifact by ear before it's visible.
 export const ECHO = {
-  RANGE: 28,           // max audible distance (string only fades in by ~13m)
+  RANGE: 28,           // hard silence beyond this (string only fades in by ~13m)
+  FADE: 8,             // fade-out band width just inside RANGE (20m..28m -> 1..0)
   REF_DIST: 4,         // distance of full volume; rolls off past this
   PING_INTERVAL: 2.6,  // seconds between pings (sonar cadence)
   GAIN: 0.18,          // peak per-echo volume

@@ -6,7 +6,7 @@
 // real direction (it pans as you turn) and distance (it swells as you near),
 // so the player can home in by ear from beyond the visible string's reach.
 // ============================================================
-import { ECHO } from '../config.js';
+import { ECHO, clamp01 } from '../config.js';
 
 // A short pentatonic set so different artifacts ping at distinct, consonant
 // pitches — easier to tell two echoes apart while triangulating.
@@ -19,6 +19,8 @@ export class EchoVoice {
     this.freq = PING_SCALE[Math.floor(Math.random() * PING_SCALE.length)];
     this.phase = phase;                       // staggers pings across artifacts
     this.nextPing = ctx.currentTime + phase;  // first ping after the offset
+
+    this.pos = { x: pos.x, y: pos.y, z: pos.z }; // kept for the listener-distance gate
 
     const panner = ctx.createPanner();
     panner.panningModel = 'HRTF';
@@ -42,15 +44,30 @@ export class EchoVoice {
   }
 
   // Schedule the next bell ping once its phased timer elapses. Called each frame
-  // with ctx.currentTime; allocates only the one-shot nodes a ping needs (auto
-  // GC'd after stop), nothing per-frame while waiting.
-  update(now) {
+  // with ctx.currentTime + the listener's world position; allocates only the
+  // one-shot nodes a ping needs (auto GC'd after stop), nothing while waiting.
+  //
+  // The panner's 'inverse' distance model never actually reaches zero (its
+  // maxDistance is ignored by that model), so range-gate here: fade the ping's
+  // envelope out across the last ECHO.FADE meters and skip it entirely beyond
+  // ECHO.RANGE — a skipped ping also keeps the shared delay tail silent.
+  update(now, listenerPos) {
     if (now < this.nextPing) return;
     this.nextPing = now + ECHO.PING_INTERVAL;
-    this._ping(now);
+
+    let fade = 1;
+    if (listenerPos) {
+      const dx = listenerPos.x - this.pos.x;
+      const dy = listenerPos.y - this.pos.y;
+      const dz = listenerPos.z - this.pos.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      fade = clamp01((ECHO.RANGE - dist) / ECHO.FADE);
+      if (fade <= 0) return; // out of earshot: no ping, no delay feed
+    }
+    this._ping(now, fade);
   }
 
-  _ping(at) {
+  _ping(at, fade = 1) {
     const { ctx } = this;
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
@@ -58,7 +75,7 @@ export class EchoVoice {
     osc.frequency.value = this.freq;
     // Bell-like attack/decay: quick rise, long-ish tail.
     env.gain.setValueAtTime(0.0001, at);
-    env.gain.exponentialRampToValueAtTime(ECHO.GAIN, at + 0.02);
+    env.gain.exponentialRampToValueAtTime(ECHO.GAIN * fade, at + 0.02);
     env.gain.exponentialRampToValueAtTime(0.0001, at + 1.1);
     osc.connect(env).connect(this.panner);
     osc.start(at);

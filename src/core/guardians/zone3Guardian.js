@@ -39,11 +39,11 @@ export function buildZone3Guardian(figure) {
   const glow = 0xffcf87;                    // warm gold halo/beacon mood tint
   const matStone = fadeMat(0x7a8272, 0x5a4a2a, 0.3, 0.92, 0.85, 0.05);      // mossy stone
   const matStoneDark = fadeMat(0x565e50, 0x4a3c20, 0.25, 0.92, 0.9, 0.05);
-  const matGlow = fadeMat(0xffcf87, 0xffcf87, 2.2, 0.96, 0.3, 0.1);         // gold light
+  const matGlow = fadeMat(0xffcf87, 0xffcf87, 0, 0.96, 0.3, 0.1);           // gold seams (unlit)
   matGlow.side = THREE.DoubleSide;                                          // seam planes visible both faces
   const matCape = fadeMat(0xffe0b0, 0xffcf87, 1.2, 0.3, 0.4, 0.05);         // translucent light cape
   matCape.side = THREE.DoubleSide;
-  const matCrystal = fadeMat(0xcfe8ff, 0x9fd8ff, 1.4, 0.75, 0.3, 0.2);      // icy crest
+  const matCrystal = fadeMat(0xcfe8ff, 0x9fd8ff, 0, 0.75, 0.3, 0.2);        // icy crest
   const matSpectral = fadeMat(0xbfe0ff, 0x8fc8ff, 1.2, 0.4, 0.4, 0.1);      // ghost figures
   const matThread = new THREE.LineBasicMaterial({
     color: 0xffcf87, transparent: true, opacity: 0.5,
@@ -295,15 +295,13 @@ export function buildZone3Guardian(figure) {
     chestY: 3.8,
     glowColor: glow,
     animate(dt, t, f, playerPos, groupPos) {
-      // Bob, face the player, pulse core, flow cape, twinkle eyes, drift
-      // fragments, turn thread arcs, orbit spectrals + redraw threads.
+      // Bob, face the player, flow cape, twinkle eyes, drift fragments,
+      // turn thread arcs, orbit spectrals + redraw threads.
       figure.position.y = CONFIG.WATER_LEVEL + Math.sin(t * 0.8) * 0.12;
       const yaw = Math.atan2(playerPos.x - groupPos.x, playerPos.z - groupPos.z);
       figure.rotation.y += angDelta(figure.rotation.y, yaw) * Math.min(1, dt * 1.8);
 
       core.swirl.rotation.z += dt * 0.6;
-      matGlow.emissiveIntensity = (2.0 + Math.sin(t * 1.9) * 0.5) * f;
-      matCrystal.emissiveIntensity = (1.4 + Math.sin(t * 2.6) * 0.4) * f;
       cape.rotation.z = Math.sin(t * 0.9) * 0.08;
       cape.rotation.x = 0.15 + Math.sin(t * 1.1) * 0.05;
 

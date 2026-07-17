@@ -11,13 +11,16 @@
 import * as THREE from 'three';
 import { ECHO, MUSIC_SWELL_RANGE, clamp01 } from '../config.js';
 import { EchoVoice } from './EchoVoice.js';
+import { BGM_BPM, BGM_LOOP_BEATS, BGM_SCORE } from './BgmScore.js';
 
-// Sparse A-minor pentatonic for the melody — melancholic, fits a drowned market.
-const MELODY_SCALE = [220.0, 261.63, 293.66, 329.63, 392.0, 440.0]; // A3 C4 D4 E4 G4 A4
+// Fixed headroom on the master bus; user music/SFX volumes scale their buses.
+const MASTER_BASE_GAIN = 0.9;
 
 export class AudioManager {
   constructor() {
     this.ready = false;
+    this.musicVolume = 1;      // 0..1 user music volume (bed + melody); settable pre-init
+    this.sfxVolume = 1;        // 0..1 user SFX volume (hum, echoes, scatter, teleport)
     this.echoes = new Map();   // artifact -> EchoVoice
     // scratch vectors for the per-frame listener update (no per-frame alloc)
     this._lpos = new THREE.Vector3();
@@ -32,7 +35,7 @@ export class AudioManager {
       const ctx = this.ctx;
 
       this.master = ctx.createGain();
-      this.master.gain.value = 0.9;
+      this.master.gain.value = MASTER_BASE_GAIN;
       this.master.connect(ctx.destination);
 
       // Shared feedback delay = the "echo" tail (also makes everything watery).
@@ -43,10 +46,22 @@ export class AudioManager {
       this.delay.connect(this.delayFb).connect(this.delay);
       this.delay.connect(this.master);
 
-      // Echo bus: voices route here, heard dry + sent into the echo tail.
+      // User-facing volume buses. Every source routes through one of these
+      // (heard dry via master + sent into the shared echo tail), so the sliders
+      // also scale each group's delay feed — muting SFX mutes its tail too.
+      this.musicBus = ctx.createGain();
+      this.musicBus.gain.value = this.musicVolume;
+      this.musicBus.connect(this.master);
+      this.musicBus.connect(this.delay);
+
+      this.sfxBus = ctx.createGain();
+      this.sfxBus.gain.value = this.sfxVolume;
+      this.sfxBus.connect(this.master);
+      this.sfxBus.connect(this.delay);
+
+      // Echo bus: spatialized voices route here, into the SFX group.
       this.echoBus = ctx.createGain();
-      this.echoBus.connect(this.master);
-      this.echoBus.connect(this.delay);
+      this.echoBus.connect(this.sfxBus);
 
       this._buildHum();
       this._buildBed();
@@ -61,7 +76,7 @@ export class AudioManager {
     const ctx = this.ctx;
     this.hum = ctx.createGain();
     this.hum.gain.value = 0;
-    this.hum.connect(this.master);
+    this.hum.connect(this.sfxBus);
     this.osc = ctx.createOscillator();
     this.osc.type = 'sine';
     this.osc.frequency.value = 196; // G string
@@ -73,13 +88,12 @@ export class AudioManager {
   _buildBed() {
     const ctx = this.ctx;
     const bedGain = ctx.createGain();
-    bedGain.gain.value = 0.05;
+    bedGain.gain.value = 0.09;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 320;
     filter.Q.value = 0.7;
-    filter.connect(bedGain).connect(this.master);
-    bedGain.connect(this.delay); // a little tail on the pad too
+    filter.connect(bedGain).connect(this.musicBus); // musicBus feeds the delay tail too
 
     for (const [f, det] of [[55, -4], [82.41, 5]]) { // A1 + its fifth, detuned
       const o = ctx.createOscillator();
@@ -99,34 +113,77 @@ export class AudioManager {
     lfo.start();
   }
 
-  // Sparse pentatonic bells into melodyGain (the swell target) + echo tail.
+  // Composed kulintang-style BGM (see BgmScore.js): bells route through
+  // melodyGain so the near-artifact swell keeps modulating the lead line;
+  // gongs get their own steady gain. A short look-ahead scheduler walks the
+  // score and books each note on the Web Audio clock, wrapping per loop.
   _buildMelody() {
     const ctx = this.ctx;
     this.melodyGain = ctx.createGain();
-    this.melodyGain.gain.value = 0.015;   // quiet until an echo is near
-    this.melodyGain.connect(this.master);
-    this.melodyGain.connect(this.delay);
+    this.melodyGain.gain.value = 0.05;    // the lead line; swells further near a find
+    this.melodyGain.connect(this.musicBus);
 
-    // ~1.4s grid; most ticks rest, so the motif stays sparse and atmospheric.
+    this.gongGain = ctx.createGain();
+    this.gongGain.gain.value = 0.13;
+    this.gongGain.connect(this.musicBus);
+
+    // The pointer walks the score in order, so it MUST be time-sorted —
+    // the source file groups notes by voice for readability.
+    const score = [...BGM_SCORE].sort((a, b) => a.t - b.t);
+    const beat = 60 / BGM_BPM;
+    const loopDur = BGM_LOOP_BEATS * beat;
+    let loopStart = ctx.currentTime + 0.15;
+    let i = 0;
+    const LOOKAHEAD = 0.6; // schedule anything starting within this window
+
     this._melodyTimer = setInterval(() => {
-      if (Math.random() < 0.55) return;   // rest
-      this._note(MELODY_SCALE[Math.floor(Math.random() * MELODY_SCALE.length)]);
-    }, 1400);
+      const horizon = ctx.currentTime + LOOKAHEAD;
+      // Book due notes; when the score is exhausted, roll into the next cycle.
+      while (true) {
+        if (i >= score.length) { loopStart += loopDur; i = 0; }
+        const n = score[i];
+        // A start time in the past would collapse the note's envelope ramps
+        // to silence (e.g. after a background-tab stall) — nudge it to "now".
+        const at = Math.max(loopStart + n.t * beat, ctx.currentTime + 0.01);
+        if (at > horizon) break;
+        i++;
+        if (n.voice === 'gong') this._gong(n.f, at, n.d * beat, n.v);
+        else this._bell(n.f, at, n.d * beat, n.v);
+      }
+    }, 200);
   }
 
-  _note(freq) {
+  // Kulintang pot: bright triangle strike with a ringing tail.
+  _bell(freq, at, dur, vel) {
     const ctx = this.ctx;
-    const at = ctx.currentTime + 0.02;
+    const o = ctx.createOscillator();
+    const env = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = freq;
+    const tail = Math.max(dur, 1.2);
+    env.gain.setValueAtTime(0.0001, at);
+    env.gain.exponentialRampToValueAtTime(0.5 * vel, at + 0.02);
+    env.gain.exponentialRampToValueAtTime(0.0001, at + tail);
+    o.connect(env).connect(this.melodyGain);
+    o.start(at);
+    o.stop(at + tail + 0.1);
+  }
+
+  // Agung: deep sine strike, a slight pitch sag, long fat decay.
+  _gong(freq, at, dur, vel) {
+    const ctx = this.ctx;
     const o = ctx.createOscillator();
     const env = ctx.createGain();
     o.type = 'sine';
-    o.frequency.value = freq;
+    o.frequency.setValueAtTime(freq * 1.02, at);
+    o.frequency.exponentialRampToValueAtTime(freq, at + 0.25);
+    const tail = Math.max(dur, 2.4);
     env.gain.setValueAtTime(0.0001, at);
-    env.gain.exponentialRampToValueAtTime(0.5, at + 0.03);
-    env.gain.exponentialRampToValueAtTime(0.0001, at + 1.6);
-    o.connect(env).connect(this.melodyGain);
+    env.gain.exponentialRampToValueAtTime(0.6 * vel, at + 0.04);
+    env.gain.exponentialRampToValueAtTime(0.0001, at + tail);
+    o.connect(env).connect(this.gongGain);
     o.start(at);
-    o.stop(at + 1.7);
+    o.stop(at + tail + 0.1);
   }
 
   // ---- one-shot scatter burst ----------------------------------------------
@@ -155,8 +212,7 @@ export class AudioManager {
     nGain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.05);
     nGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     noise.connect(bp).connect(nGain);
-    nGain.connect(this.master);
-    nGain.connect(this.delay);
+    nGain.connect(this.sfxBus);
     noise.start(t0);
     noise.stop(t0 + dur);
 
@@ -171,8 +227,7 @@ export class AudioManager {
       env.gain.setValueAtTime(0.0001, at);
       env.gain.exponentialRampToValueAtTime(0.28, at + 0.02);
       env.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
-      o.connect(env).connect(this.master);
-      env.connect(this.delay);
+      o.connect(env).connect(this.sfxBus);
       o.start(at);
       o.stop(at + 1.0);
     });
@@ -198,8 +253,7 @@ export class AudioManager {
     env.gain.setValueAtTime(0.0001, t0);
     env.gain.exponentialRampToValueAtTime(0.6, t0 + 0.02);
     env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(env).connect(this.master);
-    env.connect(this.delay);
+    o.connect(env).connect(this.sfxBus);
     o.start(t0);
     o.stop(t0 + dur);
 
@@ -214,11 +268,24 @@ export class AudioManager {
       senv.gain.setValueAtTime(0.0001, at);
       senv.gain.exponentialRampToValueAtTime(0.2, at + 0.01);
       senv.gain.exponentialRampToValueAtTime(0.0001, at + 0.5);
-      so.connect(senv).connect(this.master);
-      senv.connect(this.delay);
+      so.connect(senv).connect(this.sfxBus);
       so.start(at);
       so.stop(at + 0.55);
     });
+  }
+
+  // ---- user volumes ---------------------------------------------------------
+  // Safe to call before init(); values are applied when the context is built.
+  setMusicVolume(v) {
+    this.musicVolume = clamp01(v);
+    if (!this.ready) return;
+    this.musicBus.gain.setTargetAtTime(this.musicVolume, this.ctx.currentTime, 0.05);
+  }
+
+  setSfxVolume(v) {
+    this.sfxVolume = clamp01(v);
+    if (!this.ready) return;
+    this.sfxBus.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
   }
 
   // ---- string hum (unchanged behavior) -------------------------------------
@@ -233,7 +300,7 @@ export class AudioManager {
   setSwell(nearestDist) {
     if (!this.ready) return;
     const swell = clamp01((MUSIC_SWELL_RANGE - nearestDist) / MUSIC_SWELL_RANGE);
-    const target = 0.015 + swell * 0.12;
+    const target = 0.05 + swell * 0.15;   // matches the melody's base gain
     this.melodyGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.4);
   }
 
@@ -282,6 +349,6 @@ export class AudioManager {
     }
 
     const now = this.ctx.currentTime;
-    for (const v of this.echoes.values()) v.update(now);
+    for (const v of this.echoes.values()) v.update(now, this._lpos); // range-gates each ping
   }
 }

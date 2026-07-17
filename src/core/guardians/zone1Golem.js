@@ -28,15 +28,15 @@ export function buildZone1Golem(figure) {
   const matPot   = fadeMat(0x6b4a35, gold, 0.06, 0.95, 0.8, 0.02);  // terracotta
   const matHorn  = fadeMat(0x3d4a3a, jade, 0.2, 0.95, 0.5, 0.1);    // dark olive stone
   const matFrond = fadeMat(0x3e6b45, jade, 0.15, 0.85, 0.7, 0.05);  // seaweed
-  const matGlow  = fadeMat(jade, jade, 1.8, 0.96, 0.3, 0.1);        // runes / eyes / belt
-  const matWarm  = fadeMat(0xd9a24a, gold, 1.6, 0.95, 0.5, 0.1);    // lantern-lit food glow
+  const matGlow  = fadeMat(jade, jade, 0, 0.96, 0.3, 0.1);          // runes / eyes / belt
+  const matWarm  = fadeMat(0xd9a24a, gold, 0, 0.95, 0.5, 0.1);      // lantern-lit food accents
   const fadeMats = [
     [matBody, 0.9], [matLimb, 0.92], [matRope, 0.92], [matPot, 0.95],
     [matHorn, 0.95], [matFrond, 0.85], [matGlow, 0.96], [matWarm, 0.95],
   ];
   const sphereGeo = new THREE.SphereGeometry(0.16, 10, 8);  // shared food/knob geo
   const foodColors = [0xd94f3a, 0x7ab648, 0xe8c86a, 0xc47ab0]; // shared food-morsel mats
-  const foodMats = foodColors.map((c) => fadeMat(c, c, 0.6, 0.95, 0.6, 0.05));
+  const foodMats = foodColors.map((c) => fadeMat(c, c, 0, 0.95, 0.6, 0.05));
   for (const m of foodMats) fadeMats.push([m, 0.95]);
 
   // A small serving plate heaped with colored food morsels (used inside the
@@ -269,7 +269,7 @@ export function buildZone1Golem(figure) {
     chestY: 3.55,           // local chest height (halo + encounter anchor)
     glowColor: gold,
     animate(dt, t, f, playerPos, groupPos) {
-      // Bob, turn to face the player, sway arms/fronds, pulse glow, orbit plates.
+      // Bob, turn to face the player, sway arms/fronds, orbit plates.
       figure.position.y = CONFIG.WATER_LEVEL + Math.sin(t * 1.2) * 0.12;
       const yaw = Math.atan2(playerPos.x - groupPos.x, playerPos.z - groupPos.z);
       figure.rotation.y += angDelta(figure.rotation.y, yaw) * Math.min(1, dt * 2.5);
@@ -283,9 +283,6 @@ export function buildZone1Golem(figure) {
       for (const fr of fronds) {
         fr.mesh.rotation.x = fr.baseX + Math.sin(t * 1.6 + fr.phase) * 0.12;
       }
-      matGlow.emissiveIntensity = (2.0 + Math.sin(t * 2.5) * 0.6) * f;
-      matWarm.emissiveIntensity = (1.6 + Math.sin(t * 2.0 + 1) * 0.4) * f;
-
       for (const o of orbits) {
         o.ang += dt * o.speed;
         o.mesh.position.set(

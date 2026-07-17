@@ -412,21 +412,181 @@
       line-height: 1.9;
     }
 
-    #title .skip {
-      margin-top: 20px;
-      padding: 8px 22px;
-      border: 1px solid rgba(111, 216, 208, .35);
-      border-radius: 30px;
-      font-size: 11px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      opacity: .5;
-      cursor: pointer;
-      transition: opacity .2s;
+    /* ---- Main menu ---- */
+    #title {
+      cursor: default;
     }
 
-    #title .skip:hover {
+    #title .rule {
+      width: 70px;
+      margin-top: 26px;
+      border-top: 1px solid rgba(201, 161, 107, .55);
+    }
+
+    #title .menu {
+      margin-top: 46px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      width: min(280px, 80vw);
+    }
+
+    .menu-btn {
+      font-family: inherit;
+      color: #eaf6f4;
+      background: rgba(10, 21, 24, .55);
+      border: 1px solid rgba(111, 216, 208, .35);
+      border-radius: 40px;
+      padding: 13px 30px;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background .2s, border-color .2s, box-shadow .2s;
+    }
+
+    .menu-btn:hover,
+    .menu-btn:focus-visible {
+      background: rgba(111, 216, 208, .14);
+      border-color: var(--teal);
+      outline: none;
+      box-shadow: 0 0 18px rgba(111, 216, 208, .25);
+    }
+
+    .menu-btn:active {
+      background: rgba(111, 216, 208, .28);
+    }
+
+    .menu-btn.primary {
+      border-color: var(--teal);
+      color: var(--teal);
+      animation: pulse 2.6s ease-in-out infinite;
+    }
+
+    #title .ver {
+      margin-top: 40px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      opacity: .35;
+      font-style: italic;
+    }
+
+    /* ---- Settings gear (Descend / Resume screens) ---- */
+    .gear {
+      position: absolute;
+      top: max(18px, env(safe-area-inset-top));
+      right: max(22px, env(safe-area-inset-right));
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid rgba(111, 216, 208, .35);
+      background: rgba(10, 21, 24, .55);
+      color: var(--teal);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: .65;
+      transition: opacity .2s, border-color .2s;
+    }
+
+    .gear:hover,
+    .gear:focus-visible {
       opacity: 1;
+      border-color: var(--teal);
+      outline: none;
+    }
+
+    /* ---- Settings modal ---- */
+    #settings {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4, 9, 11, .72);
+      backdrop-filter: blur(4px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease;
+      z-index: 40;
+    }
+
+    #settings.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #settings .panel {
+      width: min(360px, 88vw);
+      padding: 30px 32px;
+      border-radius: 16px;
+      border: 1px solid rgba(111, 216, 208, .35);
+      background: rgba(10, 21, 24, .92);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .55);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      text-align: left;
+    }
+
+    #settings .s-title {
+      font-size: 15px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--teal);
+      text-align: center;
+    }
+
+    #settings .s-row {
+      display: grid;
+      grid-template-columns: auto 1fr 46px;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #settings label {
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: .75;
+    }
+
+    #settings .s-val {
+      font-size: 13px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--amber);
+    }
+
+    #settings input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 4px;
+      background: rgba(234, 246, 244, .14);
+      outline: none;
+      cursor: pointer;
+    }
+
+    #settings input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--teal);
+      border: none;
+      box-shadow: 0 0 8px rgba(111, 216, 208, .7);
+    }
+
+    #settings input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--teal);
+      border: none;
+      box-shadow: 0 0 8px rgba(111, 216, 208, .7);
     }
 
     @keyframes pulse {
@@ -723,12 +883,35 @@
 
   <div id="title" style="display:none">
     <h1>STRINGS</h1>
+    <div class="rule"></div>
     <div class="sub">"You wake where the art has not yet arrived."</div>
-    <div class="enter">Click to Awaken</div>
-    <div class="skip" id="skipmuseum">Skip to Museum</div>
+    <div class="menu">
+      <button class="menu-btn primary" id="btn-awaken">Awaken</button>
+      <button class="menu-btn" id="skipmuseum">Skip to Museum</button>
+      <button class="menu-btn" id="btn-settings">Settings</button>
+    </div>
+    <div class="ver">A drowned-city prototype — Dagupan, Pangasinan</div>
+  </div>
+
+  <div id="settings">
+    <div class="panel">
+      <div class="s-title">Settings</div>
+      <div class="s-row">
+        <label for="music-slider">Music</label>
+        <input type="range" id="music-slider" min="0" max="100" value="90" />
+        <span class="s-val" id="music-val">90%</span>
+      </div>
+      <div class="s-row">
+        <label for="sfx-slider">SFX</label>
+        <input type="range" id="sfx-slider" min="0" max="100" value="90" />
+        <span class="s-val" id="sfx-val">90%</span>
+      </div>
+      <button class="menu-btn primary" id="settings-close">Done</button>
+    </div>
   </div>
 
   <div id="start" style="display:none">
+    <button class="gear" data-settings aria-label="Settings">⚙</button>
     <h1>STRINGS</h1>
     <div class="sub">"Beneath the water, the city still breathes."</div>
     <div class="zone" id="start-zone">Zone 1 — Pantal Market</div>
@@ -776,6 +959,7 @@
   </div>
 
   <div id="resume" style="display:none">
+    <button class="gear" data-settings aria-label="Settings">⚙</button>
     <div class="sub">"The gallery waits in the quiet."</div>
     <div class="enter">Click to keep looking</div>
   </div>

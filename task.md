@@ -213,3 +213,41 @@ center glow via additive emissive meshes only (no PointLight).
       glow at nave center; diagonal shafts + memory strings + drifting slabs read;
       collision holds on pillars/arch piers/walls/altar while ribs/strings/slabs
       never block; artifacts spawn reachable; zones 1/2 unaffected
+
+## Main menu UI polish + volume settings (2026-07-17)
+- [x] Restyle #title into a real menu (Awaken / Skip to Museum / Settings buttons, hover/focus states)
+- [x] Add #settings modal with volume slider, persisted to localStorage (strings.volume)
+- [x] AudioManager.setVolume(v) scaling the master bus; applied on init too
+- [x] Gear button on Descend/Resume screens opens the same modal
+- [x] Static verify: node --check on touched JS
+- [ ] User in-browser verify: menu renders, slider changes loudness live, value persists across reload
+
+## Echo range-gate bug fix (2026-07-17)
+- [x] Root cause: PannerNode 'inverse' distance model ignores maxDistance — echoes never hit zero
+- [x] EchoVoice.update(now, listenerPos): skip pings beyond ECHO.RANGE, fade envelope over ECHO.FADE (new config, 8m)
+- [x] Static verify: node --check passes on config.js / EchoVoice.js / AudioManager.js
+- [ ] User in-browser verify: echoes silent when far (>28m), fade in ~20-28m, swell up close
+
+## Split music/SFX volume + louder music (2026-07-17)
+- [x] AudioManager: musicBus (bed+melody) and sfxBus (hum, echoes, scatter, teleport) between sources and master; both feed the shared delay so sliders scale their tails too
+- [x] setMusicVolume/setSfxVolume (pre-init safe); replaced single setVolume
+- [x] Louder music: bed 0.05->0.09, melody base 0.015->0.03, swell target 0.03+0.15
+- [x] Settings modal: Music + SFX sliders; keys strings.musicVolume/strings.sfxVolume, legacy strings.volume migrates as default
+- [x] Static verify: node --check passes; no stale setVolume refs
+- [ ] User in-browser verify: sliders independently duck ambience/melody vs pings/one-shots; music audibly louder
+
+## Composed BGM replaces random melody (2026-07-17)
+- [x] ElevenLabs blocked (ELEVENLABS_API_KEY=MISSING probe shown); pivoted to hand-composed score per user
+- [x] src/audio/BgmScore.js: 32-beat (8-bar, 66bpm, ~29s) A-minor-pentatonic kulintang loop — bells (melody) + agung gongs
+- [x] AudioManager: look-ahead sequencer (200ms tick, 0.6s window) replaces the random setInterval melody; bells -> melodyGain (swell cue intact), gongs -> new gongGain(0.11) -> musicBus
+- [x] assets/audio/strings-bgm.mid: same score exported as GM MIDI (Tubular Bells) for DAW audition/editing
+- [x] Static verify: node --check passes on BgmScore.js / AudioManager.js
+- [ ] User in-browser verify: composed loop plays seamlessly, swell still lifts the bell line near artifacts, Music slider scales it
+
+## Remove guardian glow (2026-07-17)
+- [x] zone1Golem: matGlow 1.8->0, matWarm 1.6->0, foodMats 0.6->0; removed animate() glow-pulse lines
+- [x] zone2Guardian: matCyan 2.0->0, matGlow 2.2->0; removed pulse lines (core swirl spin kept)
+- [x] zone3Guardian: matGlow 2.2->0, matCrystal 1.4->0; removed pulse lines (cape/spectrals/arcs untouched per user)
+- [x] Kept: chest halo PointLight + beacon column (Guardian.js), all geometry, motion animation
+- [x] Static verify: all three builders parse as ES modules; no emissiveIntensity refs remain
+- [ ] User in-browser verify: guardians read flat (no self-glow), halo still lifts them off the water
