@@ -43,8 +43,9 @@ export class Museum {
     ];
 
     // The player wakes at the +Z end and the open (Zone 1) portal sits past the
-    // -Z wall on the centerline.
-    this.spawnPoint = new THREE.Vector3(0, 1.5, MUSEUM.ROOM_HALF - 1.6);
+    // -Z wall on the centerline. Kept > INTERACT_RANGE away from the back-wall
+    // frame anchors so the hub never spawns with a frame already interactable.
+    this.spawnPoint = new THREE.Vector3(0, 1.5, MUSEUM.ROOM_HALF - 2.2);
     this.hallwayPoint = new THREE.Vector3(0, 1.55, -MUSEUM.ROOM_HALF - MUSEUM.HALL_LEN + 0.5);
 
     this._lights();

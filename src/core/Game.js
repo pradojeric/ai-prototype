@@ -60,9 +60,8 @@ export class Game {
     this.discovery = new DiscoveryScreen();
     this.riddleScreen = new RiddleScreen();        // bugtong multiple-choice
     this.museum = new Museum();                    // reusable digital-museum scene (future hub)
-    // Debug: open every portal up front so the hub's sequential unlock (see
-    // _zoneComplete) can be skipped entirely while testing zone content.
-    if (CONFIG.DEBUG_UNLOCK_ALL_ZONES) { this.museum.unlockPortal(2); this.museum.unlockPortal(3); }
+    // (DEBUG_UNLOCK_ALL_ZONES is applied on hub entry — see _enterMuseum — so
+    // the intro cutscene still shows zones 2/3 barricaded.)
     this.cutscene = new IntroCutscene(this.museum); // scripted intro over the museum
     this.defeatCutscene = new DefeatCutscene();      // scripted guardian-defeat over the world
     this.faintCutscene = new FaintCutscene();         // scripted black-out on a wrong answer
@@ -103,6 +102,7 @@ export class Game {
     this.elTotal = document.getElementById('total');
     this.elHud = document.getElementById('hud');
     this.elGhint = document.getElementById('ghint');
+    this.elGhintLabel = document.getElementById('ghint-label');
     this.elPrompt = document.getElementById('prompt');
     this.elCross = document.getElementById('crosshair');
     this.elTitle = document.getElementById('title');
@@ -273,7 +273,9 @@ export class Game {
     const riddles = drawRiddles(RIDDLE_COUNT, rng);
 
     for (let i = 0; i < riddles.length; i++) {
-      const ok = await this.riddleScreen.show(riddles[i], i + 1, riddles.length);
+      const ok = await this.riddleScreen.show(
+        riddles[i], i + 1, riddles.length, this.world.zone.guardianName,
+      );
       if (!ok) {
         // Wrong: the guardian rebukes the player, vanishes, and the player faints
         // and wakes back at the dock. The whole sequence resets to riddle 1.
@@ -444,6 +446,9 @@ export class Game {
       this.elHud.classList.add('active');     // artifacts are loose: show the counter
       this.elGhint.classList.remove('active');
     } else {
+      // Label the objective with the active zone's guardian name.
+      this.elGhintLabel.textContent =
+        `Find ${this.world.zone.guardianName?.eng || 'the Guardian'}`;
       this.elGhint.classList.add('active');   // still seeking the guardian
       this.elHud.classList.remove('active');
       // The guardian now WAITS at its start spot; roaming only begins after a
@@ -520,6 +525,15 @@ export class Game {
   _enterMuseum() {
     this.phase = 'museum';
     this._loadingZone = false;   // re-arm hub portal entry detection
+    // Drop any E rising-edge left over from gameplay (only the museum loop ever
+    // consumes _ePressed) so a nearby frame can't auto-open its discovery card.
+    this._ePressed = false;
+
+    // Debug: open every portal so the hub's sequential unlock (see _zoneComplete)
+    // can be skipped while testing zone content. Applied here — not at construction
+    // — so the intro cutscene still plays over a museum with zones 2/3 barricaded.
+    // unlockPortal is idempotent, so re-running this on every hub entry is safe.
+    if (CONFIG.DEBUG_UNLOCK_ALL_ZONES) { this.museum.unlockPortal(2); this.museum.unlockPortal(3); }
 
     // Snap white up to hide the swap, then ease it away (same idiom as the intro).
     this.elFlash.style.transition = 'none';
@@ -604,6 +618,7 @@ export class Game {
     this.busy = false;
     this.holdKey = false;
     this.holdProgress = 0;
+    this._ePressed = false;
     this._proximity = null;
 
     // Leave the hub lighting behind and spawn on the dock like Zone 1.
@@ -710,7 +725,7 @@ export class Game {
       const inRange = !this.busy && this.player.controls.isLocked &&
                       gdist <= GUARDIAN.ENCOUNTER_RANGE;
       if (inRange) {
-        this._setPrompt('Press <b>E</b> to face the Guardian');
+        this._setPrompt(`Press <b>E</b> to face ${this.world.zone.guardianName?.eng || 'the Guardian'}`);
         this.elPrompt.classList.add('active');
         if (this._ePressed) this._startEncounter();
       } else {

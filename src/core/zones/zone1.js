@@ -242,6 +242,7 @@ export const zone1 = {
   seed: 20260618,
   guardianStart: { x: 0, z: 14 },   // waits ahead of the dock on the avenue (between near light shaft z=10 and the arch z=26)
   guardianRebuke: 'You are not worthy of these waters. The market keeps its memories yet.',   // shown on a wrong riddle answer
+  guardianName: { fil: 'Bantay ng Pantal', eng: 'The Feastkeeper' },
   // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
   introDialogue: [
     '[Zone 1 — Pantal Market] The water is colder than I remember.',

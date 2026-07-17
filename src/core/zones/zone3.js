@@ -69,8 +69,7 @@ function naveColonnade(world) {
 
 // ---- Vault ribs: half-torus archways spanning the nave ----------------------
 // The cathedral's broken stone vaulting: upright half-torus ribs bridge the
-// tall pillar pairs high over the aisle (decor, non-colliding), while fallen
-// ribs lie half-buried in the water between the stumps.
+// tall pillar pairs high over the aisle (decor, non-colliding).
 function vaultRibs(world) {
   const ribGeo = () => new THREE.TorusGeometry(6, 0.42, 8, 14, Math.PI);
   for (const z of TALL_ROWS) {
@@ -78,14 +77,6 @@ function vaultRibs(world) {
     const rib = new THREE.Mesh(ribGeo(), world.mat.concrete);
     rib.position.set(0, topY - 0.5, z);           // arc springs from the pillar tops
     rib.rotation.y = (world.rng() - 0.5) * 0.08;  // slight settle
-    world.scene.add(rib);
-  }
-  // collapsed ribs, toppled into the aisle water (decor, walk-through)
-  for (const [x, z, rot] of [[-2, 13, 0.9], [3, 1, -1.1], [-1, -5, 1.4]]) {
-    const rib = new THREE.Mesh(ribGeo(), world.mat.rubble);
-    rib.position.set(x, W - 0.2, z);
-    rib.rotation.set(Math.PI / 2 + (world.rng() - 0.5) * 0.4, rot, 0);
-    rib.scale.setScalar(0.55 + world.rng() * 0.2);
     world.scene.add(rib);
   }
 }
@@ -105,10 +96,9 @@ function transepts(world) {
 
 // ---- Altar + apse: the ruined sanctuary the nave leads to (N) ---------------
 // A low stone dais (near water level — wade-over decor, like zone2's), a
-// semicircle of pillar stumps tracing the lost apse wall behind it, and the
-// Keeper's cold-white glow: emissive lantern "candles" plus a breathing
-// additive orb over the guardian's waiting spot — no real THREE.Light, per
-// the engine's glow budget.
+// semicircle of pillar stumps tracing the lost apse wall behind it, and
+// cold-white emissive lantern "candles" — no real THREE.Light, per the
+// engine's glow budget.
 function altarApse(world) {
   const cx = 0, cz = -18;
   const dais = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 4.1, 0.5, 10), world.mat.concrete);
@@ -129,15 +119,6 @@ function altarApse(world) {
   // cold votive light around the sanctuary
   world._lanternCluster(cx - 2.4, cz + 1.5, { count: 5, y: 2.4, radius: 0.9, color: GLOW_COLOR });
   world._lanternCluster(cx + 2.6, cz - 0.5, { count: 4, y: 3.0, radius: 0.7, color: GLOW_COLOR });
-  // the Keeper's glow: a soft breathing orb over the guardian's waiting spot
-  const orbMat = new THREE.MeshBasicMaterial({
-    color: GLOW_COLOR, transparent: true, opacity: 0.16,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12), orbMat);
-  orb.position.set(0, 2.4, 15);
-  world.scene.add(orb);
-  world.shafts.push({ mat: orbMat, base: 0.16, phase: world.rng() * Math.PI * 2 });
 }
 
 // ---- Bell-tower: the surviving campanile, the zone's far terminus (N) -------
@@ -273,6 +254,7 @@ export const zone3 = {
   seed: 20260714,
   guardianStart: { x: 0, z: 15 },   // center of the nave, just before the altar
   guardianRebuke: 'The archive does not open for a clouded mind. Kneel with the stones a while longer, and return.',
+  guardianName: { fil: 'Ang Tagapag-ingat ng mga Alaala', eng: 'The Keeper of Memories' },
   // Spoken (as a subtitle) one line at a time right after the player descends.
   introDialogue: [
     '[Zone 3 — Pananisia] Here the flood took not food nor festival, but place itself — the shrines, the shores, the landmarks of Pangasinan.',

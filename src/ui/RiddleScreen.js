@@ -19,14 +19,15 @@ export class RiddleScreen {
     this._locked = false;   // ignore further clicks after the first answer
   }
 
-  // Show one riddle. `step`/`total` drive the "Riddle 1 / 3" label.
+  // Show one riddle. `step`/`total` drive the "Riddle 1 / 3" label; `name` is
+  // the zone's guardian name ({ fil, eng }), falling back to the generic text.
   // Resolves true (correct) or false (wrong) after the feedback beat.
-  async show(riddle, step, total) {
+  async show(riddle, step, total, name) {
     this.active = true;
     this._locked = false;
 
-    this.elFil.textContent = GUARDIAN_TEXT.fil;
-    this.elEng.textContent = GUARDIAN_TEXT.eng;
+    this.elFil.textContent = name?.fil || GUARDIAN_TEXT.fil;
+    this.elEng.textContent = name?.eng || GUARDIAN_TEXT.eng;
     this.elStep.textContent = `Bugtong ${step} / ${total}`;
     this.elPrompt.textContent = riddle.prompt;
     this.elPromptEng.textContent = riddle.promptEng || '';

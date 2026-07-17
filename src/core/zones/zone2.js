@@ -272,6 +272,7 @@ export const zone2 = {
   seed: 20260702,
   guardianStart: { x: 0, z: 16 },   // waits ahead of the dock on the avenue
   guardianRebuke: 'Not yet. The tide keeps its festival for those who have not proven themselves.',
+  guardianName: { fil: 'Ang Tagabulong ng Bahura', eng: 'The Coral-Whisperer' },
   // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
   introDialogue: [
     '[Zone 2 — LIKET] The current here still hums with old music.',
