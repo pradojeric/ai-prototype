@@ -124,6 +124,65 @@ export const MUSIC_SWELL_RANGE = 24; // melodic layer ramps in within this of ne
 // Player collision radius (circle-vs-AABB).
 export const PLAYER_RADIUS = 0.45;
 
+// Wave combat — post-defeat, each scattered artifact is "contested": holding E
+// on it interrupts the reach and spawns waves of drowned echoes around it.
+// Clearing every wave frees that artifact for normal collection (per visit).
+export const COMBAT = {
+  PLAYER_HP: 100,
+  HEAL_ON_CLEAR: 25,          // hp restored when a fight is won
+  // Player light-bolt: cast from the hand's lure with left click.
+  BOLT: {
+    SPEED: 38, RADIUS: 0.18, LIFE: 1.2, COOLDOWN: 0.22, DAMAGE: 1,
+    COLOR: 0x7fe8ff, SIZE: 0.09,
+  },
+  // Melee chaser: speed sits between wade (2.6) and sprint (~4.7) so kiting
+  // costs stamina — sprint escapes, walking gets caught.
+  CHASER: {
+    HP: 2, SPEED: 3.2, RADIUS: 0.5, DAMAGE: 15,
+    ATTACK_RANGE: 1.4, ATTACK_COOLDOWN: 1.1, HOVER: 0.9,
+  },
+  // Ranged spitter: keeps distance and lobs slow, dodgeable spits.
+  SPITTER: {
+    HP: 3, SPEED: 2.1, RADIUS: 0.55, DAMAGE: 10,
+    PREFERRED_RANGE: 9, SPIT_INTERVAL: 2.4, SPIT_SPEED: 9,
+    SPIT_COLOR: 0xff9a5a, HOVER: 1.5,
+  },
+  // Escalation teaches one concept per wave: chasers first, then a spitter,
+  // then combinations. Zone bonuses add pressure without new rules.
+  WAVES: [
+    { chasers: 2, spitters: 0 },
+    { chasers: 2, spitters: 1 },
+    { chasers: 3, spitters: 1 },
+    { chasers: 2, spitters: 2 },
+  ],
+  ZONE_BONUS: { zone1: 0, zone2: 1, zone3: 1 },     // extra chasers per wave
+  ZONE_HP_BONUS: { zone1: 0, zone2: 0, zone3: 1 },  // extra hp per enemy
+  WAVE_GAP: 1.6,              // breather between cleared wave and the next
+  FADE_IN: 0.5,               // enemies can't act until fully faded in
+  SPIT_WINDUP: 0.4,           // spitter glow telegraph before each spit
+  SPAWN_RADIUS_MIN: 7,        // spawn ring around the contested artifact
+  SPAWN_RADIUS_MAX: 12,
+  SPAWN_MIN_PLAYER_DIST: 5,
+  POOL_BOLTS: 16,
+  POOL_SPITS: 24,
+  LEASH_RADIUS: 24,           // walk this far from the artifact → fight resets
+  HURT_FLASH: 0.25,           // seconds the red vignette holds
+  // Pathfinding: a per-zone walkability grid + BFS flow field toward the
+  // player; enemies follow the flow only when they lack line of sight.
+  NAV: {
+    CELL: 1.0,                // grid resolution (m); 96×96 cells per zone
+    BAKE_RADIUS: 0.7,         // clearance tested per cell (enemy r + margin)
+    FLOW_INTERVAL: 0.4,       // seconds between BFS flow rebuilds mid-fight
+    LOS_STEP: 0.6,            // sampling stride for line-of-sight checks (m)
+    LOS_INTERVAL: 0.25,       // per-enemy LOS re-check cadence (staggered)
+  },
+  // Game-feel magnitudes (hit flash / kill hitstop / player-hit FOV punch).
+  FEEL: {
+    HITSTOP: 0.05, HITSTOP_SCALE: 0.1, FOV_PUNCH: 5,
+    FLASH_DECAY: 0.2, SFX_PITCH_VAR: 0.06,
+  },
+};
+
 export const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 export function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }

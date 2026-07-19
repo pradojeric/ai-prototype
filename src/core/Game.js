@@ -15,6 +15,7 @@ import { createWorld, ZONES } from './zones/index.js';
 import { PlayerController } from './PlayerController.js';
 import { ArtifactManager } from './ArtifactManager.js';
 import { Guardian } from './Guardian.js';
+import { CombatManager } from './combat/CombatManager.js';
 import { ViewModel } from './ViewModel.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
@@ -57,6 +58,11 @@ export class Game {
     this.guardian = new Guardian(this.world.scene, this.world, this.world.zone.id); // riddle gate
     this.viewmodel = new ViewModel(this.camera);   // first-person hand
     this.audio = new AudioManager();
+    // Wave combat: contested artifacts spawn waves of drowned echoes when the
+    // player first holds E on them (see combat/CombatManager.js).
+    this.combat = new CombatManager(
+      this.world.scene, this.world, this.player, this.camera, this.viewmodel, this.audio,
+    );
     this.discovery = new DiscoveryScreen();
     this.riddleScreen = new RiddleScreen();        // bugtong multiple-choice
     this.museum = new Museum();                    // reusable digital-museum scene (future hub)
@@ -174,6 +180,15 @@ export class Game {
       this.holdKey = true;
     });
     document.addEventListener('keyup',   (e) => { if (e.code === 'KeyE') this.holdKey = false; });
+    // Left click casts a light-bolt — only mid-fight, so exploration clicks
+    // (and the pointer-lock click itself) never fire a stray shot.
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      if (this.phase === 'playing' && !this.busy &&
+          this.player.controls.isLocked && this.combat.active) {
+        this.combat.requestFire();
+      }
+    });
     addEventListener('resize', () => {
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
@@ -390,10 +405,23 @@ export class Game {
     this.guardian.teleport(playerPos);
     this.audio.playTeleport();
 
-    // 3. The player faints. Frame the droop with the cutscene camera and fade to
-    //    black. Re-lock NOW (last answer-click activation still valid) and hold it
-    //    through the cinematic so mouse-look is retained on waking — locking after
-    //    the async gap would silently fail and trap the player (see _defeatGuardian).
+    // 3-4. The player faints and wakes at the dock (shared cinematic).
+    await this._faintOnly();
+
+    // 5. Resume seeking: the guardian roams again and the hint returns.
+    this.guardian.setRoaming(true);
+    this.busy = false;
+    this._startGameplayPhase();                        // phase='playing', crosshair + ghint
+  }
+
+  // The shared faint cinematic: camera droop under a black fade, unconscious
+  // hold, wake at the dock, fade back in. Used by the riddle loss
+  // (_faintAndRespawn) and the combat defeat (_combatFaint).
+  async _faintOnly() {
+    // Frame the droop with the cutscene camera and fade to black. Re-lock NOW
+    // (any prior activation still valid; a no-op if already locked) and hold it
+    // through the cinematic so mouse-look is retained on waking — locking after
+    // the async gap would silently fail and trap the player (see _defeatGuardian).
     const camPos = this.camera.position.clone();
     this._faintLook ||= new THREE.Vector3();
     this.camera.getWorldDirection(this._faintLook);
@@ -409,17 +437,24 @@ export class Game {
     await this.faintCutscene.play(camPos, lookAt);
     await wait(FAINT.BLACK_HOLD * 1000);              // unconscious in the dark
 
-    // 4. Wake at the dock (under the black), then fade back in.
+    // Wake at the dock (under the black), then fade back in.
     this._spawnAtDock();
     this._levelCamera();
     this.renderPass.camera = this.camera;
     this.viewmodel.group.visible = true;
     this.elFaint.classList.remove('active');          // CSS fades from black
+  }
 
-    // 5. Resume seeking: the guardian roams again and the hint returns.
-    this.guardian.setRoaming(true);
+  // The echoes overwhelmed the player mid-fight: reset the fight (the artifact
+  // stays contested for another attempt) and run the shared faint respawn. The
+  // guardian is already defeated here, so there's no rebuke/flee prelude.
+  async _combatFaint() {
+    if (this.busy) return;
+    this.busy = true;
+    this.combat.abortFight();
+    await this._faintOnly();
     this.busy = false;
-    this._startGameplayPhase();                        // phase='playing', crosshair + ghint
+    this._startGameplayPhase();                        // phase='playing', HUD back on
   }
 
   // Place the player on the raised dock spawn (south edge), facing north, at rest.
@@ -448,7 +483,13 @@ export class Game {
     const inRange = !this.busy && this.player.controls.isLocked &&
                     near && this._proximity.nearestDist <= CONFIG.INTERACT_RANGE;
 
-    if (this.holdKey && inRange) {
+    // Contested artifact: the first hold-E starts the wave fight instead of the
+    // reach, and progress can't accrue until its echoes are cleared. This gating
+    // also makes batch/zone completion mid-fight impossible by construction.
+    const contested = inRange && this.combat.isContested(near);
+    if (this.holdKey && contested && !this.combat.active) this.combat.startFight(near);
+
+    if (this.holdKey && inRange && !contested) {
       this.holdProgress = Math.min(1, this.holdProgress + dt / HOLD_TIME);
       if (this.holdProgress >= 1) this._completeInteract(near);
     } else {
@@ -631,9 +672,10 @@ export class Game {
   // subsystems, reset the loop state, and lock the player back in on the dock.
   // Used both for first-time zone entry from the hub and re-entering a finished one.
   _loadZone(zoneId) {
-    // Tear down the outgoing zone — guardian first so its meshes leave the scene
-    // before the world's disposal walks it.
+    // Tear down the outgoing zone — guardian + combat first so their meshes
+    // leave the scene before the world's disposal walks it.
     this.guardian.dispose();
+    this.combat.dispose();
     const oldWorld = this.world;
 
     this.world = createWorld(zoneId);
@@ -656,6 +698,11 @@ export class Game {
     this.collectedByZone[zoneId] ||= new Set();
     this.artifacts = new ArtifactManager(this.world.scene, this.world, this.collectedByZone[zoneId]);
     this.guardian = new Guardian(this.world.scene, this.world, zoneId);
+    // Fresh CombatManager per zone: pools rebuild on the new scene and the
+    // cleared-fight set resets, so every visit's artifacts are contested again.
+    this.combat = new CombatManager(
+      this.world.scene, this.world, this.player, this.camera, this.viewmodel, this.audio,
+    );
     this.audio.clearEchoes();   // drop the old zone's echoes; new ones register on defeat
 
     // Reset the gameplay state machine.
@@ -800,12 +847,26 @@ export class Game {
     this.audio.updateListener(this.camera);             // orient spatial echoes + tick pings
     this.audio.setSwell(this._proximity.nearestDist);   // theme swells near a find
 
+    // Wave combat sim: projectiles, enemies, waves, hp. A death routes through
+    // the shared faint respawn (fight aborted; the artifact stays contested).
+    this.combat.update(dt, t, playerPos);
+    if (this.combat.consumePlayerDeath()) { this._combatFaint(); this.composer.render(); return; }
+
     const inRange = this._updateHold(dt);
 
-    // "Hold E" prompt: shown in range, hidden once the ring starts filling. Set
-    // the copy explicitly so it doesn't inherit the guardian's "Press E" text.
-    this._setPrompt('Hold <b>E</b> to reach toward it');
-    this.elPrompt.classList.toggle('active', inRange && this.holdProgress < 0.02);
+    // "Hold E" prompt: shown in range, hidden once the ring starts filling (and
+    // during a fight, where the wave HUD carries the info). Contested artifacts
+    // warn that reaching will wake something. Set the copy explicitly so it
+    // doesn't inherit the guardian's "Press E" text.
+    if (this.combat.active) {
+      this.elPrompt.classList.remove('active');
+    } else {
+      const near = this._proximity.nearest;
+      this._setPrompt(near && this.combat.isContested(near)
+        ? 'Hold <b>E</b> to reach — something stirs in the water'
+        : 'Hold <b>E</b> to reach toward it');
+      this.elPrompt.classList.toggle('active', inRange && this.holdProgress < 0.02);
+    }
 
     this.composer.render();
   }

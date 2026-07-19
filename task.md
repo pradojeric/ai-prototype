@@ -244,6 +244,58 @@ center glow via additive emissive meshes only (no PointLight).
 - [x] Static verify: node --check passes on BgmScore.js / AudioManager.js
 - [ ] User in-browser verify: composed loop plays seamlessly, swell still lifts the bell line near artifacts, Music slider scales it
 
+## Enemy pathfinding — nav grid + flow field (2026-07-19)
+Follow-up to wave combat after user playtest: enemies got stuck steering
+straight into building footprints. Decision: BFS flow field over a baked
+walkability grid (robust in zone 1's alley/maze districts), direct steering
+kept whenever the enemy has line of sight so open-water motion is unchanged.
+- [x] config.js: `COMBAT.NAV` (CELL 1.0, BAKE_RADIUS, FLOW_INTERVAL 0.4,
+      LOS_STEP, LOS_INTERVAL)
+- [x] src/core/combat/NavGrid.js (new): 96×96 walkability grid baked from
+      `world.collidesAt`; alloc-free BFS flow field toward the player
+      (8-connected, no corner cutting, wall-nudge for the start cell);
+      `dirAt` sampling + segment-sampled `hasLOS`
+- [x] Enemy.js: staggered LOS re-checks; !LOS → follow flow (both types),
+      face travel direction while routing; chasers only melee with LOS;
+      spitters cancel their wind-up and never spit without LOS (fixes
+      shooting through walls); unreachable player → direct-steer fallback
+- [x] CombatManager.js: owns the NavGrid (baked per zone at construction),
+      rebuilds the flow every FLOW_INTERVAL mid-fight + on startFight,
+      passes nav through to each enemy update
+- [x] Static verify: `node --check` passes; all combat files < 400 lines
+- [ ] User in-browser verify: hide behind a building — chasers route around
+      instead of wall-grinding; spitters reposition, no through-wall spits;
+      open-water pursuit unchanged; steady frame rate mid-fight
+
+## Wave combat — FPS fights guarding artifact collection (2026-07-19)
+Decisions (user): fight triggers on the first hold-E on a scattered artifact ·
+thematic light-bolt cast from the hand's lure (left click) · 3–5 mixed waves
+(melee chasers + ranged spitters) · death reuses the faint→dock respawn, fight
+resets. Designed via the threejs-gameplay-systems skill (design brief +
+encounter plan + game-feel pass in the session plan file).
+- [x] config.js: `COMBAT` block (hp, bolt, chaser, spitter, WAVES table, zone
+      bonuses, spawn ring, leash, FEEL magnitudes)
+- [x] index.html: #health bar ("Liwanag"), #wavehud counter, #hurt vignette,
+      crosshair .combat/.hit states, CLICK — Cast Light on the controls line
+- [x] ViewModel: `triggerCast()` recoil/finger-flick/lure-flash + `getMuzzleWorld`
+- [x] AudioManager: playShoot/playHit/playEnemyDeath/playPlayerHurt/playWaveClear,
+      ±6% seeded pitch variance (`mulberry32`)
+- [x] src/core/combat/ProjectilePool.js: pre-allocated bolt pool (player + spit
+      instances), wall/seabed/expiry kill, zero per-frame alloc
+- [x] src/core/combat/Enemy.js: chaser (pursuit + lunge tell) / spitter (range
+      seek + strafe + glow wind-up telegraph), guardian-primitive bodies,
+      fade-in gate before acting, per-enemy death poof
+- [x] src/core/combat/CombatManager.js: fight orchestration (waves, hit tests,
+      hp/HUD, leash reset, ESC freeze, kill hitstop, FOV punch, hit marker)
+- [x] Game.js: combat construction + rebuild in `_loadZone`, mousedown fire hook,
+      contested gating in `_updateHold`, `_faintOnly` extraction shared by
+      `_faintAndRespawn`/`_combatFaint`, prompt copy for contested artifacts
+- [x] GAME_LOOP.md stage 4 updated
+- [x] Static verify: `node --check` on all touched/new JS
+- [ ] User in-browser verify: hold-E on a scattered artifact starts waves; bolts
+      kill chasers/spitters; all waves cleared → artifact collects; dying faints
+      to the dock with the fight reset; walking away leashes; zone swap clean
+
 ## Remove guardian glow (2026-07-17)
 - [x] zone1Golem: matGlow 1.8->0, matWarm 1.6->0, foodMats 0.6->0; removed animate() glow-pulse lines
 - [x] zone2Guardian: matCyan 2.0->0, matGlow 2.2->0; removed pulse lines (core swirl spin kept)

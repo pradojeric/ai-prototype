@@ -9,7 +9,7 @@
 //   3. echo voices    — one spatialized ping per artifact (the locator)
 // ============================================================
 import * as THREE from 'three';
-import { ECHO, MUSIC_SWELL_RANGE, clamp01 } from '../config.js';
+import { ECHO, MUSIC_SWELL_RANGE, COMBAT, clamp01, mulberry32 } from '../config.js';
 import { EchoVoice } from './EchoVoice.js';
 import { BGM_BPM, BGM_LOOP_BEATS, BGM_SCORE } from './BgmScore.js';
 
@@ -22,6 +22,9 @@ export class AudioManager {
     this.musicVolume = 1;      // 0..1 user music volume (bed + melody); settable pre-init
     this.sfxVolume = 1;        // 0..1 user SFX volume (hum, echoes, scatter, teleport)
     this.echoes = new Map();   // artifact -> EchoVoice
+    // Seeded rng for per-shot SFX pitch variance (project convention: mulberry32,
+    // never Math.random in gameplay paths). Identical repeats read as artificial.
+    this._sfxRng = mulberry32(0x51f0);
     // scratch vectors for the per-frame listener update (no per-frame alloc)
     this._lpos = new THREE.Vector3();
     this._lfwd = new THREE.Vector3();
@@ -271,6 +274,144 @@ export class AudioManager {
       so.connect(senv).connect(this.sfxBus);
       so.start(at);
       so.stop(at + 0.55);
+    });
+  }
+
+  // ---- wave-combat one-shots ------------------------------------------------
+  // All follow the playScatter/playTeleport shape (osc + gain envelope → sfxBus)
+  // with a ±SFX_PITCH_VAR frequency wobble per shot so rapid repeats stay alive.
+
+  _pitchVar() { return 1 + (this._sfxRng() - 0.5) * 2 * COMBAT.FEEL.SFX_PITCH_VAR; }
+
+  // Light-bolt cast: a short bright zap sweeping down.
+  playShoot() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    const v = this._pitchVar();
+    const o = ctx.createOscillator();
+    const env = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(900 * v, t0);
+    o.frequency.exponentialRampToValueAtTime(260 * v, t0 + 0.12);
+    env.gain.setValueAtTime(0.0001, t0);
+    env.gain.exponentialRampToValueAtTime(0.22, t0 + 0.008);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+    o.connect(env).connect(this.sfxBus);
+    o.start(t0);
+    o.stop(t0 + 0.16);
+  }
+
+  // Bolt lands on an echo: a dull "thock" (short bandpassed noise + low blip).
+  playHit() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    const v = this._pitchVar();
+    const dur = 0.06;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.2;
+    bp.frequency.value = 700 * v;
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.25, t0);
+    nGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    noise.connect(bp).connect(nGain).connect(this.sfxBus);
+    noise.start(t0);
+    noise.stop(t0 + dur);
+
+    const o = ctx.createOscillator();
+    const env = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 220 * v;
+    env.gain.setValueAtTime(0.0001, t0);
+    env.gain.exponentialRampToValueAtTime(0.18, t0 + 0.01);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.1);
+    o.connect(env).connect(this.sfxBus);
+    o.start(t0);
+    o.stop(t0 + 0.12);
+  }
+
+  // An echo dissolves: a quick descending sparkle (inverse of the scatter run).
+  playEnemyDeath() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    const v = this._pitchVar();
+    const run = [784.0, 523.25, 392.0]; // G5 C5 G4 — falling
+    run.forEach((freq, i) => {
+      const at = t0 + i * 0.06;
+      const o = ctx.createOscillator();
+      const env = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.value = freq * v;
+      env.gain.setValueAtTime(0.0001, at);
+      env.gain.exponentialRampToValueAtTime(0.2, at + 0.015);
+      env.gain.exponentialRampToValueAtTime(0.0001, at + 0.5);
+      o.connect(env).connect(this.sfxBus);
+      o.start(at);
+      o.stop(at + 0.55);
+    });
+  }
+
+  // The player takes a hit: a low thud with a dark noise thump under it.
+  playPlayerHurt() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    const v = this._pitchVar();
+    const o = ctx.createOscillator();
+    const env = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(90 * v, t0);
+    o.frequency.exponentialRampToValueAtTime(50 * v, t0 + 0.25);
+    env.gain.setValueAtTime(0.0001, t0);
+    env.gain.exponentialRampToValueAtTime(0.5, t0 + 0.015);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+    o.connect(env).connect(this.sfxBus);
+    o.start(t0);
+    o.stop(t0 + 0.32);
+
+    const dur = 0.12;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 260;
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.3, t0);
+    nGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    noise.connect(lp).connect(nGain).connect(this.sfxBus);
+    noise.start(t0);
+    noise.stop(t0 + dur);
+  }
+
+  // A wave (or the whole fight) is cleared: a rising two-note pentatonic chime.
+  playWaveClear() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    const run = [523.25, 784.0]; // C5 G5 — rising
+    run.forEach((freq, i) => {
+      const at = t0 + i * 0.12;
+      const o = ctx.createOscillator();
+      const env = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.value = freq;
+      env.gain.setValueAtTime(0.0001, at);
+      env.gain.exponentialRampToValueAtTime(0.3, at + 0.02);
+      env.gain.exponentialRampToValueAtTime(0.0001, at + 1.0);
+      o.connect(env).connect(this.sfxBus);
+      o.start(at);
+      o.stop(at + 1.1);
     });
   }
 

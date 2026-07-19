@@ -26,10 +26,14 @@ title → cutscene → descend → playing → encounter → defeat/faint → pl
 - **Win:** all riddles correct → `_defeatGuardian()`: scripted `DefeatCutscene`, guardian explodes, `artifacts.scatter(origin)` bursts artifacts out from the guardian's position, `bossDefeated=true`. Returns to `phase='playing'` with HUD (artifact counter) active.
 - **Lose:** any wrong answer → `_faintAndRespawn()`: guardian rebukes player, teleports away and resumes roaming, player faints (black-out `FaintCutscene`), respawns at the zone dock. Riddle sequence resets to riddle 1 on the next attempt.
 
-## 4. Artifact Collection (post-Guardian)
+## 4. Artifact Collection (post-Guardian) — gated by wave combat
 
-- **Trigger:** artifacts (defined per-zone in `ARTIFACT_DATA`, `src/data.js`) are now visible/collectible in `ArtifactManager` (`src/core/ArtifactManager.js`), spawned from `world.spawnNodes` positions, only `ARTIFACT_BATCH` per visit.
-- **Player action:** walk near an artifact (fishing-line "String" visual pulls toward it), hold E for `HOLD_TIME` seconds (`_updateHold`) to trigger `_completeInteract` → shows `DiscoveryScreen` card, then `artifacts.collect()`.
+- **Trigger:** artifacts (defined per-zone in `ARTIFACT_DATA`, `src/data.js`) are now visible in `ArtifactManager` (`src/core/ArtifactManager.js`), spawned from `world.spawnNodes` positions, only `ARTIFACT_BATCH` per visit — but each starts **contested** (`CombatManager.isContested`, `src/core/combat/CombatManager.js`).
+- **Wave fight:** the first hold-E on a contested artifact interrupts the reach and spawns `COMBAT.WAVES` waves of enemies ("drowned echoes": melee chasers + ranged spitters, `src/core/combat/Enemy.js`) around it. The player casts light-bolts from the hand's lure with left click (`src/core/combat/ProjectilePool.js`); all tunables in `COMBAT` (`src/config.js`).
+  - **Win:** all waves cleared → the artifact id joins `combat.clearedIds` (per zone visit) and it collects normally.
+  - **Lose:** player HP hits 0 → `_combatFaint()` reuses the shared faint respawn (`_faintOnly`): fight aborts, HP refills, artifact stays contested for a re-try.
+  - **Leash:** walking > `COMBAT.LEASH_RADIUS` from the artifact resets the fight.
+- **Player action (once cleared):** walk near an artifact (fishing-line "String" visual pulls toward it), hold E for `HOLD_TIME` seconds (`_updateHold`) to trigger `_completeInteract` → shows `DiscoveryScreen` card, then `artifacts.collect()`.
 - **State change:** artifact id added to `collectedByZone[zone]` (persists across zone reloads this session).
 - **Branch:**
   - `batchComplete` (this visit's batch done, more remain in zone) → `_batchComplete()` completion card → back to Museum, must re-descend for next batch.
@@ -48,6 +52,7 @@ title → cutscene → descend → playing → encounter → defeat/faint → pl
 ## Key files
 
 - `src/core/Game.js`
+- `src/core/combat/CombatManager.js` (+ `Enemy.js`, `ProjectilePool.js`)
 - `src/core/ArtifactManager.js`
 - `src/core/Guardian.js`
 - `src/core/guardians/*.js`

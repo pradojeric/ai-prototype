@@ -18,6 +18,7 @@ export class ViewModel {
 
     this.bobT = 0;
     this.reach = 0;                  // 0..1 hold-to-collect reach, set by Game
+    this.castT = 0;                  // 1→0 cast-recoil envelope (see triggerCast)
   }
 
   _buildHand() {
@@ -130,15 +131,28 @@ export class ViewModel {
   // Game feeds the hold-to-collect progress here; the hand reaches as it fills.
   setReach(p) { this.reach = p; }
 
+  // Combat: snap the cast envelope to full; update() decays it, driving a quick
+  // forward punch + finger flick + lure flash layered over the idle pose.
+  triggerCast() { this.castT = 1; }
+
+  // World position of the glowing lure — the muzzle a light-bolt spawns from.
+  // Matrices are fresh from the previous frame's render, so this is safe to
+  // call at fire time without an extra updateMatrixWorld pass.
+  getMuzzleWorld(out) { return this.lureGroup.getWorldPosition(out); }
+
   // Subtle wade bob + breathing sway; stronger while moving. The hand reaches
   // forward (and the lure brightens) as the hold-to-collect progress fills;
   // the fingers open wide and the thumb spreads, like reaching for the string.
   update(dt, moving) {
     this.bobT += dt * (moving ? 6 : 1.4);
     const amp = moving ? 0.022 : 0.007;
+    // Cast recoil: a sharp punch forward that eases back (decays ~6x/sec).
+    this.castT = Math.max(0, this.castT - dt * 6);
+    const cast = this.castT * this.castT;   // squared so the snap front-loads
+
     this.group.position.x = this.basePos.x + Math.cos(this.bobT * 0.5) * amp;
     this.group.position.y = this.basePos.y + Math.sin(this.bobT) * amp + 0.06 * this.reach;
-    this.group.position.z = this.basePos.z - 0.2 * this.reach;        // reach forward
+    this.group.position.z = this.basePos.z - 0.2 * this.reach - 0.08 * cast;  // reach/cast forward
     this.group.rotation.z = 0.16 + Math.sin(this.bobT * 0.5) * 0.02;
 
     // fingers: faint idle drift so the hand never looks rigid, straightening
@@ -146,7 +160,7 @@ export class ViewModel {
     for (let i = 0; i < 4; i++) {
       const f = this.fingers[i];
       const idle = Math.sin(this.bobT * 0.8 + i * 1.7) * 0.03;
-      f.root.rotation.x = f.baseX + idle - this.reach * 0.15;
+      f.root.rotation.x = f.baseX + idle - this.reach * 0.15 - cast * 0.2;  // snap open on cast
       f.mid.rotation.x = -0.18 + idle * 0.5 + this.reach * 0.14;      // uncurl
     }
     this.thumb.rotation.y = this._thumbBaseY + this.reach * 0.25;     // spread
@@ -158,7 +172,7 @@ export class ViewModel {
 
     // lure glow: gentle idle flicker, swelling as you reach
     const flicker = Math.sin(this.bobT * 1.3) * 0.06;
-    this.lureLight.intensity = 0.5 + flicker + this.reach * 1.1;
-    this.lureMat.emissiveIntensity = 2.2 + this.reach * 1.8;
+    this.lureLight.intensity = 0.5 + flicker + this.reach * 1.1 + cast * 2.5;
+    this.lureMat.emissiveIntensity = 2.2 + this.reach * 1.8 + cast * 3;
   }
 }
