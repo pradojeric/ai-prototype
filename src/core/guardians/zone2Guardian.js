@@ -1,5 +1,5 @@
 // ============================================================
-// ZONE 2 GUARDIAN — "THE CORAL-WHISPERER" (reference/boss2.jpg)
+// ZONE 2 GUARDIAN — "THE REVELER" (reference/boss2.jpg)
 // A coral titan built from Three.js primitives:
 //  - pale ice-blue multi-sphere "boolean" mask head with five glowing eyes
 //  - tentacles radiating from the crown in every direction, two long front

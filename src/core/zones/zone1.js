@@ -1,5 +1,5 @@
 // ============================================================
-// ZONE 1 — submerged Pantal Market District (GDD §3/§13)
+// ZONE 1 — submerged PONSIA District (GDD §3/§13)
 // Composed around a CENTRAL NORTH–SOUTH AVENUE: the player spawns on the south
 // dock (+Z) looking north (-Z) down a flooded market street lined by stall rows,
 // passes through broken ruin-arch GATEWAYS that mark each district threshold, and
@@ -237,15 +237,17 @@ function setSpawnNodes(world) {
 
 export const zone1 = {
   id: 'zone1',
-  name: 'Pantal Market',
-  label: 'Zone 1 — Pantal Market',   // descend-screen heading
+  name: 'PONSIA',
+  label: 'Zone 1 — PONSIA',   // descend-screen heading
   seed: 20260618,
+  arenaId: 'arena1',
+  riftSpot: { x: 0, z: 14 },        // Memory Rift gateway into the arena (ahead of the dock on the avenue)
   guardianStart: { x: 0, z: 14 },   // waits ahead of the dock on the avenue (between near light shaft z=10 and the arch z=26)
   guardianRebuke: 'You are not worthy of these waters. The market keeps its memories yet.',   // shown on a wrong riddle answer
   guardianName: { fil: 'Bantay ng Pantal', eng: 'The Feastkeeper' },
   // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
   introDialogue: [
-    '[Zone 1 — Pantal Market] The water is colder than I remember.',
+    '[Zone 1 — PONSIA] The water is colder than I remember.',
     '[Zone 1 placeholder] Somewhere here, the market still holds what it loved.',
   ],
   background: 0x0c2b2c,

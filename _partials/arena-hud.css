@@ -1,0 +1,468 @@
+/* In-game HUD: exploration reticle, combat status, arena riddle, and Lumina. */
+
+/* ---- Crosshair ---- */
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgba(234, 246, 244, 0.55);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .4s, background .2s, box-shadow .2s;
+}
+
+#crosshair.active {
+  opacity: 1;
+}
+
+#crosshair.combat {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  background: rgba(127, 232, 255, 0.9);
+  box-shadow: 0 0 8px rgba(127, 232, 255, .8);
+}
+
+#crosshair.overcharge {
+  background: rgba(255, 207, 84, .98);
+  box-shadow: 0 0 8px rgba(255, 207, 84, .95), 0 0 20px rgba(255, 166, 48, .55);
+  animation: overcharge-crosshair .4s ease-in-out infinite alternate;
+}
+
+#crosshair.hit {
+  transform: scale(1.8);
+  transition: transform .08s ease-out;
+}
+
+@keyframes overcharge-crosshair {
+  to { box-shadow: 0 0 12px rgba(255, 228, 132, 1), 0 0 26px rgba(255, 166, 48, .72); }
+}
+
+/* ---- Hold-to-collect ring (around crosshair) ---- */
+#holdring {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 78px;
+  height: 78px;
+  margin: -39px 0 0 -39px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+  z-index: 5;
+}
+
+#holdring.active { opacity: 1; }
+
+#holdring circle {
+  fill: none;
+  stroke-width: 3;
+}
+
+#holdring .track { stroke: rgba(234, 246, 244, 0.14); }
+
+#holdring .prog {
+  stroke: var(--teal);
+  stroke-linecap: round;
+  stroke-dasharray: 213.6;
+  stroke-dashoffset: 213.6;
+  filter: drop-shadow(0 0 6px rgba(111, 216, 208, .85));
+}
+
+/* ---- Artifact HUD ---- */
+#hud {
+  position: fixed;
+  top: 22px;
+  right: 26px;
+  text-align: right;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
+}
+
+#hud.active { opacity: 1; }
+
+#hud .label {
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--teal);
+  opacity: .8;
+}
+
+#hud .count {
+  font-size: 30px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+/* ---- Stamina and health ---- */
+#stamina,
+#health {
+  position: fixed;
+  left: 26px;
+  width: 180px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .4s;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .7);
+}
+
+#stamina { bottom: 26px; }
+#health { bottom: 68px; }
+#stamina.active,
+#health.active { opacity: 1; }
+
+#stamina.rail-hidden { opacity: 0 !important; }
+
+#stamina .label,
+#health .label {
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  opacity: .7;
+  margin-bottom: 6px;
+}
+
+#stamina .label { color: var(--teal); }
+#health .label { color: #e8907a; }
+
+#stamina .track,
+#health .track {
+  height: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(234, 246, 244, 0.12);
+}
+
+#stamina .track { border: 1px solid rgba(111, 216, 208, .25); }
+#health .track { border: 1px solid rgba(232, 144, 122, .3); }
+
+#stamina .fill,
+#health .fill {
+  height: 100%;
+  width: 100%;
+  transition: width .1s linear, background .3s, box-shadow .3s;
+}
+
+#stamina .fill {
+  background: var(--teal);
+  box-shadow: 0 0 8px rgba(111, 216, 208, .7);
+}
+
+#stamina.low .fill {
+  background: #d98a6f;
+  box-shadow: 0 0 8px rgba(217, 138, 111, .7);
+}
+
+#stamina.zephyr .label { color: #63b9ff; }
+
+#stamina.zephyr .fill {
+  background: #63b9ff;
+  box-shadow: 0 0 12px rgba(99, 185, 255, .95);
+}
+
+#health .fill {
+  background: #e8907a;
+  box-shadow: 0 0 8px rgba(232, 144, 122, .7);
+}
+
+#health.low .fill {
+  background: #e35b4f;
+  box-shadow: 0 0 10px rgba(227, 91, 79, .9);
+  animation: healthpulse .8s ease-in-out infinite;
+}
+
+#health.lumina-heal .fill { animation: lumina-heal .4s ease-out; }
+
+@keyframes healthpulse {
+  50% { opacity: .55; }
+}
+
+@keyframes lumina-heal {
+  30% {
+    background: #62ef8a;
+    box-shadow: 0 0 18px rgba(98, 239, 138, 1);
+  }
+}
+
+/* ---- Wave counter ---- */
+#wavehud {
+  position: fixed;
+  top: 98px;
+  right: 26px;
+  text-align: right;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .4s;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
+}
+
+#wavehud.active { opacity: 1; }
+
+#wavehud .label {
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #e8907a;
+  opacity: .8;
+}
+
+#wavehud .count {
+  font-size: 30px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+#wavehud .sub {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: rgba(234, 246, 244, .6);
+}
+
+/* ---- Guardian ward counter (Arena 2) ---- */
+#guardian-wards {
+  position: fixed;
+  top: 22px;
+  left: 24px;
+  min-width: 150px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .35s;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .75);
+  z-index: 9;
+}
+
+#guardian-wards.active { opacity: 1; }
+
+#guardian-wards .label {
+  color: #ffbd67;
+  font-size: 12px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+#guardian-wards .count {
+  margin-top: 3px;
+  color: rgba(244, 251, 255, .78);
+  font-size: 13px;
+  letter-spacing: 1.4px;
+  font-variant-numeric: tabular-nums;
+}
+
+#guardian-wards .count span {
+  color: #fff0c3;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* ---- Lumina timers ---- */
+#lumina-status {
+  position: fixed;
+  left: 222px;
+  bottom: 24px;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .2s;
+  z-index: 8;
+  font-family: system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+#lumina-status.active { opacity: 1; }
+
+.lumina-buff {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 124px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid currentColor;
+  border-radius: 18px;
+  background: rgba(4, 18, 26, .78);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, .38);
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+}
+
+.lumina-buff.active { display: flex; }
+.lumina-buff.zephyr { color: #63b9ff; }
+.lumina-buff.overcharge { color: #ffcf54; }
+
+.lumina-buff .name {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lumina-buff .time {
+  width: 3.4em;
+  text-align: right;
+  font-size: 12px;
+  color: #f4fbff;
+}
+
+/* ---- Hurt vignette ---- */
+#hurt {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center,
+      rgba(0, 0, 0, 0) 55%, rgba(190, 40, 30, 0.45) 100%);
+  opacity: 0;
+  transition: opacity .5s ease-out;
+  z-index: 6;
+}
+
+#hurt.active {
+  opacity: 1;
+  transition: opacity .06s ease-in;
+}
+
+/* ---- Interact prompt ---- */
+#prompt {
+  position: fixed;
+  bottom: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border: 1px solid rgba(111, 216, 208, .4);
+  background: rgba(10, 21, 24, .45);
+  border-radius: 30px;
+  font-size: 15px;
+  letter-spacing: 1px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .3s;
+  backdrop-filter: blur(3px);
+}
+
+#prompt.active { opacity: 1; }
+#prompt b { color: var(--amber); }
+
+/* ---- Guardian / Rift hint ---- */
+#ghint {
+  position: fixed;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
+}
+
+#ghint.active { opacity: 1; }
+
+#ghint .label {
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--teal);
+  opacity: .85;
+}
+
+#ghint .sub {
+  font-size: 14px;
+  font-style: italic;
+  opacity: .6;
+  margin-top: 4px;
+}
+
+/* ---- Arena riddle banner ---- */
+#arena-riddle {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, 82vw);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .4s;
+  padding: 12px 20px;
+  background: rgba(4, 18, 26, .62);
+  border: 1px solid rgba(127, 232, 255, .35);
+  border-radius: 10px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .8);
+  z-index: 12;
+}
+
+#arena-riddle.active { opacity: 1; }
+
+#arena-riddle .step {
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--teal);
+  opacity: .9;
+  margin-bottom: 6px;
+}
+
+#arena-riddle .fil {
+  font-size: 18px;
+  font-weight: 600;
+  white-space: pre-line;
+  line-height: 1.35;
+}
+
+#arena-riddle .eng {
+  font-size: 14px;
+  font-style: italic;
+  opacity: .7;
+  margin-top: 4px;
+}
+
+#arena-riddle .hint {
+  font-size: 12px;
+  opacity: .6;
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  #stamina,
+  #health {
+    left: 16px;
+    width: 160px;
+  }
+
+  #lumina-status {
+    left: 16px;
+    bottom: 108px;
+    flex-wrap: wrap;
+  }
+
+  .lumina-buff {
+    min-width: 112px;
+    height: 32px;
+  }
+
+  #arena-riddle {
+    top: 48px;
+    width: min(92vw, 640px);
+    padding: 10px 14px;
+  }
+
+  #guardian-wards {
+    top: 14px;
+    left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #crosshair.overcharge,
+  #health.low .fill,
+  #health.lumina-heal .fill {
+    animation: none;
+  }
+}

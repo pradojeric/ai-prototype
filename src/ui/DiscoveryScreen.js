@@ -14,7 +14,7 @@ export class DiscoveryScreen {
   }
 
   // `zoneName` is the active zone's display name (Game passes world.zone.name);
-  // it falls back to ZONE_NAME so older/direct callers still read "Pantal Market".
+  // it falls back to ZONE_NAME so older/direct callers still read "PONSIA".
   async show(artifactData, zoneName, onSaved) {
     this.active = true;
     this.flash.style.opacity = '1';            // fade to white

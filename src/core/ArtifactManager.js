@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import {
   CONFIG, mulberry32, shuffle, clamp01, PLAYER_RADIUS,
-  ARTIFACT_BATCH, ARTIFACT_MIN_SEP, SCATTER_DURATION, SCATTER_ARC_HEIGHT,
+  ARTIFACT_MIN_SEP, SCATTER_DURATION, SCATTER_ARC_HEIGHT,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { StringBundle } from './StringSystem.js';
@@ -26,9 +26,9 @@ function zoneNumOf(id) {
 
 export class ArtifactManager {
   // `collectedIds` is a Set of artifact ids already recovered in this zone across
-  // earlier visits (owned by Game, persists across zone reloads). Only the next
-  // ARTIFACT_BATCH uncollected artifacts are revealed per visit; the zone is done
-  // once every ARTIFACT_DATA id for this zone is in the set.
+  // earlier visits (owned by Game, persists across zone reloads). scatter() reveals
+  // every still-uncollected artifact for this zone at once; the zone is done once
+  // every ARTIFACT_DATA id for this zone is in the set.
   constructor(scene, world, collectedIds = new Set()) {
     this.scene = scene;
     this.world = world;          // provides spawnNodes + collidesAt
@@ -42,12 +42,13 @@ export class ArtifactManager {
     this._v = new THREE.Vector3();
   }
 
-  // Draw up-to-ARTIFACT_BATCH artifacts not yet collected in this zone, in a
-  // shuffled order so repeat visits don't always surface the first N
-  // uncollected entries in the same sequence.
+  // Strings v2.0: defeating the arena guardian surfaces EVERY still-uncollected
+  // artifact in this zone at once (no per-visit batching — the challenge lives in
+  // the Memory Arena now, so the main zone is a single peaceful collection pass).
+  // Shuffled so placement order varies run to run.
   _pickBatch(rng) {
     const uncollected = this.zoneArtifacts.filter((d) => !this.collectedIds.has(d.id));
-    return shuffle(uncollected, rng).slice(0, ARTIFACT_BATCH);
+    return shuffle(uncollected, rng);
   }
 
   // Compute spread-out, collision-safe landing points (one per batch artifact).
@@ -280,11 +281,9 @@ export class ArtifactManager {
     for (const a of this.artifacts) a.strings.setResolution(w, h);
   }
 
-  // This visit's batch progress (drives "keep collecting vs. batch done").
+  // Count of revealed artifacts already collected this visit / total revealed.
   get foundCount() { return this.artifacts.filter((a) => a.found).length; }
   get total() { return this.artifacts.length; }
-  // True once every revealed artifact this visit has been collected.
-  get batchComplete() { return this.artifacts.length > 0 && this.foundCount >= this.total; }
 
   // Whole-zone progress, persisting across visits (drives final completion + HUD).
   get zoneTotal() { return this.zoneArtifacts.length; }

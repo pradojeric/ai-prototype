@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { MUSEUM } from '../config.js';
 import { createVortexMaterial } from './PortalVortex.js';
+import { SoulPedestal } from './_partials/SoulPedestal.js';
 
 const FRAME_COLOR = 0x0a0e10;     // near-black frame border
 const EMPTY_COLOR = 0x12181b;     // recessed "no art yet" interior
@@ -32,13 +33,15 @@ export class Museum {
     this._mats = [];              // tracked for dispose()
     this._geos = [];
     this._texs = [];              // canvas textures (portal signs) tracked for dispose()
+    this._rayTargets = [];        // hung frame/art meshes eligible for crosshair picking
+    this._aimedSlot = null;       // slot currently under the crosshair (highlighted)
     this.hallLit = false;         // the hallway light is off until ignited
 
     // Three zone portals on the -Z wall (physical left -> right). Zone 1 sits in the
     // center and is the only one open; the others are locked until those zones exist.
     this.portals = [
       { x: MUSEUM.PORTAL_X[0], zone: 2, locked: true, name: 'LIKET' },
-      { x: MUSEUM.PORTAL_X[1], zone: 1, locked: false, name: 'Pantal Market' },
+      { x: MUSEUM.PORTAL_X[1], zone: 1, locked: false, name: 'PONSIA' },
       { x: MUSEUM.PORTAL_X[2], zone: 3, locked: true, name: 'Pananisia' },
     ];
 
@@ -54,6 +57,10 @@ export class Museum {
     this._wings();
     this._portalSigns();
     this._pedestals();
+    // Built on the room centerline but hidden until hub mode. IntroCutscene moves
+    // its camera directly along x=0, so keeping the altar out of that scene beat
+    // prevents clipping while preserving the authored wake-to-hallway path.
+    this.soulPedestal = new SoulPedestal(this.scene);
     this._hallway();
     this._hubLights();    // built but kept off-scene until the hub visit
     this._freezeStatic(); // bake transforms — nothing built here ever moves
@@ -373,11 +380,11 @@ export class Museum {
     group.add(empty);
 
     this.scene.add(group);
-    // anchor = point just in front of the frame (camera/player look target)
-    const anchor = new THREE.Vector3(x, y, z).add(
-      new THREE.Vector3(Math.sin(ry), 0, Math.cos(ry)).multiplyScalar(0.4),
-    );
-    const slot = { group, frameMesh, artMesh: null, anchor, data: null, zone };
+    // anchor = point just in front of the frame (camera/player look target);
+    // normal = the frame's outward facing, used to reject through-wall ray hits
+    const normal = new THREE.Vector3(Math.sin(ry), 0, Math.cos(ry));
+    const anchor = new THREE.Vector3(x, y, z).addScaledVector(normal, 0.4);
+    const slot = { group, frameMesh, artMesh: null, anchor, normal, data: null, zone };
     this.slots.push(slot);
     (this.slotsByZone[zone] ||= []).push(slot);
   }
@@ -534,6 +541,7 @@ export class Museum {
   // ---- per-frame ------------------------------------------------------------
 
   update(dt, t) {
+    this.soulPedestal.update(t);
     if (this.hubMode) {
       // Hub: the vortices carry the portal look — just spin them.
       if (this._vortexMat) this._vortexMat.uniforms.uTime.value = t;
@@ -593,6 +601,7 @@ export class Museum {
   // the intro, so mutating the shared room materials here is safe.
   setHubLighting(on) {
     this.hubMode = on;
+    this.soulPedestal.setVisible(on);
     // Hub: open portals trade the warm emissive panel for the blue vortex;
     // leaving the hub restores the intro's warm panels. Locked corridors keep
     // their dim cold panel either way.
@@ -646,6 +655,8 @@ export class Museum {
     const H = MUSEUM.ROOM_HALF;
     const d = MUSEUM.DOOR_HALF;
 
+    if (this.soulPedestal.collidesAt(x, z, r)) return true;
+
     // Solid pedestals (inflate the box footprint by the player's radius).
     if (this.pedestalSpots) {
       const reach = this.pedestalHalf + r;
@@ -689,6 +700,11 @@ export class Museum {
 
   // ---- hub API (stubbed for the intro; used when the museum becomes a hub) ---
 
+  placeSoul(zone) { return this.soulPedestal.placeSoul(zone); }
+  soulPedestalDistance(pos) { return this.soulPedestal.distanceTo(pos); }
+  get placedSoulCount() { return this.soulPedestal.count; }
+  get allSoulsPlaced() { return this.soulPedestal.complete; }
+
   // Swap a glowing art plane into an empty frame slot.
   _setSlot(slot, data) {
     if (!slot || slot.artMesh) return;
@@ -723,11 +739,18 @@ export class Museum {
     // Shared art-plane geometry (pooled in _geos; clear() only frees the per-slot
     // material/texture). Materials stay per-slot — each holds its own artwork map.
     this._artGeo ||= this._geo(new THREE.PlaneGeometry(1.18, 1.58));
+    // Base tint kept aside so the aim highlight can lift and restore it.
+    mat.userData.baseColor = mat.color.clone();
     const art = new THREE.Mesh(this._artGeo, mat);
     art.position.z = 0.08;
     slot.group.add(art);
     slot.artMesh = art;
     slot.data = data;
+    // Hung frames become crosshair-pick targets (art plane + border box, so
+    // aiming at the frame edge still counts).
+    art.userData.slot = slot;
+    slot.frameMesh.userData.slot = slot;
+    this._rayTargets.push(art, slot.frameMesh);
   }
 
   // Fill each zone section's slots from `byZone` ({ zoneNumber: [artifactData] },
@@ -740,19 +763,36 @@ export class Museum {
     }
   }
 
-  // Nearest hung-artwork slot within `range` of `pos` (for "press E to revisit").
-  // Returns { data, dist } or null. Measured to the frame's in-front anchor.
-  nearestArtifact(pos, range) {
-    let best = null, bestDist = range;
-    for (const slot of this.slots) {
-      if (!slot.data) continue;
-      const d = pos.distanceTo(slot.anchor);
-      if (d < bestDist) { bestDist = d; best = slot; }
-    }
-    return best ? { data: best.data, dist: bestDist } : null;
+  // Hung-artwork slot under the crosshair within `range` (for "press E to
+  // revisit"). Raycasts from the camera center against hung art/frame meshes,
+  // rejecting back-face hits so a frame can't be picked through its wall.
+  // Also drives the aim highlight. Returns { data, dist } or null.
+  aimedArtifact(camera, range) {
+    this._raycaster ||= new THREE.Raycaster();
+    this._rayCenter ||= new THREE.Vector2(0, 0);
+    this._raycaster.setFromCamera(this._rayCenter, camera);
+    this._raycaster.far = range;
+    const hits = this._raycaster.intersectObjects(this._rayTargets, false);
+    const hit = hits.find((h) => h.object.userData.slot.normal.dot(this._raycaster.ray.direction) < 0);
+    const slot = hit ? hit.object.userData.slot : null;
+    this._setAimed(slot);
+    return slot ? { data: slot.data, dist: hit.distance } : null;
+  }
+
+  clearAim() { this._setAimed(null); }
+
+  // Swap the highlight: restore the previous slot's base art tint, lift the new one.
+  _setAimed(slot) {
+    if (this._aimedSlot === slot) return;
+    const prev = this._aimedSlot;
+    if (prev?.artMesh) prev.artMesh.material.color.copy(prev.artMesh.material.userData.baseColor);
+    if (slot?.artMesh) slot.artMesh.material.color.copy(slot.artMesh.material.userData.baseColor).multiplyScalar(1.3);
+    this._aimedSlot = slot;
   }
 
   clear() {
+    this._aimedSlot = null;
+    this._rayTargets.length = 0;
     for (const slot of this.slots) {
       if (slot.artMesh) {
         slot.group.remove(slot.artMesh);
@@ -767,6 +807,7 @@ export class Museum {
 
   dispose() {
     this.clear();                 // free any slot-owned art mat/tex first
+    this.soulPedestal.dispose();
     if (this._bulbInst) this._bulbInst.dispose();
     for (const g of this._geos) g.dispose();
     for (const m of this._mats) m.dispose();

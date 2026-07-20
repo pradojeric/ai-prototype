@@ -1,10 +1,10 @@
 // ============================================================
-// ENEMY — a "drowned echo": a small spectral shard of the defeated Guardian
-// that swarms the player during a wave fight. Two archetypes share this class:
-//   'chaser'  — fast melee swarmer, steers straight at the player
-//   'spitter' — keeps its distance and lobs slow glowing spits
+// ENEMY — a "drowned echo": a small spectral shard that swarms the player during
+// a Memory Arena wave fight (Strings v2.0). Two archetypes share this class:
+//   'chaser'  — STARVED FISHER: fast skeletal melee swarmer, steers straight in
+//   'spitter' — BRINE SPITTER: keeps its distance and lobs slow corrosive spits
 // Bodies are built from the shared guardian primitives (fadeMat) so they read
-// as kin of the zone's Guardian; the fade in/out mirrors Guardian's easing.
+// as kin of the arena's Guardian; the fade in/out mirrors Guardian's easing.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, COMBAT, GUARDIAN } from '../../config.js';
@@ -13,7 +13,7 @@ import { fadeMat, angDelta } from '../guardians/primitives.js';
 const POOF_COUNT = 16;   // small per-enemy death puff (Guardian uses 48)
 
 export class Enemy {
-  constructor(scene, world, type, x, z, hpBonus = 0) {
+  constructor(scene, world, type, x, z, hpBonus = 0, dropMultiplier = 1) {
     this.scene = scene;
     this.world = world;
     this.type = type;
@@ -21,6 +21,7 @@ export class Enemy {
     this.cfg = cfg;
     this.hp = cfg.HP + hpBonus;
     this.radius = cfg.RADIUS;
+    this.dropMultiplier = dropMultiplier;
     this.alive = true;
 
     // Flags the manager consumes each frame (the enemy never touches pools/hp).
@@ -67,14 +68,15 @@ export class Enemy {
   }
 
   // Distinct silhouettes per archetype so threats read at a glance:
-  // chaser = a lean forward-swept spectral shard; spitter = a rounder husk
-  // with a bright "mouth" that swells as it winds up a spit.
+  // Starved Fisher = a lean forward-swept bony shard; Brine Spitter = a rounder
+  // husk with a bright "mouth" that swells as it winds up a corrosive spit.
   _buildBody() {
     const isChaser = this.type === 'chaser';
     this._glowColor = isChaser ? GUARDIAN.CORE_COLOR : COMBAT.SPITTER.SPIT_COLOR;
 
-    // Per-enemy materials (fade + hit-flash are per-instance state).
-    this._bodyMat = fadeMat(0x1c3a40, isChaser ? 0x2a6a74 : 0x6a4530, 0.5, 0.85);
+    // Per-enemy materials (fade + hit-flash are per-instance state). The Starved
+    // Fisher tints bonier/paler; the Brine Spitter keeps a rusty brine hue.
+    this._bodyMat = fadeMat(0x1c3a40, isChaser ? 0x5f6f66 : 0x6a4530, 0.5, 0.85);
     this._glowMat = fadeMat(0xdffbff, this._glowColor, 2.0, 0.95, 0.3, 0);
     this._glowBase = this._glowMat.emissiveIntensity;
     this.fadeMats = [[this._bodyMat, this._bodyMat.opacity], [this._glowMat, this._glowMat.opacity]];

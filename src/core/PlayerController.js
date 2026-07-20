@@ -15,6 +15,10 @@ export class PlayerController {
     this.moving = false;             // WASD held this frame (for the view-model bob)
     this.sprinting = false;          // Shift held + moving + stamina left this frame
     this.stamina = CONFIG.STAMINA_MAX; // sprint "tank", drains on sprint and regens otherwise
+    this.zephyrActive = false;       // Lumina surge: automatic sprint + stamina recovery
+    this.zephyrSpeedMultiplier = 1;
+    this.movementLocked = false;     // rail encounters keep aim but suppress WASD movement
+    this.movementAnchor = new THREE.Vector3();
     this.collide = null;             // (x, z) => boolean, injected by Game
     this.groundHeight = null;        // (x, z) => number, injected by Game
     this.eyeBase = CONFIG.DOCK_TOP;  // smoothed support height under the player
@@ -34,8 +38,34 @@ export class PlayerController {
   // Game wires the world's support-height function (raised dock + ladder ramp).
   setGroundHeight(fn) { this.groundHeight = fn; }
 
+  setMovementLocked(locked, anchor = null) {
+    this.movementLocked = locked;
+    if (anchor) this.movementAnchor.copy(anchor);
+    this.velocity.set(0, 0, 0);
+    this.moving = false;
+    this.sprinting = false;
+    if (this.elStaminaWrap) this.elStaminaWrap.classList.toggle('rail-hidden', locked);
+  }
+
+  // Arena Lumina owns the timer; the player owns how the movement state is
+  // applied so global CONFIG values never need to be mutated.
+  setZephyr(active, speedMultiplier = 1) {
+    this.zephyrActive = active;
+    this.zephyrSpeedMultiplier = active ? speedMultiplier : 1;
+    if (!active) this.sprinting = false;
+    this._updateStaminaUi();
+  }
+
   update(dt) {
     if (!this.controls.isLocked) return false;
+    if (this.movementLocked) {
+      const obj = this.controls.getObject();
+      obj.position.copy(this.movementAnchor);
+      this.velocity.set(0, 0, 0);
+      this.moving = false;
+      this.sprinting = false;
+      return true;
+    }
     const f = (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0);
     const s = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] ? 1 : 0);
     const moveInput = Math.abs(f) + Math.abs(s) > 0;
@@ -43,15 +73,20 @@ export class PlayerController {
     // Sprint: Shift while moving, as long as the tank isn't empty. Drains only
     // while actually sprinting; otherwise the tank regenerates (GDD §4).
     const wantSprint = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && moveInput;
-    this.sprinting = wantSprint && this.stamina > 0;
-    if (this.sprinting) {
+    this.sprinting = moveInput && (this.zephyrActive || (wantSprint && this.stamina > 0));
+    if (this.zephyrActive) {
+      this.stamina = Math.min(CONFIG.STAMINA_MAX, this.stamina + CONFIG.STAMINA_REGEN * dt);
+    } else if (this.sprinting) {
       this.stamina = Math.max(0, this.stamina - CONFIG.STAMINA_DRAIN * dt);
     } else {
       this.stamina = Math.min(CONFIG.STAMINA_MAX, this.stamina + CONFIG.STAMINA_REGEN * dt);
     }
     this._updateStaminaUi();
 
-    const speed = CONFIG.WADE_SPEED * (this.sprinting ? CONFIG.SPRINT_MULT : 1);
+    const speedMultiplier = this.zephyrActive
+      ? this.zephyrSpeedMultiplier
+      : (this.sprinting ? CONFIG.SPRINT_MULT : 1);
+    const speed = CONFIG.WADE_SPEED * speedMultiplier;
     // smooth accel/decel for the heavy wade feel
     this.velocity.x += (s * speed - this.velocity.x) * Math.min(1, dt * 4);
     this.velocity.z += (f * speed - this.velocity.z) * Math.min(1, dt * 4);
@@ -98,7 +133,10 @@ export class PlayerController {
     if (!this.elStaminaWrap || !this.elStaminaFill) return;
     const pct = (this.stamina / CONFIG.STAMINA_MAX) * 100;
     this.elStaminaFill.style.width = pct + '%';
-    this.elStaminaWrap.classList.toggle('active', this.sprinting || this.stamina < CONFIG.STAMINA_MAX - 0.001);
+    this.elStaminaWrap.classList.toggle(
+      'active', this.zephyrActive || this.sprinting || this.stamina < CONFIG.STAMINA_MAX - 0.001,
+    );
     this.elStaminaWrap.classList.toggle('low', this.stamina < CONFIG.STAMINA_MAX * 0.25);
+    this.elStaminaWrap.classList.toggle('zephyr', this.zephyrActive);
   }
 }

@@ -53,7 +53,7 @@ export function buildPot(matPot, matGlow, sphereGeo) {
 
 // A glowing spiral "core" — a bright ring + backing disc + a logarithmic spiral
 // arm of emissive motes. Reused as the focal chest bloom on multiple guardians
-// (the coral-whisperer's market swirl, the keeper's memory galaxy). Returns the
+// (The Reveler's market swirl, the Keeper's memory galaxy). Returns the
 // group plus refs the caller rotates + pulses each frame (see `swirl` / `motes`).
 //   opts: { radius, arms, motesPerArm, moteGeo, turns }
 export function spiralCore(matGlow, opts = {}) {

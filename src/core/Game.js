@@ -2,28 +2,23 @@
 // GAME — wiring + main loop
 // ============================================================
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
   CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
-  RIDDLE_COUNT, mulberry32, wait,
+  ENDING, wait,
 } from '../config.js';
-import { drawRiddles, ARTIFACT_DATA } from '../data.js';
+import { ARTIFACT_DATA } from '../data.js';
 import { createWorld, ZONES } from './zones/index.js';
 import { PlayerController } from './PlayerController.js';
 import { ArtifactManager } from './ArtifactManager.js';
-import { Guardian } from './Guardian.js';
-import { CombatManager } from './combat/CombatManager.js';
+import { MemoryRift } from './MemoryRift.js';
 import { ViewModel } from './ViewModel.js';
+import { createGameRenderer, createPostProcessing } from './_partials/GameRendering.js';
+import { bindGameUi, wireGameEvents } from './_partials/GameUI.js';
+import { arenaFlowMethods } from './_partials/ArenaFlow.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
-import { RiddleScreen } from '../ui/RiddleScreen.js';
 import { Museum } from '../museum/Museum.js';
 import { IntroCutscene } from '../cutscene/IntroCutscene.js';
-import { DefeatCutscene } from '../cutscene/DefeatCutscene.js';
 import { FaintCutscene } from '../cutscene/FaintCutscene.js';
 import { FinalPortal, chooseFinalPortalPosition } from '../cutscene/FinalPortal.js';
 import { PortalPullCutscene, MuseumEndingCutscene } from '../cutscene/EndingCutscenes.js';
@@ -35,15 +30,7 @@ const RING_CIRC = 2 * Math.PI * 34;   // circumference of the r=34 progress ring
 
 export class Game {
   constructor() {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(innerWidth, innerHeight);
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    // ACES tone mapping rolls the >1 emissive values (string glow, hub bulbs at
-    // intensity up to 7) into the bloom gracefully instead of hard-clipping to
-    // white. Applied at the OutputPass below. outputColorSpace stays the sRGB
-    // default. Switch to THREE.NoToneMapping to revert to the un-mapped look.
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    document.body.appendChild(this.renderer.domElement);
+    this.renderer = createGameRenderer();
 
     this.camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 200);
 
@@ -54,77 +41,40 @@ export class Game {
     this.player.setCollider((x, z) => this.world.collidesAt(x, z, PLAYER_RADIUS));
     // Inject support-height so the player stands on the dock + climbs the ladder.
     this.player.setGroundHeight((x, z) => this.world.groundHeightAt(x, z));
-    // Per-zone recovered-artifact ids, persisted across zone reloads so the
-    // player surfaces them ARTIFACT_BATCH at a time over repeat visits (session
-    // only — a browser reload restarts progress).
+    // Per-zone recovered-artifact ids, persisted across zone reloads so a
+    // re-entered zone remembers what was already collected (session only — a
+    // browser reload restarts progress).
     this.collectedByZone = { zone1: new Set(), zone2: new Set(), zone3: new Set() };
     this.artifacts = new ArtifactManager(this.world.scene, this.world, this.collectedByZone.zone1);
-    this.guardian = new Guardian(this.world.scene, this.world, this.world.zone.id); // riddle gate
     this.viewmodel = new ViewModel(this.camera);   // first-person hand
     this.audio = new AudioManager();
-    // Wave combat: contested artifacts spawn waves of drowned echoes when the
-    // player first holds E on them (see combat/CombatManager.js).
-    this.combat = new CombatManager(
-      this.world.scene, this.world, this.player, this.camera, this.viewmodel, this.audio,
-    );
+    // Strings v2.0: the main zone hosts a Memory Rift gateway; the Guardian
+    // (Feastkeeper) and wave combat live in the instanced arena, constructed on
+    // demand in _loadArena. All three are null while in a main zone.
+    this.rift = new MemoryRift(this.world.scene, this.world.zone.riftSpot);
+    this.guardian = null;   // arena-only
+    this.combat = null;     // arena-only
+    this.arena = null;      // arena-only
+    this.soul = null;       // Guardian Soul dropped in the main zone after a win
     this.discovery = new DiscoveryScreen();
-    this.riddleScreen = new RiddleScreen();        // bugtong multiple-choice
-    this.museum = new Museum();                    // reusable digital-museum scene (future hub)
+    this.museum = new Museum();                    // reusable digital-museum scene (hub)
     // (DEBUG_UNLOCK_ALL_ZONES is applied on hub entry — see _enterMuseum — so
     // the intro cutscene still shows zones 2/3 barricaded.)
     this.cutscene = new IntroCutscene(this.museum); // scripted intro over the museum
-    this.defeatCutscene = new DefeatCutscene();      // scripted guardian-defeat over the world
-    this.faintCutscene = new FaintCutscene();         // scripted black-out on a wrong answer
+    this.faintCutscene = new FaintCutscene();         // scripted black-out on an arena defeat
 
-    // post-processing: bloom for the string glow. We keep the RenderPass so the
-    // intro cutscene can borrow it to render the museum scene/camera.
-    this.composer = new EffectComposer(this.renderer);
-    this.renderPass = new RenderPass(this.world.scene, this.camera);
-    this.composer.addPass(this.renderPass);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.6, 0.2);
-    this.composer.addPass(this.bloom);
-    // Disabled outside the portal pull. Radial UV wobble + split RGB channels
-    // produce the close-range distortion without changing normal gameplay.
-    this.endingDistortion = new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        uAmount: { value: 0 },
-        uTime: { value: 0 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-      `,
-      fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uAmount;
-        uniform float uTime;
-        varying vec2 vUv;
-        void main() {
-          vec2 p = vUv - .5;
-          float r = length(p);
-          vec2 warp = p * sin(r * 35. - uTime * 8.) * .025 * uAmount;
-          float split = .008 * uAmount * (0.4 + r);
-          vec2 dir = normalize(p + vec2(.0001));
-          float red = texture2D(tDiffuse, vUv + warp + dir * split).r;
-          float green = texture2D(tDiffuse, vUv + warp).g;
-          float blue = texture2D(tDiffuse, vUv + warp - dir * split).b;
-          gl_FragColor = vec4(red, green, blue, 1.0);
-        }
-      `,
-    });
-    this.endingDistortion.enabled = false;
-    this.composer.addPass(this.endingDistortion);
-    // Final pass: apply tone mapping + linear->sRGB encoding. With a composer
-    // the renderer's automatic output conversion is bypassed, so this is what
-    // gets the colors onto the canvas correctly (replaces the old GammaCorrection
-    // pass). Must be last so bloom composites in linear space first.
-    this.composer.addPass(new OutputPass());
+    const postProcessing = createPostProcessing(this.renderer, this.world.scene, this.camera);
+    this.composer = postProcessing.composer;
+    this.renderPass = postProcessing.renderPass;
+    this.bloom = postProcessing.bloom;
+    this.endingDistortion = postProcessing.endingDistortion;
 
     this.clock = new THREE.Clock();
-    this.phase = 'title';     // title -> cutscene -> descend -> playing
+    this.phase = 'title';     // title -> cutscene -> descend -> playing -> arena
     this.busy = false;        // true during discovery / riddle / scatter
-    this.bossDefeated = false; // gates artifacts behind the guardian's riddles
+    this.bossDefeated = false; // true once the arena is cleared & artifacts are loose
+    this.collectedSouls = new Set();   // main-zone ids whose Guardian Soul is recovered
+    this._returnZone = 'zone1';        // main zone an active arena returns to
     // Zone progression: the hub unlocks the next zone in order on completion.
     this.zoneOrder = ['zone1', 'zone2', 'zone3'];
     this.completed = new Set();   // zone ids the player has finished
@@ -132,176 +82,17 @@ export class Game {
     this.currentZone = 'zone1';   // the active gameplay zone (built above)
     this.holdKey = false;     // E currently held
     this.holdProgress = 0;    // 0..1 hold-to-collect progress
-    this._ui();
+    bindGameUi(this);
     this.portalCutscene = new PortalPullCutscene();
     this.museumEndingCutscene = new MuseumEndingCutscene(this.museum);
     this.restoredProvince = new RestoredProvince(
       this.elEndingSubtitle, this.elEndingSubtitleEn, this.elEndingSubtitleFil,
     );
-    this._events();
+    wireGameEvents(this);
 
     document.getElementById('loading').style.display = 'none';
     this.elTitle.style.display = 'flex';      // the intro begins at the title screen
     this.animate();
-  }
-
-  _ui() {
-    this.elFound = document.getElementById('found');
-    this.elTotal = document.getElementById('total');
-    this.elHud = document.getElementById('hud');
-    this.elGhint = document.getElementById('ghint');
-    this.elGhintLabel = document.getElementById('ghint-label');
-    this.elPrompt = document.getElementById('prompt');
-    this.elCross = document.getElementById('crosshair');
-    this.elTitle = document.getElementById('title');
-    this.elStart = document.getElementById('start');
-    this.elStartZone = document.getElementById('start-zone');   // descend-screen zone heading
-    this.elResume = document.getElementById('resume');
-    this.elFlash = document.getElementById('flash');
-    this.elFaint = document.getElementById('faint');     // black-out overlay for the faint
-    this.elGspeak = document.getElementById('gspeak');   // guardian rebuke subtitle
-    this.elZintro = document.getElementById('zintro');   // per-zone entry dialogue subtitle
-    this.elZoneDone = document.getElementById('zonecomplete');
-    this.elZcTitle = document.getElementById('zc-title');
-    this.elZcQuote = document.getElementById('zc-quote');
-    this.elZcTrans = document.getElementById('zc-trans');
-    this.elZcEnter = document.getElementById('zc-enter');
-    this.elSkipMuseum = document.getElementById('skipmuseum');
-    this.elTestEnding = document.getElementById('test-ending');
-    this.elAwaken = document.getElementById('btn-awaken');
-    this.elSettings = document.getElementById('settings');
-    this.elRingWrap = document.getElementById('holdring');
-    this.elRing = this.elRingWrap.querySelector('.prog');
-    this.elEndingBlack = document.getElementById('ending-black');
-    this.elEndingSubtitle = document.getElementById('ending-subtitle');
-    this.elEndingSubtitleEn = document.getElementById('ending-subtitle-en');
-    this.elEndingSubtitleFil = document.getElementById('ending-subtitle-fil');
-    this.elEndingCredits = document.getElementById('ending-credits');
-    this.elEndingReturn = document.getElementById('ending-return');
-  }
-
-  _events() {
-    // Title menu -> play the intro cutscene -> reveal the Descend screen.
-    // stopPropagation so these clicks don't reach the cutscene-skip handler below.
-    this.elAwaken.addEventListener('click', (e) => { e.stopPropagation(); this._runIntro(); });
-    // Skip the intro + gameplay and drop straight into the walkable museum hub.
-    this.elSkipMuseum.addEventListener('click', (e) => { e.stopPropagation(); this._skipToMuseum(); });
-    this.elTestEnding.style.display = CONFIG.DEBUG_TEST_ENDING_BUTTON ? '' : 'none';
-    this.elTestEnding.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (CONFIG.DEBUG_TEST_ENDING_BUTTON) this._testEnding();
-    });
-    this._wireSettings();
-    // A click during the cutscene skips to the white fade.
-    addEventListener('click', () => { if (this.phase === 'cutscene') this.cutscene.skip(); });
-
-    this.elStart.addEventListener('click', () => {
-      this.audio.init();
-      this.player.controls.lock();
-    });
-    // Zone complete -> walk the finished gallery; resume re-locks after ESC.
-    this.elZoneDone.addEventListener('click', () => { if (this.phase === 'complete') this._enterMuseum(); });
-    this.elResume.addEventListener('click', () => { if (this.phase === 'museum') this.player.controls.lock(); });
-    this.elEndingReturn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (this.phase === 'endingCredits') this._enterEpilogueMuseum();
-    });
-    this.player.controls.addEventListener('lock', () => {
-      this.elStart.style.display = 'none';
-      this.elResume.style.display = 'none';
-      // The defeat/faint cinematics re-lock mid-sequence and manage their own UI;
-      // don't let this async lock event flip on the crosshair or end them early.
-      if (this.phase === 'defeat' || this.phase === 'faint') return;
-      this.elCross.classList.add('active');
-      // A fresh descend into the zone (vs. an ESC-resume) plays the zone-intro dialogue.
-      const wasDescending = this.phase === 'descend';
-      if (this.phase !== 'museum') this._startGameplayPhase();
-      if (wasDescending) this._playZoneIntro();
-    });
-    this.player.controls.addEventListener('unlock', () => {
-      if (this.phase === 'museum') {
-        // A view-only artifact re-read unlocks the pointer too; don't surface the
-        // Resume screen behind the discovery card (it re-locks on dismiss).
-        if (this.busy) return;
-        this.elResume.style.display = 'flex';
-        this.elCross.classList.remove('active');
-      } else if (!this.busy && this.phase === 'playing') {
-        this.elStart.style.display = 'flex';
-        this.elHud.classList.remove('active');
-        this.elGhint.classList.remove('active');
-        this.elCross.classList.remove('active');
-      }
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.code !== 'KeyE') return;
-      if (!this.holdKey) this._ePressed = true;   // rising edge: a single tap (consumed by the loop)
-      this.holdKey = true;
-    });
-    document.addEventListener('keyup',   (e) => { if (e.code === 'KeyE') this.holdKey = false; });
-    // Left click casts a light-bolt — only mid-fight, so exploration clicks
-    // (and the pointer-lock click itself) never fire a stray shot.
-    document.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      if (this.phase === 'playing' && !this.busy &&
-          this.player.controls.isLocked && this.combat.active) {
-        this.combat.requestFire();
-      }
-    });
-    addEventListener('resize', () => {
-      this.camera.aspect = innerWidth / innerHeight;
-      this.camera.updateProjectionMatrix();
-      this.cutscene.resize(innerWidth, innerHeight);
-      this.defeatCutscene.resize(innerWidth, innerHeight);
-      this.faintCutscene.resize(innerWidth, innerHeight);
-      this.portalCutscene.resize(innerWidth, innerHeight);
-      this.museumEndingCutscene.resize(innerWidth, innerHeight);
-      this.restoredProvince.resize(innerWidth, innerHeight);
-      this.renderer.setSize(innerWidth, innerHeight);
-      this.composer.setSize(innerWidth, innerHeight);
-      this.artifacts.setResolution(innerWidth, innerHeight); // fat-line thickness
-    });
-  }
-
-  // Settings modal: volume slider drives the audio master bus and persists
-  // across sessions. Openers: the title menu button + the gear on the
-  // Descend/Resume screens (those screens are whole-surface click targets,
-  // so gear clicks must not propagate).
-  _wireSettings() {
-    // Restore + wire one volume slider; setters are pre-init safe on AudioManager.
-    // Falls back to the legacy single-volume key so older saves carry over.
-    const readSaved = (key, fallback) => {
-      try {
-        const raw = localStorage.getItem(key) ?? localStorage.getItem('strings.volume');
-        const v = parseFloat(raw);
-        if (raw !== null && !Number.isNaN(v)) return v;
-      } catch (e) { /* storage optional (private mode) */ }
-      return fallback;
-    };
-    const wireSlider = (sliderId, valId, storageKey, apply) => {
-      const slider = document.getElementById(sliderId);
-      const val = document.getElementById(valId);
-      const saved = readSaved(storageKey, 0.9);
-      apply(saved);
-      slider.value = Math.round(saved * 100);
-      val.textContent = `${Math.round(saved * 100)}%`;
-      slider.addEventListener('input', () => {
-        const v = slider.value / 100;
-        apply(v);
-        val.textContent = `${slider.value}%`;
-        try { localStorage.setItem(storageKey, String(v)); } catch (e) { /* ignore */ }
-      });
-    };
-    wireSlider('music-slider', 'music-val', 'strings.musicVolume', (v) => this.audio.setMusicVolume(v));
-    wireSlider('sfx-slider', 'sfx-val', 'strings.sfxVolume', (v) => this.audio.setSfxVolume(v));
-
-    const open = (e) => { e.stopPropagation(); this.elSettings.classList.add('active'); };
-    document.getElementById('btn-settings').addEventListener('click', open);
-    document.querySelectorAll('.gear').forEach((g) => g.addEventListener('click', open));
-
-    const close = (e) => { e.stopPropagation(); this.elSettings.classList.remove('active'); };
-    document.getElementById('settings-close').addEventListener('click', close);
-    // Clicking the dim backdrop (not the panel) also closes.
-    this.elSettings.addEventListener('click', (e) => { if (e.target === this.elSettings) close(e); });
   }
 
   // Play the intro cutscene over the museum, then reveal the Descend screen.
@@ -335,14 +126,10 @@ export class Game {
     });
     this.busy = false;
 
-    if (this._allArtifactsCollected() && !this.endingPlayed) {
-      this._runEnding();
-    } else if (this.artifacts.zoneComplete) {
-      this._zoneComplete();             // all 11 recovered: unlock next zone
-    } else if (this.artifacts.batchComplete) {
-      this._batchComplete();            // this visit's batch done; more remain
+    if (this.artifacts.zoneComplete && this.collectedSouls.has(this.currentZone)) {
+      this._zoneComplete();             // memories + this zone's Soul are safely recovered
     } else {
-      this.player.controls.lock();      // keep collecting the rest of this batch
+      this.player.controls.lock();      // keep collecting memories / recover the Soul
     }
   }
 
@@ -382,115 +169,39 @@ export class Game {
     return byZone;
   }
 
-  _allArtifactsCollected() {
-    const ids = new Set();
-    for (const set of Object.values(this.collectedByZone)) for (const id of set) ids.add(id);
-    return ARTIFACT_DATA.every((data) => ids.has(data.id));
+  // Guardian Soul collected (walk-over). The zone only closes once its artifacts
+  // are also home, preventing the completion card from abandoning a missed Soul.
+  _collectSoul(zone) {
+    this.collectedSouls.add(zone);
+    this.soul = null;
+    this.audio.playWaveClear();
+    if (this.phase === 'playing' && this.artifacts.zoneComplete) this._zoneComplete();
   }
 
-  // Walking within range of the guardian starts the bugtong challenge. The
-  // guardian holds position while the dialog is open. A wrong answer makes it
-  // flee and resets the sequence; three correct answers defeat it.
-  async _startEncounter() {
-    if (this.busy) return;
-    this.busy = true;
-    this.guardian.setRoaming(false);
-    this.elGhint.classList.remove('active');
-    this.player.controls.unlock();
+  _syncMuseumSouls() {
+    for (const zone of this.collectedSouls) this.museum.placeSoul(zone);
+  }
 
-    const rng = mulberry32((Date.now() & 0xffff) ^ 0x5bd1);
-    const riddles = drawRiddles(RIDDLE_COUNT, rng);
-
-    for (let i = 0; i < riddles.length; i++) {
-      const ok = await this.riddleScreen.show(
-        riddles[i], i + 1, riddles.length, this.world.zone.guardianName,
-      );
-      if (!ok) {
-        // Wrong: the guardian rebukes the player, vanishes, and the player faints
-        // and wakes back at the dock. The whole sequence resets to riddle 1.
-        await this._faintAndRespawn();
-        return;
-      }
+  _updatePedestalHold(dt, canActivate) {
+    if (canActivate && this.holdKey && this.player.controls.isLocked) {
+      this.holdProgress = Math.min(1, this.holdProgress + dt / HOLD_TIME);
+      if (this.holdProgress >= 1) this._runEnding();
+    } else {
+      this.holdProgress = Math.max(0, this.holdProgress - dt * HOLD_DRAIN);
     }
-    await this._defeatGuardian();
-  }
-
-  // Guardian defeated: a scripted camera beat frames the whole guardian, blows it
-  // up, then tilts up to follow the artifacts scattering across the zone. The
-  // explosion (defeat puff + artifact burst) is deferred to the cutscene's
-  // mid-point so the guardian is still fully visible during the framing.
-  async _defeatGuardian() {
-    const origin = this.guardian.center().clone();   // capture BEFORE defeating
-    const playerPos = this.camera.position.clone();
-    this.bossDefeated = true;
-    this.phase = 'defeat';
-    this.elCross.classList.remove('active');          // hide the crosshair during the cinematic
-    this.viewmodel.group.visible = false;             // hide the first-person hand (it lives in the scene)
-    this.renderPass.camera = this.defeatCutscene.camera;
-    // Re-lock NOW, while the last answer-click's activation is still valid, and
-    // keep it locked through the cutscene so mouse-look is retained the instant it
-    // ends (the gameplay loop ignores input while phase === 'defeat'). Locking
-    // after the cutscene's async gap would silently fail and trap the player.
-    this.player.controls.lock();
-
-    await this.defeatCutscene.play(origin, playerPos, {
-      onExplode: () => {
-        this.guardian.defeat();                       // bigger poof + fade, now
-        this.artifacts.scatter(origin);               // burst + flight, now
-        this.audio.playScatter();                     // whoosh + sparkle as they burst out
-        // Each loose artifact starts emitting its spatialized "echo" locator.
-        this.artifacts.artifacts.forEach((a) => this.audio.addEcho(a, a.pos));
-        this._updateArtifactCount();                  // whole-zone progress (e.g. 4 / 11)
-        this.elHud.classList.add('active');
-      },
-    });
-
-    // Hand control back level + facing forward (zero pitch/roll, keep yaw).
-    this._levelCamera();
-    this.viewmodel.group.visible = true;              // restore the first-person hand
-    this.renderPass.camera = this.camera;             // restore gameplay camera
-    this.busy = false;
-
-    // Edge case: re-entering an already fully-collected zone reveals no artifacts.
-    // Route straight to the completion card instead of stranding the player.
-    if (this.artifacts.total === 0) { this._zoneComplete(); return; }
-
-    this._startGameplayPhase();                       // phase='playing', crosshair + HUD on
-  }
-
-  // Wrong answer: the guardian rebukes the player and teleports away, then the
-  // player faints (scripted camera droop under a black fade) and wakes at the
-  // dock. A scripted camera over the live world, mirroring _defeatGuardian.
-  async _faintAndRespawn() {
-    // 1. The guardian speaks its (per-zone) rebuke, still visible at its spot.
-    this.elGspeak.textContent =
-      this.world.zone.guardianRebuke || 'You are not worthy. Begone.';
-    this.elGspeak.classList.add('active');
-    await wait(FAINT.SPEAK * 1000);
-    this.elGspeak.classList.remove('active');
-
-    // 2. It flees — vanish + poof, audible from across the zone.
-    const playerPos = this.player.controls.getObject().position;
-    this.guardian.teleport(playerPos);
-    this.audio.playTeleport();
-
-    // 3-4. The player faints and wakes at the dock (shared cinematic).
-    await this._faintOnly();
-
-    // 5. Resume seeking: the guardian roams again and the hint returns.
-    this.guardian.setRoaming(true);
-    this.busy = false;
-    this._startGameplayPhase();                        // phase='playing', crosshair + ghint
+    this.viewmodel.setReach(this.holdProgress);
+    this.elRing.style.strokeDashoffset = (RING_CIRC * (1 - this.holdProgress)).toFixed(1);
+    this.elRingWrap.classList.toggle('active', this.holdProgress > 0.001);
   }
 
   // The shared faint cinematic: camera droop under a black fade, unconscious
-  // hold, wake at the dock, fade back in. Used by the riddle loss
-  // (_faintAndRespawn) and the combat defeat (_combatFaint).
-  async _faintOnly() {
+  // hold, respawn, fade back in. `respawn` places the player on waking (defaults
+  // to the dock; the arena passes its center). Used by the arena defeat.
+  async _faintOnly(respawn = () => this._spawnAtDock()) {
     // Frame the droop with the cutscene camera and fade to black. Re-lock NOW
     // (any prior activation still valid; a no-op if already locked) and hold it
     // through the cinematic so mouse-look is retained on waking — locking after
-    // the async gap would silently fail and trap the player (see _defeatGuardian).
+    // the async gap would silently fail and trap the player.
     const camPos = this.camera.position.clone();
     this._faintLook ||= new THREE.Vector3();
     this.camera.getWorldDirection(this._faintLook);
@@ -506,24 +217,12 @@ export class Game {
     await this.faintCutscene.play(camPos, lookAt);
     await wait(FAINT.BLACK_HOLD * 1000);              // unconscious in the dark
 
-    // Wake at the dock (under the black), then fade back in.
-    this._spawnAtDock();
+    // Wake at the respawn point (under the black), then fade back in.
+    respawn();
     this._levelCamera();
     this.renderPass.camera = this.camera;
     this.viewmodel.group.visible = true;
     this.elFaint.classList.remove('active');          // CSS fades from black
-  }
-
-  // The echoes overwhelmed the player mid-fight: reset the fight (the artifact
-  // stays contested for another attempt) and run the shared faint respawn. The
-  // guardian is already defeated here, so there's no rebuke/flee prelude.
-  async _combatFaint() {
-    if (this.busy) return;
-    this.busy = true;
-    this.combat.abortFight();
-    await this._faintOnly();
-    this.busy = false;
-    this._startGameplayPhase();                        // phase='playing', HUD back on
   }
 
   // Place the player on the raised dock spawn (south edge), facing north, at rest.
@@ -552,13 +251,9 @@ export class Game {
     const inRange = !this.busy && this.player.controls.isLocked &&
                     near && this._proximity.nearestDist <= CONFIG.INTERACT_RANGE;
 
-    // Contested artifact: the first hold-E starts the wave fight instead of the
-    // reach, and progress can't accrue until its echoes are cleared. This gating
-    // also makes batch/zone completion mid-fight impossible by construction.
-    const contested = inRange && this.combat.isContested(near);
-    if (this.holdKey && contested && !this.combat.active) this.combat.startFight(near);
-
-    if (this.holdKey && inRange && !contested) {
+    // v2: main-zone collection is purely peaceful (the challenge lived in the
+    // arena), so holding E always reaches for the artifact.
+    if (this.holdKey && inRange) {
       this.holdProgress = Math.min(1, this.holdProgress + dt / HOLD_TIME);
       if (this.holdProgress >= 1) this._completeInteract(near);
     } else {
@@ -590,24 +285,23 @@ export class Game {
     this.elStart.style.display = 'flex';
   }
 
-  // Enter the active "playing" phase: show the right HUD and, if the guardian is
-  // still alive, start it roaming. Driven by the lock event on the normal
-  // Start-screen path, or called directly by _loadZone when the player is already
-  // pointer-locked (entering a zone straight from the hub).
+  // Enter the active main-zone "playing" phase. Before the arena is cleared the
+  // objective is to find the Memory Rift; after, the artifact counter shows while
+  // the scattered memories (and the Guardian Soul) are gathered.
   _startGameplayPhase() {
     this.phase = 'playing';
+    // Clear the load latch here — the single gate every entry path (descend,
+    // hub swap, arena return) passes through — so Rift entry (_enterArena, which
+    // guards on _loadingZone) is never left blocked after a hub-entered zone.
+    this._loadingZone = false;
     this.elCross.classList.add('active');
     if (this.bossDefeated) {
       this.elHud.classList.add('active');     // artifacts are loose: show the counter
       this.elGhint.classList.remove('active');
     } else {
-      // Label the objective with the active zone's guardian name.
-      this.elGhintLabel.textContent =
-        `Find ${this.world.zone.guardianName?.eng || 'the Guardian'}`;
-      this.elGhint.classList.add('active');   // still seeking the guardian
+      this.elGhintLabel.textContent = 'Find the Memory Rift';
+      this.elGhint.classList.add('active');   // still seeking the rift
       this.elHud.classList.remove('active');
-      // The guardian now WAITS at its start spot; roaming only begins after a
-      // wrong answer (see _startEncounter). So no setRoaming(true) here.
     }
   }
 
@@ -628,11 +322,12 @@ export class Game {
     }
   }
 
-  // All 27 memories are home. This async director only performs scene swaps
+  // All three Guardian Souls have been seated at the museum altar. This async director performs scene swaps
   // while a black/white overlay fully covers them; per-frame animation remains
   // in animate() so the normal renderer/composer owns every frame.
   async _runEnding() {
-    if (this.endingPlayed) return;
+    if (this.endingPlayed || !this.museum.allSoulsPlaced) return;
+    this._endingFromMuseum = this.phase === 'museum';
     this.endingPlayed = true;
     this.busy = true;
     this.phase = 'endingPortal';
@@ -648,10 +343,20 @@ export class Game {
     this.viewmodel.group.visible = false;
     if (this.player.controls.isLocked) this.player.controls.unlock();
 
+    // Swap to the gentler ending bloom for every beat of the finale; the
+    // gameplay values return with the epilogue museum.
+    this._gameplayBloom = {
+      strength: this.bloom.strength, radius: this.bloom.radius, threshold: this.bloom.threshold,
+    };
+    this.bloom.strength = ENDING.BLOOM.STRENGTH;
+    this.bloom.radius = ENDING.BLOOM.RADIUS;
+    this.bloom.threshold = ENDING.BLOOM.THRESHOLD;
+
     const start = this.camera.getWorldPosition(new THREE.Vector3());
     const forward = this.camera.getWorldDirection(new THREE.Vector3());
-    const portalPos = chooseFinalPortalPosition(this.world, start, forward);
-    this.finalPortal = new FinalPortal(this.world.scene, portalPos, start);
+    const portalWorld = this._endingFromMuseum ? this.museum : this.world;
+    const portalPos = chooseFinalPortalPosition(portalWorld, start, forward);
+    this.finalPortal = new FinalPortal(portalWorld.scene, portalPos, start);
     this.renderPass.camera = this.portalCutscene.camera;
     this.endingDistortion.enabled = true;
     this.audio.playPortalCharge();
@@ -672,7 +377,9 @@ export class Game {
     // Re-parent the player before freeing the old zone, as with normal zone swaps.
     this.finalPortal.dispose();
     this.finalPortal = null;
-    this.guardian.dispose();
+    this._disposeArenaEntities();               // arena guardian/combat (if any)
+    if (this.rift) { this.rift.dispose(); this.rift = null; }
+    if (this.soul) { this.soul.dispose(); this.soul = null; }
     this.audio.fadeUnderwater(2.2);
     this.museum.scene.add(this.player.controls.getObject());
     const oldWorld = this.world;
@@ -682,6 +389,7 @@ export class Game {
     this.museum.unlockPortal(3);
     this.museum.setHubLighting(true);
     this.museum.populate(this._collectedArtifacts());
+    this._syncMuseumSouls();
     this.phase = 'endingMuseum';
     this.renderPass.scene = this.museum.scene;
     this.renderPass.camera = this.museumEndingCutscene.camera;
@@ -712,9 +420,16 @@ export class Game {
     this.elEndingBlack.classList.add('active');
     this.elEndingCredits.classList.remove('active');
     this.restoredProvince.dispose();
+    if (this._gameplayBloom) {
+      this.bloom.strength = this._gameplayBloom.strength;
+      this.bloom.radius = this._gameplayBloom.radius;
+      this.bloom.threshold = this._gameplayBloom.threshold;
+      this._gameplayBloom = null;
+    }
     this.audio.restoreAfterEnding();
     this.museum.setHubLighting(true);
     this.museum.populate(this._collectedArtifacts());
+    this._syncMuseumSouls();
     this.museum.setEpilogueMode(true);
     this.museum.scene.add(this.player.controls.getObject());
     this.renderPass.scene = this.museum.scene;
@@ -738,6 +453,7 @@ export class Game {
 
   _zoneComplete() {
     this.phase = 'complete';      // the card is up; controls already unlocked by discovery
+    if (this.player.controls.isLocked) this.player.controls.unlock();
     // Record this zone as done and open the next portal in the hub (sequential unlock).
     this.completed.add(this.currentZone);
     const next = this.zoneOrder[this.zoneOrder.indexOf(this.currentZone) + 1];
@@ -750,22 +466,8 @@ export class Game {
     this._showCompletionCard();
   }
 
-  // A batch of artifacts is recovered but the zone holds more. Reuse the
-  // completion card (which routes its click to _enterMuseum) with batch copy, but
-  // do NOT mark the zone done or unlock the next portal — the player must return
-  // through the hub to surface the remaining artifacts.
-  _batchComplete() {
-    this.phase = 'complete';
-    const left = this.artifacts.zoneTotal - this.artifacts.zoneFoundCount;
-    this.elZcTitle.textContent = 'MGA ALAALA — NALIGTAS';
-    this.elZcQuote.textContent = '"May natitira pang mga alaala sa ilalim ng tubig."';
-    this.elZcTrans.textContent = `(${left} ${left === 1 ? 'memory' : 'memories'} remain — return to the Museum, then descend again.)`;
-    this.elZcEnter.textContent = 'Return to your Museum';
-    this._showCompletionCard();
-  }
-
-  // Shared reveal for the zone/batch completion card (controls already unlocked
-  // by the discovery flow).
+  // Shared reveal for the zone completion card (controls already unlocked by the
+  // discovery flow).
   _showCompletionCard() {
     this.elHud.classList.remove('active');
     this.elCross.classList.remove('active');
@@ -783,19 +485,17 @@ export class Game {
     this._enterMuseum();
   }
 
-  // Development shortcut from the title menu. Seed session progress with every
-  // authored artifact, then use the real ending director so this exercises the
-  // same portal, museum, restored-province, credits, and epilogue paths as play.
+  // Development shortcut from the title menu. Seed all memories + Souls, then
+  // enter the real hub so the 3/3 pedestal hold remains part of the test path.
   _testEnding() {
     if (this.endingPlayed) return;
-    this.audio.init();
-    this.elTitle.style.display = 'none';
     for (const data of ARTIFACT_DATA) {
       const zoneId = `zone${data.zone}`;
       (this.collectedByZone[zoneId] ||= new Set()).add(data.id);
     }
+    for (const zone of this.zoneOrder) this.collectedSouls.add(zone);
     this._updateArtifactCount();
-    this._runEnding();
+    this._skipToMuseum();
   }
 
   // Return to the now-finished museum, walkable. Runs synchronously inside the
@@ -825,6 +525,7 @@ export class Game {
     // newly recovered pieces (idempotent).
     this.museum.setHubLighting(true);
     this.museum.populate(this._collectedArtifacts());
+    this._syncMuseumSouls();
 
     // Move the player (camera + its hand mesh) into the museum scene so its world
     // matrix updates when we render museum.scene, and point physics at the museum.
@@ -841,6 +542,10 @@ export class Game {
     this.camera.rotation.set(0, 0, 0);
     this.player.velocity.set(0, 0, 0);
     this.player.eyeBase = 0;
+    this.holdKey = false;
+    this.holdProgress = 0;
+    this.viewmodel.setReach(0);
+    this.elRingWrap.classList.remove('active');
 
     this.elZoneDone.classList.remove('active');
     this.player.controls.lock();
@@ -859,15 +564,16 @@ export class Game {
     requestAnimationFrame(() => { this.elFlash.style.opacity = '0'; });
   }
 
-  // Tear down the current zone and build a fresh one in its place: re-parent the
-  // player rig, re-wire physics + rendering, rebuild the artifact/guardian
-  // subsystems, reset the loop state, and lock the player back in on the dock.
+  // Tear down the current zone and build a fresh main zone in its place: re-parent
+  // the player rig, re-wire physics + rendering, rebuild the artifact + Rift
+  // subsystems, reset the loop state, and pause on the Descend screen at the dock.
   // Used both for first-time zone entry from the hub and re-entering a finished one.
   _loadZone(zoneId) {
-    // Tear down the outgoing zone — guardian + combat first so their meshes
+    // Tear down the outgoing zone — arena entities + Rift first so their meshes
     // leave the scene before the world's disposal walks it.
-    this.guardian.dispose();
-    this.combat.dispose();
+    this._disposeArenaEntities();
+    if (this.rift) { this.rift.dispose(); this.rift = null; }
+    if (this.soul) { this.soul.dispose(); this.soul = null; }
     const oldWorld = this.world;
 
     this.world = createWorld(zoneId);
@@ -881,21 +587,17 @@ export class Game {
     // Re-wire physics + rendering at the new world.
     this.player.setCollider((x, z) => this.world.collidesAt(x, z, PLAYER_RADIUS));
     this.player.setGroundHeight((x, z) => this.world.groundHeightAt(x, z));
+    this.player.setMovementLocked(false);
     this.renderPass.scene = this.world.scene;
     this.renderPass.camera = this.camera;
 
-    // Fresh subsystems on the new scene (artifact count + guardian reset to 0/seek).
-    // The persistent per-zone collected-set carries prior visits' progress so the
-    // next batch — not the whole set — is revealed.
+    // Fresh subsystems on the new scene: the artifact manager (persistent
+    // per-zone collected-set carries prior visits' progress) and the Memory Rift
+    // gateway. The Guardian + combat are built later, in the arena (_loadArena).
     this.collectedByZone[zoneId] ||= new Set();
     this.artifacts = new ArtifactManager(this.world.scene, this.world, this.collectedByZone[zoneId]);
-    this.guardian = new Guardian(this.world.scene, this.world, zoneId);
-    // Fresh CombatManager per zone: pools rebuild on the new scene and the
-    // cleared-fight set resets, so every visit's artifacts are contested again.
-    this.combat = new CombatManager(
-      this.world.scene, this.world, this.player, this.camera, this.viewmodel, this.audio,
-    );
-    this.audio.clearEchoes();   // drop the old zone's echoes; new ones register on defeat
+    this.rift = new MemoryRift(this.world.scene, this.world.zone.riftSpot);
+    this.audio.clearEchoes();   // drop the old zone's echoes; new ones register on return
 
     // Reset the gameplay state machine.
     this.bossDefeated = false;
@@ -933,8 +635,12 @@ export class Game {
       this.portalCutscene.update(dt);
       if (this.finalPortal) {
         this.finalPortal.update(dt, t, this.portalCutscene.appearProgress);
-        this.world.update(dt, t, this.portalCutscene.camera.position);
-        this.guardian.update(dt, t, this.portalCutscene.camera.position);
+        if (this._endingFromMuseum) {
+          this.museum.update(dt, t);
+        } else {
+          this.world.update(dt, t, this.portalCutscene.camera.position);
+          if (this.guardian) this.guardian.update(dt, t, this.portalCutscene.camera.position);
+        }
       }
       // Move Hil's rig with the cinematic camera even though the dedicated
       // cutscene camera is what is rendered.
@@ -979,18 +685,35 @@ export class Game {
             break;
           }
         }
-        // Re-read a recovered memory: walk up to a hung frame and tap E to bring
-        // its discovery card back. Skipped if a portal entry fired this frame.
+        // The altar takes interaction priority over nearby frames. Recovered
+        // Souls are seated automatically on hub entry; 3/3 enables the hold-E
+        // ritual that begins the existing Final Memory sequence.
         if (!entered) {
-          const near = this.player.controls.isLocked
-            ? this.museum.nearestArtifact(pos, CONFIG.INTERACT_RANGE) : null;
-          if (near) {
-            this._setPrompt('Press <b>E</b> to revisit this memory');
+          const nearAltar = this.museum.soulPedestalDistance(pos) <= MUSEUM.SOUL_ALTAR.ACTIVATE_RANGE;
+          if (nearAltar) {
+            this.museum.clearAim();
+            const ready = this.museum.allSoulsPlaced;
+            this._setPrompt(ready
+              ? 'Hold <b>E</b> to awaken the Final Memory'
+              : `Guardian Souls: ${this.museum.placedSoulCount} / 3`);
             this.elPrompt.classList.add('active');
-            if (this._ePressed) this._viewArtifact(near.data);
+            this._updatePedestalHold(dt, ready);
           } else {
-            this.elPrompt.classList.remove('active');
+            this._updatePedestalHold(dt, false);
+            const aimed = this.player.controls.isLocked
+              ? this.museum.aimedArtifact(this.camera, CONFIG.INTERACT_RANGE) : null;
+            if (!this.player.controls.isLocked) this.museum.clearAim();
+            if (aimed) {
+              this._setPrompt('Press <b>E</b> to revisit this memory');
+              this.elPrompt.classList.add('active');
+              if (this._ePressed) this._viewArtifact(aimed.data);
+            } else {
+              this.elPrompt.classList.remove('active');
+            }
           }
+        } else {
+          this.museum.clearAim();
+          this._updatePedestalHold(dt, false);
         }
       }
       this._ePressed = false;   // consume the tap (rising edge set in keydown)
@@ -998,30 +721,34 @@ export class Game {
       return;
     }
 
-    // Guardian-defeat cinematic owns the camera; the world/guardian/artifacts keep
-    // updating so the explosion + scatter flight play out under the scripted shot.
-    if (this.phase === 'defeat') {
-      const camPos = this.defeatCutscene.camera.position;
-      this.world.update(dt, t, camPos);
-      this.guardian.update(dt, t, camPos);   // guardian faces the cinematic camera
-      // String-anchor basis from the cutscene camera (each artifact owns a StringBundle).
-      this._gather ||= new THREE.Vector3();   this._camDir ||= new THREE.Vector3();
-      this._camRight ||= new THREE.Vector3(); this._camUp ||= new THREE.Vector3();
-      this.defeatCutscene.camera.getWorldDirection(this._camDir);
-      this._camRight.crossVectors(this._camDir, WORLD_UP).normalize();
-      this._camUp.crossVectors(this._camRight, this._camDir).normalize();
-      this._gather.copy(camPos).addScaledVector(this._camDir, 1.0).addScaledVector(this._camUp, -0.5);
-      this.artifacts.update(dt, t, camPos, this._gather, this._camRight, this._camUp);
-      this.defeatCutscene.update(dt);
+    // Memory Arena: the reused combat core runs the fight, the ArenaController
+    // runs the riddle rounds + armor, and winning flips arena.won → collapse +
+    // return to the main zone. Firing is via the mousedown → combat.requestFire.
+    if (this.phase === 'arena') {
+      const playerPos = this.player.controls.getObject().position;
+      this.world.update(dt, t, playerPos);
+      if (!this.busy) this.player.update(dt);
+      this.viewmodel.update(dt, !this.busy && this.player.moving);
+      if (this.guardian) this.guardian.update(dt, t, playerPos);   // Feastkeeper idle/face
+      if (this.combat) this.combat.update(dt, t, playerPos);
+      if (this.combat && this.combat.consumePlayerDeath()) {
+        this._arenaFaint(); this.composer.render(); return;
+      }
+      if (this.arena && !this.busy) {
+        this.arena.update(dt, t, playerPos);
+        if (this.arena.won) this._returnFromArena();
+      }
+      this.audio.updateListener(this.camera);
+      this._ePressed = false;
       this.composer.render();
       return;
     }
 
     // Faint cinematic owns the camera; the world/guardian keep updating so the
-    // guardian's flee-poof plays out under the scripted droop (no artifacts yet).
+    // guardian's poof plays out under the scripted droop (no artifacts here).
     if (this.phase === 'faint') {
       this.world.update(dt, t, this.faintCutscene.camera.position);
-      this.guardian.update(dt, t, this.faintCutscene.camera.position);
+      if (this.guardian) this.guardian.update(dt, t, this.faintCutscene.camera.position);
       this.faintCutscene.update(dt);
       this.composer.render();
       return;
@@ -1033,19 +760,16 @@ export class Game {
 
     const playerPos = this.player.controls.getObject().position;
 
-    // The guardian keeps animating every frame (so its defeat dissolve + puff
-    // still play out after it's beaten). Before it's beaten the player walks up
-    // to it and TAPS E within range to start the riddle (no artifacts exist yet).
-    // It only begins roaming/teleporting after a wrong answer (see _startEncounter).
-    const gdist = this.guardian.update(dt, t, playerPos);
-    if (this.guardian.teleportedThisFrame) this.audio.playTeleport();   // roam blink: heard from anywhere
+    // Before the arena is cleared: wade to the Memory Rift and tap E to enter it.
     if (!this.bossDefeated) {
+      if (this.rift) this.rift.update(dt, t);
+      const rdist = this.rift ? playerPos.distanceTo(this.rift.center()) : Infinity;
       const inRange = !this.busy && this.player.controls.isLocked &&
-                      gdist <= GUARDIAN.ENCOUNTER_RANGE;
+                      rdist <= GUARDIAN.ENCOUNTER_RANGE;
       if (inRange) {
-        this._setPrompt(`Press <b>E</b> to face ${this.world.zone.guardianName?.eng || 'the Guardian'}`);
+        this._setPrompt('Press <b>E</b> to enter the Memory Rift');
         this.elPrompt.classList.add('active');
-        if (this._ePressed) this._startEncounter();
+        if (this._ePressed) this._enterArena(this.world.zone.arenaId || 'arena1');
       } else {
         this.elPrompt.classList.remove('active');
       }
@@ -1054,9 +778,9 @@ export class Game {
       return;
     }
 
-    // Held point: ~1.0m ahead and held low in VIEW space, so the string anchors
-    // near the bottom of the screen at any pitch (no floor sag). camRight/camUp
-    // form the view basis the string bows and vibrates within.
+    // After the arena: the artifacts (and the Guardian Soul) are loose for
+    // peaceful collection. Held point ~1.0m ahead + low in VIEW space so the
+    // string anchors near the bottom of the screen at any pitch.
     this._gather ||= new THREE.Vector3();
     this._camDir ||= new THREE.Vector3();
     this._camRight ||= new THREE.Vector3();
@@ -1073,27 +797,15 @@ export class Game {
     this.audio.updateListener(this.camera);             // orient spatial echoes + tick pings
     this.audio.setSwell(this._proximity.nearestDist);   // theme swells near a find
 
-    // Wave combat sim: projectiles, enemies, waves, hp. A death routes through
-    // the shared faint respawn (fight aborted; the artifact stays contested).
-    this.combat.update(dt, t, playerPos);
-    if (this.combat.consumePlayerDeath()) { this._combatFaint(); this.composer.render(); return; }
+    // Guardian Soul: a walk-over collectible dropped on the arena return.
+    if (this.soul && !this.busy) this.soul.update(dt, t, playerPos);
 
     const inRange = this._updateHold(dt);
-
-    // "Hold E" prompt: shown in range, hidden once the ring starts filling (and
-    // during a fight, where the wave HUD carries the info). Contested artifacts
-    // warn that reaching will wake something. Set the copy explicitly so it
-    // doesn't inherit the guardian's "Press E" text.
-    if (this.combat.active) {
-      this.elPrompt.classList.remove('active');
-    } else {
-      const near = this._proximity.nearest;
-      this._setPrompt(near && this.combat.isContested(near)
-        ? 'Hold <b>E</b> to reach — something stirs in the water'
-        : 'Hold <b>E</b> to reach toward it');
-      this.elPrompt.classList.toggle('active', inRange && this.holdProgress < 0.02);
-    }
+    this._setPrompt('Hold <b>E</b> to reach toward it');
+    this.elPrompt.classList.toggle('active', inRange && this.holdProgress < 0.02);
 
     this.composer.render();
   }
 }
+
+Object.assign(Game.prototype, arenaFlowMethods);

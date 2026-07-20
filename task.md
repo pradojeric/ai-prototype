@@ -1,4 +1,4 @@
-# Task — Zone 1 (Pantal Market) Prototype
+# Task — Zone 1 (PONSIA) Prototype
 
 ## Objective
 Playable browser prototype proving the full Zone 1 core loop, single-file (CDN importmap), placeholder visuals, mock API data.
@@ -7,7 +7,7 @@ Playable browser prototype proving the full Zone 1 core loop, single-file (CDN i
 - [x] Read GDD, confirm scope with user
 - [x] Scaffold `index.html` with Three.js importmap + start screen (pointer lock)
 - [x] Atmosphere: FogExp2, water plane, sediment particles, lighting
-- [x] Pantal Market blockout (floor, stalls, hanging signs, bangkâ)
+- [x] PONSIA blockout (floor, stalls, hanging signs, bangkâ)
 - [x] PlayerController: WASD + mouse look, wade speed, head bob + breathing sway
 - [x] StringSystem: CatmullRom strings per artifact, animated drift, distance-driven count/opacity
 - [x] ArtifactManager: 3 artifacts, per-session placement, proximity + interact (E)
@@ -29,7 +29,7 @@ Playable browser prototype proving the full Zone 1 core loop, single-file (CDN i
 - [ ] User in-browser verify: collisions slide, realism present, loop + 3/3 intact
 
 ## Map Redesign Pass (match reference district map)
-Reference: top-down "Pantal Market District — The Flooded Memories" map.
+Reference: top-down "PONSIA District — The Flooded Memories" map.
 Decisions: match layout closely · no carved channel (open lanes only) · keep seeded
 random artifacts · keep south spawn (0,36). Orientation: map-N → -Z (far).
 - [x] Memories Alley — dense small-building cluster w/ alleys (west, -X)
@@ -303,3 +303,110 @@ encounter plan + game-feel pass in the session plan file).
 - [x] Kept: chest halo PointLight + beacon column (Guardian.js), all geometry, motion animation
 - [x] Static verify: all three builders parse as ES modules; no emissiveIntensity refs remain
 - [ ] User in-browser verify: guardians read flat (no self-glow), halo still lifts them off the water
+
+## Ending cutscene UI styles (2026-07-20)
+- [x] styles.css: added missing rules for #ending-black (fade), #ending-subtitle (.en/.fil bilingual card), #ending-credits (title-card + rule + copy + return button)
+- [x] Matched existing overlay conventions (#faint/#zintro fades, #title h1/.rule look, .menu-btn reuse); z-index 24/25/26 above gspeak/resume (23), below #loading (30)
+- [ ] User in-browser verify: run Test Final Cutscene — black fades between beats, subtitles legible over restored province, credits card centered with working Return button
+
+## Ending bloom too bright (2026-07-20)
+- [x] config.js: ENDING.BLOOM block (strength .4, radius .45, threshold .85) for daylight-safe bloom
+- [x] Game.js: stash gameplay bloom (.8/.6/.2) at _runEnding start, apply ENDING.BLOOM for all ending beats, restore in _enterEpilogueMuseum
+- [x] Static verify: node --check on config.js + Game.js
+- [ ] User in-browser verify: Test Final Cutscene — province no longer hazy, sky/white church don't blow out, string beads still glow; epilogue museum bloom back to normal
+
+## Scatter ALL artifacts per zone — remove batch loop (2026-07-20)
+Decisions (user): scatter every uncollected artifact on guardian defeat · zone
+"closes" via auto-return on completion (only exit is the zone-complete card) ·
+NO contested artifacts (wave combat off behind a flag) · batch card removed.
+See implementation_plan.md (rewritten this pass).
+- [ ] config.js: remove ARTIFACT_BATCH, ARTIFACT_MIN_SEP 14→10, COMBAT.ENABLED=false
+- [ ] ArtifactManager.js: _pickBatch → all uncollected; drop batchComplete getter
+- [ ] CombatManager.js: isContested short-circuits when !COMBAT.ENABLED
+- [ ] Game.js: remove batchComplete branch + _batchComplete(); comment updates
+- [ ] Static verify: node --check on touched files
+- [ ] User in-browser verify: defeat guardian → all remaining artifacts scatter;
+      no fights on hold-E; last collect shows ZONE COMPLETE (never the batch card)
+
+## Museum frame interaction: raycast + highlight (2026-07-20)
+- [x] Museum.js: _addSlot stores outward normal; _setSlot registers art+frame meshes as ray targets with baseColor stash
+- [x] Museum.js: nearestArtifact -> aimedArtifact (crosshair Raycaster, far=range, back-face reject via slot normal), _setAimed 1.3x art-tint highlight, clearAim(), clear() resets targets
+- [x] Game.js: museum phase uses aimedArtifact(camera, INTERACT_RANGE); clearAim on unlock/portal-entry
+- [x] Static verify: node --check on Museum.js + Game.js; no stale nearestArtifact refs
+- [ ] User in-browser verify: prompt only when crosshair is on a hung frame (border counts), aimed art brightens subtly, E opens the right card, no through-wall picks from wings
+
+## Strings v2.0 — Phase 1: Zone 1 Vertical Slice (2026-07-20)
+Goal: the full v2 loop for Zone 1 — descend → Memory Rift → instanced Arena (wave
+defense + hybrid riddle: DOM bugtong banner + 3 shootable coral answer nodes) → strip
+the Feastkeeper's armor → defeat → return to Zone 1 with the Guardian Soul + ALL
+artifacts scattered → peaceful collection → museum. See implementation_plan.md +
+plan file. Decisions (user): vertical slice first · hybrid riddle (DOM prompt + 3D answers).
+- [x] config.js: `ARENA` block; dropped `ARTIFACT_BATCH` cap (ArtifactManager `_pickBatch` now returns all uncollected)
+- [x] `src/core/MemoryRift.js` (new): PortalVortex swirl gateway at `zone.riftSpot`; zone1 `riftSpot: {x:0,z:14}`
+- [x] `src/core/zones/arena1.js` (new): enclosed circular kitchen arena (16-seg wall ring + central dais); registered in zones/index.js
+- [x] `src/core/arena/AnswerNode.js` (new): shootable coral answer target w/ canvas billboard label + squared-dist hitTest + break puff
+- [x] `src/core/arena/ArenaController.js` (new): endless waves + timed riddle rounds + armor (correct strips, wrong penalty wave) + victory
+- [x] CombatManager: refactor to spawn around an injected origin (arena center) + endless mode + `spawnExtra`/`stop`; dropped contested-artifact coupling
+- [x] Enemy: reskin chaser→Starved Fisher (bonier tint), spitter→Brine Spitter (comment/colors)
+- [x] `src/core/GuardianSoul.js` (new): walk-over collectible dropped on arena return; `Game.collectedSouls`
+- [x] Game.js: Rift interact, `_enterArena`/`_loadArena`, `arena` phase branch, `_arenaFaint` (respawn+reset), `_returnFromArena` (scatter + Soul); removed old riddle/defeat flow + dead RiddleScreen/DefeatCutscene refs
+- [x] index.html/styles.css: `#arena-riddle` non-blocking bugtong banner
+- [x] Static verify: `node --check` passes all touched/new modules; served files return 200
+- [x] Game.js helper split: DOM/input wiring and rendering setup moved to `src/core/_partials/`; Game.js is 929 lines and every module is below the 1000-line cap
+- [ ] User in-browser verify: full loop end-to-end; arena death resets fight; console clean over both swaps
+
+## Strings v2.0 — Phase 2: Memory Lumina (2026-07-20)
+Goal: arena-only lesser-enemy drops that create tactical recovery and short power
+windows without changing the Phase 1 encounter or later Soul/zone phases.
+- [x] Add pooled `LuminaManager` with deterministic adaptive drops, 12s expiry,
+      walk-over pickup, bolt pickup, and reset/disposal cleanup
+- [x] Combat hooks: genuine-kill callback, 30% scheduled / 15% penalty drop rolls,
+      public healing, and deterministic automatic Overcharge fire
+- [x] Player Zephyr state: automatic 2.2x movement, no stamina drain, stamina regen,
+      8s duration; same-color refresh and cross-buff coexistence
+- [x] Compact Zephyr/Overcharge timers, blue stamina state, gold crosshair state,
+      Vitality health pulse, and one shared procedural pickup chime
+- [x] Split arena/combat/Lumina HUD CSS into `_partials/arena-hud.css` so every file
+      is below the 1000-line hard cap
+- [ ] Static verify: all modules pass `node --check`; line-count audit and
+      `git diff --check` pass. HTTP 200 check remains blocked because local-server
+      permission was declined.
+- [ ] User in-browser Phase 2 verify: drops, both pickup methods, adaptive Vitality,
+      timers/refresh/coexistence, 8 shots/sec Overcharge, expiry, and reset cleanup
+
+## Strings v2.0 — Phase 3: Guardian Souls + Final Memory (2026-07-20)
+
+Goal: carry recovered Guardian Souls into an intro-safe museum altar, then activate
+the existing Final Memory sequence by holding E at the completed 3/3 pedestal.
+
+- [x] Add the split-out Soul pedestal component with three stable zone slots
+- [x] Preserve `IntroCutscene`'s centerline path by hiding the altar outside hub mode
+- [x] Sync collected Souls into the museum idempotently on every hub/ending entry
+- [x] Add 3/3 proximity + hold-E altar interaction and incomplete-state prompt
+- [x] Replace artifact-completion auto-ending with the Soul-pedestal gate
+- [x] Make the existing Final Portal entry work when started from the museum scene
+- [x] Route the debug ending shortcut through the real 3/3 pedestal interaction
+- [x] Static verify: all JS syntax, line-count audit, and diff whitespace pass
+- [ ] Local HTTP/browser verify: sandbox permission to bind port 8000 was declined
+- [ ] User in-browser verify: each Soul slot lights; incomplete altar cannot activate;
+      holding E with 3/3 runs portal → museum tour → restored province → credits
+
+## Strings v2.0 — Phase 4: LIKET Stationary-Boat Rail Shooter (2026-07-20)
+
+Goal: replace Zone 2's generic arena with an aim-only rail-shooter encounter on a
+stationary bangkâ. Layered river parallax sells forward movement while the player
+protects Boat Integrity, reflects River Sniper bolts, repels Frenzied Boarders,
+and answers three staggered lantern volleys thrown by The Reveler.
+
+- [x] Rename every Zone 2 guardian reference to **The Reveler** in both languages
+- [x] Add Arena 2 zone, stationary bangkâ, six looping festival-river chunks, and camera sway
+- [x] Add Arena 2 controller contract and keep Game.js below the 1000-line cap
+- [x] Lock walking in Arena 2 while preserving pointer-lock aiming and casting
+- [x] Add manual River Sniper / Frenzied Boarder waves targeting Boat Integrity
+- [x] Add reflected hostile bolts with originating-sniper defeat behavior
+- [x] Add staggered lantern riddles with wrong-shot and correct-miss penalties
+- [x] Add Arena 2 automatic Lumina collection and threat-only Zephyr slowdown
+- [x] Update HUD and procedural audio hooks for boat/riddle combat
+- [x] Preserve Zone 2 Soul, artifact scatter, pedestal, and final-memory progression
+- [x] Static verify: node syntax, diff whitespace, line counts, and stale-name search
+- [ ] Local HTTP/browser verify: localhost bind permission was declined; user smoke-test pending

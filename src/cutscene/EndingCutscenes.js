@@ -120,9 +120,10 @@ export class MuseumEndingCutscene extends TimelineCamera {
     this._total = T;
     this._keys = [
       { t: 0, pos: v(0, 1.7, H - 1.5), look: v(0, 1.8, 0) },
-      { t: T * 0.27, pos: v(-2.5, 2.2, 3.5), look: v(-H, 2.0, -1.5) },
-      { t: T * 0.55, pos: v(-H + 1, 2.0, 2), look: v(-H - 7, 2.0, 2) },
-      { t: T * 0.78, pos: v(2.2, 2.35, 1), look: v(H + 7, 2.0, 2) },
+      { t: T * 0.22, pos: v(-2.5, 2.2, 3.5), look: v(-H, 2.0, -1.5) },
+      { t: T * 0.42, pos: v(-H + 1, 2.0, 2), look: v(-H - 7, 2.0, 2) },
+      { t: T * 0.62, pos: v(-2, 2.2, 4), look: v(H, 2.0, -1.5) },
+      { t: T * 0.82, pos: v(H - 1, 2.0, 2), look: v(H + 7, 2.0, 2) },
       { t: T, pos: v(0, 2.8, 6), look: v(0, 1.7, -H) },
     ];
     this.active = true;

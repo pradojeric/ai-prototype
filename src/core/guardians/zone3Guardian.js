@@ -7,7 +7,7 @@
 // gold seams with detached fragments drifting around it, golden thread arcs
 // circling the figure, a flowing translucent light cape, and spectral memory
 // figures orbiting on golden threads. Primitives only; deliberately UNLIKE the
-// golem / coral-whisperer so each per-zone guardian reads distinct.
+// Feastkeeper / Reveler so each per-zone guardian reads distinct.
 //
 // Returns the shared builder contract the Guardian shell drives:
 //   build(figure) -> { fadeMats, chestY, glowColor, animate(dt,t,f,playerPos,groupPos) }

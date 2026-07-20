@@ -7,11 +7,11 @@ export { RIDDLE_POOL, drawRiddles } from './data/riddles.js';
 
 // Zone-1 provenance label. Per-zone discovery cards read the active zone's
 // name (world.zone.name) instead; this remains the fallback / Zone-1 default.
-export const ZONE_NAME = 'Pantal Market';
+export const ZONE_NAME = 'PONSIA';
 
 // Mock "City-Wide Portal API" payloads — local, no network. Zone 1's set is the
 // "Ponsia" collection: eleven Pangasinan delicacies recovered from the submerged
-// Pantal Market. Players surface them three at a time, returning across visits
+// PONSIA. Players surface them three at a time, returning across visits
 // until all eleven are restored to the Digital Museum. `image` points at the
 // artwork served from assets/ (see ArtifactManager + DiscoveryScreen + Museum).
 export const ARTIFACT_DATA = [

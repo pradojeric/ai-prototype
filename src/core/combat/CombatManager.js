@@ -1,10 +1,8 @@
 // ============================================================
-// COMBAT MANAGER — orchestrates a per-artifact wave fight (GDD add-on):
-// holding E on a "contested" scattered artifact interrupts the reach and
-// spawns waves of drowned echoes around it; clearing every wave marks the
-// artifact cleared so the normal hold-E collection works. The only combat
-// object Game talks to. Owns enemies, both projectile pools, player hp,
-// the combat HUD, and the feel layer (hit flash / kill hitstop / FOV punch).
+// COMBAT MANAGER — reusable wave-combat core for the Memory Arena. Owns
+// enemies, projectile pools, player HP, the combat HUD, and the feel layer.
+// ArenaController supplies the spawn origin, encounter completion, riddle
+// penalties, and the genuine-kill reward callback.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, COMBAT, clamp01 } from '../../config.js';
@@ -13,7 +11,7 @@ import { Enemy } from './Enemy.js';
 import { NavGrid } from './NavGrid.js';
 
 export class CombatManager {
-  constructor(scene, world, player, camera, viewmodel, audio) {
+  constructor(scene, world, player, camera, viewmodel, audio, options = {}) {
     this.scene = scene;
     this.world = world;
     this.player = player;
@@ -22,7 +20,6 @@ export class CombatManager {
     this.audio = audio;
 
     this.active = false;
-    this.clearedIds = new Set();   // artifact ids whose fight is won (this visit)
     this.hp = COMBAT.PLAYER_HP;
     this.enemies = [];
     this.bolts = new ProjectilePool(scene, COMBAT.POOL_BOLTS, {
@@ -34,14 +31,19 @@ export class CombatManager {
 
     // Pathfinding: walkability grid baked once per zone; the BFS flow field
     // toward the player is rebuilt on a timer only while a fight is active.
-    this.nav = new NavGrid(world);
+    this.nav = options.navigation === false ? null : new NavGrid(world);
     this._flowTimer = 0;
 
-    this._artifact = null;         // the contested artifact being defended
-    this._wave = 0;                // index into COMBAT.WAVES
+    this._origin = null;           // XZ center the waves spawn around (arena center)
+    this._endless = false;         // arena mode: waves keep coming until stop()ed
+    this._leash = null;            // optional Vector3; wandering past LEASH_RADIUS resets
+    this._wave = 0;                // index into COMBAT.WAVES (wraps in endless mode)
     this._waveGap = 0;             // countdown between waves
     this._fireCooldown = 0;
     this._fireRequested = false;
+    this._overchargeRate = 0;
+    this._overchargeCooldown = 0;
+    this._onEnemyDefeated = null;
     this._playerDied = false;      // one-shot flag Game consumes
     this._hurtTimer = 0;
     this._fovPunch = 0;            // additive degrees, decays exponentially
@@ -50,13 +52,16 @@ export class CombatManager {
 
     // HUD elements (plain DOM, .active convention — see index.html).
     this.elHealth = document.getElementById('health');
+    this.elHealthLabel = document.getElementById('health-label');
     this.elHealthFill = document.getElementById('health-fill');
     this.elWave = document.getElementById('wavehud');
+    this.elWaveLabel = document.getElementById('wave-label');
     this.elWaveN = document.getElementById('wave-n');
     this.elWaveT = document.getElementById('wave-t');
     this.elWaveLeft = document.getElementById('wave-left');
     this.elHurt = document.getElementById('hurt');
     this.elCross = document.getElementById('crosshair');
+    this.setHudProfile();
 
     // scratch vectors — combat runs every frame, so no per-frame allocation
     this._vMuzzle = new THREE.Vector3();
@@ -65,28 +70,72 @@ export class CombatManager {
     this._vSpit = new THREE.Vector3();
   }
 
-  // A scattered artifact still guarded by echoes? (found ones never contest)
-  isContested(artifact) {
-    return !artifact.found && !this.clearedIds.has(artifact.data.id);
+  // Arena-owned reward systems subscribe here instead of reaching into the
+  // enemy array. The callback fires only for a real damaging kill, never for
+  // abort/victory cleanup via Enemy.vanish().
+  setEnemyDefeatedHandler(handler) { this._onEnemyDefeated = handler; }
+
+  get maxHp() { return COMBAT.PLAYER_HP; }
+
+  damage(amount) { this._damagePlayer(Math.max(0, amount)); }
+
+  setHudProfile({ healthLabel = 'Liwanag', waveLabel = 'Drowned Echoes' } = {}) {
+    if (this.elHealthLabel) this.elHealthLabel.textContent = healthLabel;
+    if (this.elWaveLabel) this.elWaveLabel.textContent = waveLabel;
   }
 
-  // Hold-E on a contested artifact begins the defense.
-  startFight(artifact) {
+  heal(amount) {
+    const before = this.hp;
+    this.hp = Math.min(COMBAT.PLAYER_HP, this.hp + Math.max(0, amount));
+    this._updateHealthUi();
+    if (this.hp > before) {
+      this.elHealth.classList.remove('lumina-heal');
+      void this.elHealth.offsetHeight;
+      this.elHealth.classList.add('lumina-heal');
+      clearTimeout(this._healTimeout);
+      this._healTimeout = setTimeout(() => this.elHealth.classList.remove('lumina-heal'), 420);
+    }
+    return this.hp - before;
+  }
+
+  setOvercharge(active, shotsPerSecond = 0) {
+    this._overchargeRate = active ? Math.max(0, shotsPerSecond) : 0;
+    this._overchargeCooldown = 0;
+    this.elCross.classList.toggle('overcharge', this._overchargeRate > 0);
+  }
+
+  // Begin a fight: waves spawn around `origin` (a THREE.Vector3). Options:
+  //   endless — waves keep cycling (with per-cycle escalation) until stop();
+  //             the caller (ArenaController) decides when the fight actually ends.
+  //   leash   — optional Vector3; wandering past LEASH_RADIUS aborts the fight.
+  startFight(origin, opts = {}) {
     if (this.active) return;
     this.active = true;
-    this._artifact = artifact;
+    this._origin = origin.clone();
+    this._endless = opts.endless ?? false;
+    this._leash = opts.leash ?? null;
     this._wave = 0;
     this._waveGap = 0;
     this.hp = COMBAT.PLAYER_HP;
     // Fresh flow field so wave 1 routes correctly from its first frame.
     const p = this.player.controls.getObject().position;
-    this.nav.computeFlow(p.x, p.z);
+    if (this.nav) this.nav.computeFlow(p.x, p.z);
     this._flowTimer = 0;
     this._spawnWave();
     this.elHealth.classList.add('active');
     this.elWave.classList.add('active');
     this.elCross.classList.add('combat');
     this._updateHealthUi();
+  }
+
+  // Spawn an immediate off-schedule burst (e.g. an arena wrong-answer penalty).
+  spawnExtra(chasers = 0, spitters = 0, { dropMultiplier = 1 } = {}) {
+    if (!this.active) return;
+    const zone = this._zoneKey();
+    const hpBonus = COMBAT.ZONE_HP_BONUS[zone] || 0;
+    for (let i = 0; i < chasers; i++) this._spawnEnemy('chaser', hpBonus, dropMultiplier);
+    for (let i = 0; i < spitters; i++) this._spawnEnemy('spitter', hpBonus, dropMultiplier);
+    this._updateWaveLeft();
   }
 
   // Left-click while a fight is on; executed in the next update() tick.
@@ -99,21 +148,23 @@ export class CombatManager {
     return true;
   }
 
-  // Reset an in-progress fight (faint or leash): everything poofs out, pools
-  // clear, hp refills, HUD hides. The artifact stays contested for a re-try.
+  // Reset an in-progress fight (faint, leash, or arena victory): everything
+  // poofs out, pools clear, hp refills, HUD hides.
   abortFight() {
     if (!this.active) return;
     for (const e of this.enemies) e.vanish();
     this.bolts.clear();
     this.spits.clear();
     this.active = false;
-    this._artifact = null;
+    this._origin = null;
     this.hp = COMBAT.PLAYER_HP;
+    this.setOvercharge(false);
     this._hideHud();
   }
 
   _hideHud() {
     this.elHealth.classList.remove('active');
+    this.elHealth.classList.remove('lumina-heal');
     this.elWave.classList.remove('active');
     this.elCross.classList.remove('combat');
     this.elHurt.classList.remove('active');
@@ -122,22 +173,26 @@ export class CombatManager {
   _zoneKey() { return this.world.zone?.id || 'zone1'; }
 
   _spawnWave() {
-    const def = COMBAT.WAVES[this._wave];
+    // Endless mode wraps the table and adds one chaser per completed cycle so
+    // the pressure keeps climbing while the player works through the riddle.
+    const idx = this._wave % COMBAT.WAVES.length;
+    const cycle = Math.floor(this._wave / COMBAT.WAVES.length);
+    const def = COMBAT.WAVES[idx];
     const zone = this._zoneKey();
-    const chasers = def.chasers + (COMBAT.ZONE_BONUS[zone] || 0);
+    const chasers = def.chasers + (COMBAT.ZONE_BONUS[zone] || 0) + (this._endless ? cycle : 0);
     const hpBonus = COMBAT.ZONE_HP_BONUS[zone] || 0;
-    for (let i = 0; i < chasers; i++) this._spawnEnemy('chaser', hpBonus);
-    for (let i = 0; i < def.spitters; i++) this._spawnEnemy('spitter', hpBonus);
+    for (let i = 0; i < chasers; i++) this._spawnEnemy('chaser', hpBonus, 1);
+    for (let i = 0; i < def.spitters; i++) this._spawnEnemy('spitter', hpBonus, 1);
     this.elWaveN.textContent = this._wave + 1;
-    this.elWaveT.textContent = COMBAT.WAVES.length;
+    this.elWaveT.textContent = this._endless ? '∞' : COMBAT.WAVES.length;
     this._updateWaveLeft();
     this._punchWaveHud();
   }
 
-  // Ring spawn around the contested artifact, kept out of walls and off the
-  // player's face (retry-loop idiom shared with Guardian._pickSpot).
-  _spawnEnemy(type, hpBonus) {
-    const a = this._artifact.pos;
+  // Ring spawn around the fight origin, kept out of walls and off the player's
+  // face (retry-loop idiom shared with Guardian._pickSpot).
+  _spawnEnemy(type, hpBonus, dropMultiplier) {
+    const a = this._origin;
     const playerPos = this.player.controls.getObject().position;
     const L = CONFIG.ZONE_HALF - 2;
     let x = a.x, z = a.z + COMBAT.SPAWN_RADIUS_MIN;   // fallback if all tries fail
@@ -154,7 +209,9 @@ export class CombatManager {
       x = cx; z = cz;
       break;
     }
-    this.enemies.push(new Enemy(this.scene, this.world, type, x, z, hpBonus));
+    this.enemies.push(new Enemy(
+      this.scene, this.world, type, x, z, hpBonus, dropMultiplier,
+    ));
   }
 
   _aliveCount() {
@@ -184,10 +241,12 @@ export class CombatManager {
     this._hurtTimer = COMBAT.HURT_FLASH;
     this.elHurt.classList.add('active');
     this._fovPunch = Math.min(10, this._fovPunch + COMBAT.FEEL.FOV_PUNCH);
-    this.audio.playPlayerHurt();
+    this._playDamageSound();
     this._updateHealthUi();
     if (this.hp <= 0) this._playerDied = true;   // Game consumes → combat faint
   }
+
+  _playDamageSound() { this.audio.playPlayerHurt(); }
 
   _hitMarker() {
     this.elCross.classList.add('hit');
@@ -195,8 +254,19 @@ export class CombatManager {
     this._hitTimeout = setTimeout(() => this.elCross.classList.remove('hit'), 80);
   }
 
-  update(dt, t, playerPos) {
-    // Feel timers run on REAL dt even while paused/frozen, so effects settle.
+  _fireBolt() {
+    this.viewmodel.getMuzzleWorld(this._vMuzzle);
+    this.camera.getWorldDirection(this._vDir);
+    const fired = this.bolts.fire(
+      this._vMuzzle, this._vDir, COMBAT.BOLT.SPEED, COMBAT.BOLT.LIFE,
+    );
+    if (!fired) return false;
+    this.viewmodel.triggerCast();
+    this.audio.playShoot();
+    return true;
+  }
+
+  _updateFeel(dt) {
     if (this._hurtTimer > 0) {
       this._hurtTimer -= dt;
       if (this._hurtTimer <= 0) this.elHurt.classList.remove('active');
@@ -207,6 +277,28 @@ export class CombatManager {
       this.camera.fov = this._baseFov + this._fovPunch;
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  _updatePlayerFire(dt) {
+    this._fireCooldown = Math.max(0, this._fireCooldown - dt);
+    if (this._overchargeRate > 0) {
+      this._overchargeCooldown -= dt;
+      let shotsThisFrame = 0;
+      while (this._overchargeCooldown <= 0 && shotsThisFrame < 4) {
+        this._fireBolt();
+        this._overchargeCooldown += 1 / this._overchargeRate;
+        shotsThisFrame++;
+      }
+    } else if (this._fireRequested && this._fireCooldown <= 0) {
+      this._fireBolt();
+      this._fireCooldown = COMBAT.BOLT.COOLDOWN;
+    }
+    this._fireRequested = false;
+  }
+
+  update(dt, t, playerPos) {
+    // Feel timers run on REAL dt even while paused/frozen, so effects settle.
+    this._updateFeel(dt);
 
     if (!this.active) {
       // Finish any dissolve/poofs left by a win, leash reset, or faint abort.
@@ -219,7 +311,8 @@ export class CombatManager {
     if (!this.player.controls.isLocked) { this._fireRequested = false; return; }
 
     // Leash: wandering too far resets the fight (the echoes sink back down).
-    if (this._artifact && playerPos.distanceTo(this._artifact.pos) > COMBAT.LEASH_RADIUS) {
+    // Arenas pass no leash (the player is walled in), so this is skipped there.
+    if (this._leash && playerPos.distanceTo(this._leash) > COMBAT.LEASH_RADIUS) {
       this.abortFight();   // enemies vanish; the inactive branch reaps them
       this._reapAndUpdate(dt, t, playerPos, dt);
       return;
@@ -230,7 +323,7 @@ export class CombatManager {
     this._flowTimer -= dt;
     if (this._flowTimer <= 0) {
       this._flowTimer = COMBAT.NAV.FLOW_INTERVAL;
-      this.nav.computeFlow(playerPos.x, playerPos.z);
+      if (this.nav) this.nav.computeFlow(playerPos.x, playerPos.z);
     }
 
     // Kill hitstop scales only the enemy/projectile sim; player + camera + HUD
@@ -243,16 +336,7 @@ export class CombatManager {
     }
 
     // Fire a light-bolt from the lure along the camera's aim.
-    this._fireCooldown = Math.max(0, this._fireCooldown - dt);
-    if (this._fireRequested && this._fireCooldown <= 0) {
-      this._fireCooldown = COMBAT.BOLT.COOLDOWN;
-      this.viewmodel.getMuzzleWorld(this._vMuzzle);
-      this.camera.getWorldDirection(this._vDir);
-      this.bolts.fire(this._vMuzzle, this._vDir, COMBAT.BOLT.SPEED, COMBAT.BOLT.LIFE);
-      this.viewmodel.triggerCast();
-      this.audio.playShoot();
-    }
-    this._fireRequested = false;
+    this._updatePlayerFire(dt);
 
     // Advance projectiles, then resolve hits inline (squared distances only).
     this.bolts.update(simDt, this.world);
@@ -271,6 +355,9 @@ export class CombatManager {
           this.audio.playEnemyDeath();
           this._hitstop = COMBAT.FEEL.HITSTOP;
           this._updateWaveLeft();
+          if (this._onEnemyDefeated) {
+            this._onEnemyDefeated(e.type, this._vEnemy, e.dropMultiplier);
+          }
         } else {
           this.audio.playHit();
         }
@@ -306,9 +393,10 @@ export class CombatManager {
       }
     }
 
-    // Wave flow: cleared → breather → next wave, or the whole fight is won.
+    // Wave flow: cleared → breather → next wave. Endless (arena) never self-wins
+    // — the ArenaController ends the fight via stop() when the guardian falls.
     if (this._aliveCount() === 0) {
-      if (this._wave >= COMBAT.WAVES.length - 1) {
+      if (!this._endless && this._wave >= COMBAT.WAVES.length - 1) {
         this._winFight();
       } else {
         this._waveGap += dt;
@@ -320,6 +408,9 @@ export class CombatManager {
       }
     }
   }
+
+  // ArenaController victory: end the fight cleanly (enemies poof, HUD hides).
+  stop() { this.abortFight(); }
 
   // Advance every enemy (scaled sim time) and reap the fully-dissolved ones.
   _reapAndUpdate(simDt, t, playerPos, dt) {
@@ -334,12 +425,11 @@ export class CombatManager {
   }
 
   _winFight() {
-    this.clearedIds.add(this._artifact.data.id);
     this.hp = Math.min(COMBAT.PLAYER_HP, this.hp + COMBAT.HEAL_ON_CLEAR);
     this._updateHealthUi();
     this.audio.playWaveClear();
     this.active = false;
-    this._artifact = null;
+    this._origin = null;
     this._hideHud();
   }
 
@@ -350,6 +440,9 @@ export class CombatManager {
     this.bolts.dispose();
     this.spits.dispose();
     clearTimeout(this._hitTimeout);
+    clearTimeout(this._healTimeout);
+    this._onEnemyDefeated = null;
+    this.setOvercharge(false);
     this.camera.fov = this._baseFov;
     this.camera.updateProjectionMatrix();
     this._hideHud();

@@ -270,9 +270,11 @@ export const zone2 = {
   name: 'LIKET',
   label: 'Zone 2 — LIKET (Festival Zone)',   // descend-screen heading
   seed: 20260702,
+  arenaId: 'arena2',
+  riftSpot: { x: 0, z: 16 },
   guardianStart: { x: 0, z: 16 },   // waits ahead of the dock on the avenue
   guardianRebuke: 'Not yet. The tide keeps its festival for those who have not proven themselves.',
-  guardianName: { fil: 'Ang Tagabulong ng Bahura', eng: 'The Coral-Whisperer' },
+  guardianName: { fil: 'The Reveler', eng: 'The Reveler' },
   // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
   introDialogue: [
     '[Zone 2 — LIKET] The current here still hums with old music.',
@@ -280,8 +282,8 @@ export const zone2 = {
   ],
   background: 0x10222b,
   fog: { color: 0x1c3a3e, density: CONFIG.FOG_DENSITY },
-  // Warm brass/festival-cloth palette — deliberately contrasts zone2Guardian's
-  // cool spectral amber-green so the guardian reads as an apparition against it.
+  // Warm brass/festival-cloth palette contrasts The Reveler's cool spectral
+  // coral body so the guardian reads as an apparition against it.
   palette: {
     cloth: 0x7a3a3a, sign: 0xd9a53f, ware: 0xd97a3f,
     building: 0x24322f, buildingAlt: 0x2c3a30,

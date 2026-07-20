@@ -50,7 +50,7 @@ Each zone is a real location in Dagupan, reimagined submerged:
 
 | Zone | Real Location | Atmosphere | Artifacts |
 |---|---|---|---|
-| **Zone 1** | Pantal Market | Ghostly stalls, floating wares, still-hanging signage | 3 |
+| **Zone 1** | PONSIA | Ghostly stalls, floating wares, still-hanging signage | 3 |
 | **Zone 2** | Calle Arellano (Heritage Street) | Flooded colonial storefronts, cracked facades | 3 |
 | **Zone 3** | Bonuan Bangus Fishponds | Eerie submerged bamboo fish traps, vast open water | 3 |
 | **Zone 4** | Dagupan City Hall | Sunken civic grandeur, floating documents | 3 |
@@ -137,7 +137,7 @@ Following the game jam mechanic, each artifact's position within its zone is **r
 
 ### The 15 Cultural Heritage Artifacts
 
-#### Zone 1 — Pantal Market
+#### Zone 1 — PONSIA
 | # | Artifact | Cultural Significance |
 |---|---|---|
 | 1 | **Kabilya (Fishing Scale)** | Traditional hand-held balance scale used in bangus trading at Pantal |
@@ -221,7 +221,7 @@ The incident is never stated outright. Its truth is assembled through the artifa
 
 | Zone | Fragment Revealed |
 |---|---|
-| Pantal Market | The last day of the Bangus Festival — people were gathered |
+| PONSIA | The last day of the Bangus Festival — people were gathered |
 | Calle Arellano | Old newspaper clipping reference to a flood warning ignored |
 | Bonuan Fishponds | Fishermen reported unusual tidal behavior days before |
 | City Hall | An emergency decree that was never filed |

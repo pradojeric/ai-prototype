@@ -431,6 +431,98 @@ export class AudioManager {
     });
   }
 
+  // Memory Lumina pickup: one shared glassy two-note chime for all colors.
+  // Color identity is carried by the orb + HUD so the audio stays lightweight.
+  playLuminaPickup() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.01;
+    const v = this._pitchVar();
+    [659.25, 987.77].forEach((freq, i) => {
+      const at = t0 + i * 0.055;
+      const oscillator = ctx.createOscillator();
+      const envelope = ctx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = freq * v;
+      envelope.gain.setValueAtTime(0.0001, at);
+      envelope.gain.exponentialRampToValueAtTime(0.22, at + 0.008);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.42);
+      oscillator.connect(envelope).connect(this.sfxBus);
+      oscillator.start(at);
+      oscillator.stop(at + 0.45);
+    });
+  }
+
+  // Arena 2: paper lantern launched from The Reveler's hand.
+  playLanternThrow() {
+    if (!this.ready) return;
+    const at = this.ctx.currentTime + 0.01;
+    const oscillator = this.ctx.createOscillator();
+    const envelope = this.ctx.createGain();
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(520 * this._pitchVar(), at);
+    oscillator.frequency.exponentialRampToValueAtTime(210, at + 0.22);
+    envelope.gain.setValueAtTime(0.0001, at);
+    envelope.gain.exponentialRampToValueAtTime(0.18, at + 0.012);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.28);
+    oscillator.connect(envelope).connect(this.sfxBus);
+    oscillator.start(at);
+    oscillator.stop(at + 0.3);
+  }
+
+  // Arena 2: correct answer reverses direction toward the guardian.
+  playLanternDeflect() {
+    if (!this.ready) return;
+    const at = this.ctx.currentTime + 0.01;
+    [659.25, 987.77, 1318.5].forEach((frequency, index) => {
+      const oscillator = this.ctx.createOscillator();
+      const envelope = this.ctx.createGain();
+      const start = at + index * 0.055;
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency * this._pitchVar();
+      envelope.gain.setValueAtTime(0.0001, start);
+      envelope.gain.exponentialRampToValueAtTime(0.2, start + 0.008);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, start + 0.5);
+      oscillator.connect(envelope).connect(this.sfxBus);
+      oscillator.start(start);
+      oscillator.stop(start + 0.52);
+    });
+  }
+
+  // Arena 2: a light bolt catches and reverses a River Sniper projectile.
+  playBoltReflect() {
+    if (!this.ready) return;
+    const at = this.ctx.currentTime + 0.01;
+    const oscillator = this.ctx.createOscillator();
+    const envelope = this.ctx.createGain();
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(680 * this._pitchVar(), at);
+    oscillator.frequency.exponentialRampToValueAtTime(1480, at + 0.09);
+    envelope.gain.setValueAtTime(0.0001, at);
+    envelope.gain.exponentialRampToValueAtTime(0.16, at + 0.006);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
+    oscillator.connect(envelope).connect(this.sfxBus);
+    oscillator.start(at);
+    oscillator.stop(at + 0.16);
+  }
+
+  // Arena 2: low wooden hull knock, shared by sniper, boarder, and riddle damage.
+  playHullImpact() {
+    if (!this.ready) return;
+    const at = this.ctx.currentTime + 0.01;
+    const oscillator = this.ctx.createOscillator();
+    const envelope = this.ctx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(125 * this._pitchVar(), at);
+    oscillator.frequency.exponentialRampToValueAtTime(42, at + 0.32);
+    envelope.gain.setValueAtTime(0.0001, at);
+    envelope.gain.exponentialRampToValueAtTime(0.52, at + 0.008);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.36);
+    oscillator.connect(envelope).connect(this.sfxBus);
+    oscillator.start(at);
+    oscillator.stop(at + 0.38);
+  }
+
   // ---- final sequence ------------------------------------------------------
   playPortalCharge() {
     if (!this.ready) return;

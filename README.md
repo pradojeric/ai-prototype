@@ -1,4 +1,4 @@
-# STRINGS — Zone 1: Pantal Market (Prototype)
+# STRINGS — Zone 1: PONSIA (Prototype)
 
 A first-person interactive heritage experience set in the submerged city of **Dagupan, Pangasinan, Philippines**. Built with [Three.js](https://threejs.org/) and vanilla JavaScript ES modules, *Strings* is a slow, atmospheric walking simulator about cultural preservation, memory, and the invisible threads that connect us to the past.
 

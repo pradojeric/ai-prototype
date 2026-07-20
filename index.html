@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>STRINGS (Prototype)</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./_partials/arena-hud.css" />
 </head>
 
 <body>
@@ -31,16 +32,32 @@
   </div>
 
   <div id="health">
-    <div class="label">Liwanag</div>
+    <div class="label" id="health-label">Liwanag</div>
     <div class="track">
       <div class="fill" id="health-fill"></div>
     </div>
   </div>
 
   <div id="wavehud">
-    <div class="label">Drowned Echoes</div>
+    <div class="label" id="wave-label">Drowned Echoes</div>
     <div class="count">Wave <span id="wave-n">1</span> / <span id="wave-t">4</span></div>
     <div class="sub"><span id="wave-left">0</span> remain</div>
+  </div>
+
+  <div id="guardian-wards">
+    <div class="label" id="ward-name">The Reveler</div>
+    <div class="count"><span id="ward-count">3 / 3</span> wards</div>
+  </div>
+
+  <div id="lumina-status">
+    <div class="lumina-buff zephyr" id="lumina-zephyr">
+      <span class="name">Zephyr</span>
+      <span class="time" id="lumina-zephyr-time">0.0s</span>
+    </div>
+    <div class="lumina-buff overcharge" id="lumina-overcharge">
+      <span class="name">Overcharge</span>
+      <span class="time" id="lumina-overcharge-time">0.0s</span>
+    </div>
   </div>
 
   <div id="hurt"></div>
@@ -50,6 +67,13 @@
   <div id="ghint">
     <div class="label" id="ghint-label">Find the Guardian</div>
     <div class="sub">Follow the light. Answer its bugtong to free the memories.</div>
+  </div>
+
+  <div id="arena-riddle">
+    <div class="step" id="ar-step"></div>
+    <div class="fil" id="ar-fil"></div>
+    <div class="eng" id="ar-eng"></div>
+    <div class="hint" id="ar-hint">Shoot the correct answer to break the Feastkeeper's armor.</div>
   </div>
 
   <div id="title" style="display:none">
@@ -86,7 +110,7 @@
     <button class="gear" data-settings aria-label="Settings">⚙</button>
     <h1>STRINGS</h1>
     <div class="sub">"Beneath the water, the city still breathes."</div>
-    <div class="zone" id="start-zone">Zone 1 — Pantal Market</div>
+    <div class="zone" id="start-zone">Zone 1 — PONSIA</div>
     <div class="enter">Click to Descend</div>
     <div class="controls">WASD — Wade · SHIFT — Sprint · MOUSE — Look · CLICK — Cast Light · E — Reach · ESC — Release
     </div>
@@ -103,7 +127,7 @@
     <div class="fil" id="ending-subtitle-fil"></div>
   </div>
   <div id="ending-credits">
-    <h1>strings</h1>
+    <h1>STRINGS</h1>
     <div class="ending-rule"></div>
     <div class="ending-copy">
       A cultural preservation experience for Pangasinan.<br />

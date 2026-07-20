@@ -71,7 +71,7 @@ export const ENDING = {
     DISTANCE: 6.5,
     RADIUS: 2.35,
   },
-  MUSEUM_DURATION: 11,
+  MUSEUM_DURATION: 13.5,
   RESTORED_DURATION: 31,
   SUBTITLES: [
     { start: 0.4, end: 5.0,
@@ -90,6 +90,15 @@ export const ENDING = {
       en: 'The Strings fade, but what they joined will not be forgotten.',
       fil: 'Naglalaho ang mga Hibla, ngunit hindi malilimutan ang kanilang pinag-ugnay.' },
   ],
+  // The gameplay bloom (0.8 / 0.6 / 0.2) is tuned for the dark underwater
+  // world; the bright ending scenes push everything over that low threshold
+  // and wash out. These gentler values apply for the whole ending sequence so
+  // only true emitters (string beads, portal core) bloom.
+  BLOOM: {
+    STRENGTH: 0.4,
+    RADIUS: 0.45,
+    THRESHOLD: 0.85,
+  },
 };
 
 // Zone-entry dialogue: per-zone lines shown one at a time as a subtitle right
@@ -120,6 +129,12 @@ export const MUSEUM = {
     HALF_W: 3.5,           // wing half-width (z extent about DOOR_Z)
   },
   SLOTS_PER_ZONE: 12,      // pre-built frame slots per zone section (main room + each wing)
+  SOUL_ALTAR: {
+    X: 0,
+    Z: 0,
+    RADIUS: 1.58,
+    ACTIVATE_RANGE: 2.7,
+  },
 };
 
 // Guardian encounter — a roaming "bantay" that gates the artifacts behind a
@@ -139,9 +154,8 @@ export const GUARDIAN = {
 // Riddle challenge: how many bugtong must be solved (drawn from the larger pool).
 export const RIDDLE_COUNT = 3;
 
-// Artifact scatter (post-defeat): artifacts burst from the guardian's spot and
-// arc out to spread-out landing points.
-export const ARTIFACT_BATCH = 3;      // uncollected artifacts revealed per zone visit
+// Artifact scatter (post-arena return): every still-uncollected artifact bursts
+// from the return origin and arcs out to spread-out landing points.
 export const ARTIFACT_MIN_SEP = 14;   // min distance between two landed artifacts
 export const SCATTER_DURATION = 1.3;  // seconds of flight from origin to landing
 export const SCATTER_ARC_HEIGHT = 4;  // apex height added to the flight arc
@@ -217,6 +231,94 @@ export const COMBAT = {
     HITSTOP: 0.05, HITSTOP_SCALE: 0.1, FOV_PUNCH: 5,
     FLASH_DECAY: 0.2, SFX_PITCH_VAR: 0.06,
   },
+};
+
+// Memory Arena (Strings v2.0) — the instanced combat space entered from a main
+// zone's Memory Rift. The Guardian is an active threat here: waves of drowned
+// echoes attack while the player answers the guardian's bugtong by SHOOTING one
+// of three answer nodes. Each correct answer strips one armor layer; when armor
+// is gone the guardian falls and the arena collapses (back to the main zone).
+export const ARENA = {
+  WALL_RADIUS: 26,          // circular wall ring enclosing the play space
+  CENTER: { x: 0, z: 0 },   // player spawn + wave/riddle origin
+  ROUNDS: RIDDLE_COUNT,     // riddle rounds = guardian armor layers to break
+  RIDDLE_FIRST: 6,          // seconds of pure survival before the first riddle
+  RIDDLE_CADENCE: 16,       // seconds between riddle rounds (if none is active)
+  NODE_DIST: 8,             // answer-node ring radius around the center
+  NODE_HEIGHT: 1.7,         // answer-node height above water (shootable at aim height)
+  NODE_RADIUS: 0.85,        // answer-node bolt hit radius
+  NODE_ANGLE: Math.PI / 5,  // angular spread between the three nodes (fan in front)
+  NODE_DELAY: 3,            // seconds after the riddle appears before the choices spawn
+  PENALTY_CHASERS: 2,       // Starved Fishers spawned on a wrong answer
+  COLLAPSE: 1.4,            // victory flash/collapse beat before returning
+};
+
+// Zone 2's stationary-boat rail encounter. World-space travel is an illusion:
+// the boat stays at CENTER while recyclable festival scenery moves toward it.
+export const RAIL_ARENA = {
+  CENTER: { x: 0, z: 0 },
+  BOAT_EYE_BASE: 0.55,
+  CHUNK_COUNT: 6,
+  CHUNK_LENGTH: 18,
+  SCROLL_SPEED: 5.4,
+  LAYER_SPEED: { near: 1.2, mid: 1.0, far: 0.55 },
+  CAMERA_BOB: 0.08,
+  CAMERA_ROLL: 0.018,
+  ROUNDS: RIDDLE_COUNT,
+  FIRST_RIDDLE: 25,
+  RIDDLE_CADENCE: 55,
+  PROMPT_DELAY: 3,
+  LANTERN_STAGGER: 0.75,
+  LANTERN_FLIGHT: 6,
+  LANTERN_RADIUS: 0.78,
+  WRONG_DAMAGE: 18,
+  MISS_DAMAGE: 25,
+  RETRY_DELAY: 3,
+  RIDDLE_THREAT_SCALE: 0.65,
+  ZEPHYR_THREAT_SCALE: 0.55,
+  WAVE_INTERVAL: 10,
+  MAX_THREATS: 6,
+  WAVES: [
+    { snipers: 1, boarders: 1 },
+    { snipers: 2, boarders: 1 },
+    { snipers: 1, boarders: 2 },
+    { snipers: 2, boarders: 2 },
+  ],
+  SNIPER: {
+    HP: 2, RADIUS: 0.62, SHOT_INTERVAL: 1.8, SHOT_SPEED: 11, DAMAGE: 10,
+  },
+  BOARDER: {
+    HP: 2, RADIUS: 0.58, SPEED: 4.2, TELEGRAPH: 0.8,
+    DAMAGE: 14, ATTACK_INTERVAL: 1.25,
+  },
+};
+
+// Memory Lumina — short-lived arena drops from lesser echoes. Visuals are
+// pooled and additive (no per-orb lights); gameplay randomness uses a seeded
+// stream reset for each arena attempt.
+export const LUMINA = {
+  POOL_SIZE: 16,
+  DROP_CHANCE: 0.30,
+  PENALTY_DROP_MULT: 0.5,
+  LIFETIME: 12,
+  ORB_RADIUS: 0.3,
+  WALK_RADIUS: 1.15,
+  BOLT_RADIUS: 0.42,
+  HEIGHT: 1.05,
+  BOB_HEIGHT: 0.18,
+  BOB_SPEED: 2.4,
+  COLLECT_TIME: 0.28,
+  HEAL: COMBAT.HEAL_ON_CLEAR,
+  ZEPHYR_DURATION: 8,
+  ZEPHYR_SPEED_MULT: 2.2,
+  OVERCHARGE_DURATION: 5,
+  OVERCHARGE_SHOTS_PER_SECOND: 8,
+  COLORS: {
+    vitality: 0x62ef8a,
+    zephyr: 0x63b9ff,
+    overcharge: 0xffcf54,
+  },
+  SEED: 0x4c554d49,
 };
 
 export const WORLD_UP = new THREE.Vector3(0, 1, 0);

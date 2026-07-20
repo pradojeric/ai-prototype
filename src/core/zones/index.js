@@ -11,12 +11,18 @@ import { zone1 } from './zone1.js';
 import { zone2 } from './zone2.js';
 import { zone3 } from './zone3.js';
 import { zoneDebug } from './zoneDebug.js';
+import { arena1 } from './arena1.js';
+import { arena2 } from './arena2.js';
 
 export const ZONES = {
   zone1,
   zone2,
   zone3,
   zoneDebug,
+  // Memory Arenas (Strings v2.0) — instanced combat spaces entered from a zone's
+  // Memory Rift. Built via createWorld() like any zone; Game swaps in/out of them.
+  arena1,
+  arena2,
 };
 
 export function createWorld(zoneId = 'zone1') {

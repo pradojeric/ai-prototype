@@ -28,13 +28,16 @@ export class ProjectilePool {
         mesh,
         vel: new THREE.Vector3(),
         life: 0,
+        owner: null,
+        reflected: false,
+        source: null,
       });
     }
   }
 
   // Activate a free slot travelling from `origin` along (normalized) `dir`.
   // Silently drops the shot if the pool is exhausted (cooldowns make this rare).
-  fire(origin, dir, speed, life) {
+  fire(origin, dir, speed, life, meta = {}) {
     for (const s of this.slots) {
       if (s.active) continue;
       s.active = true;
@@ -42,6 +45,9 @@ export class ProjectilePool {
       s.mesh.position.copy(origin);
       s.vel.copy(dir).multiplyScalar(speed);
       s.life = life;
+      s.owner = meta.owner ?? null;
+      s.reflected = meta.reflected ?? false;
+      s.source = meta.source ?? null;
       return s;
     }
     return null;
@@ -50,6 +56,9 @@ export class ProjectilePool {
   deactivate(slot) {
     slot.active = false;
     slot.mesh.visible = false;
+    slot.owner = null;
+    slot.reflected = false;
+    slot.source = null;
   }
 
   // Advance live bolts; kill on expiry, wall hit, or sinking below the seabed.
