@@ -621,6 +621,18 @@ export class Museum {
     }
   }
 
+  // Final-state museum: keep the completed gallery walkable and readable, but
+  // turn every zone doorway into a sealed boundary so the ending cannot loop.
+  // Idempotent because the credits button may only enter this state once, while
+  // resize/pointer-lock events continue to reuse the ordinary hub APIs.
+  setEpilogueMode(on = true) {
+    this.epilogueMode = on;
+    for (const p of this.portals) {
+      if (p.vortexMesh) p.vortexMesh.visible = !on && this.hubMode && !p.locked;
+      if (p.panelMat && !p.locked) p.panelMat.emissiveIntensity = on ? 0.12 : 0;
+    }
+  }
+
   // ---- walkable-hub physics (mirror the World API the PlayerController expects) ---
 
   // Flat gallery floor; the player's eye ends at this + CONFIG.EYE_HEIGHT.
@@ -643,7 +655,8 @@ export class Museum {
     }
 
     // Is x within some open doorway's opening?
-    const inOpenDoor = this.portals.some((p) => !p.locked && Math.abs(x - p.x) < d - r);
+    const inOpenDoor = !this.epilogueMode &&
+      this.portals.some((p) => !p.locked && Math.abs(x - p.x) < d - r);
 
     if (z < -H) {
       // Beyond the -Z wall: only an open corridor is walkable; everything else

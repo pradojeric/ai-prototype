@@ -84,3 +84,7 @@ Install the **Live Server** extension, then right-click `index.html` → **Open 
 
 - **Three.js 0.160.0** (loaded from unpkg via import map)
 - Vanilla JavaScript (ES modules), HTML, CSS — no build step required
+
+## Optional Ending Narration
+
+Place the approximately 31-second recording at `assets/audio/ending-voiceover.mp3`, then set `ENDING.VOICEOVER_URL` in `src/config.js` to that path. The ending remains fully timed and uses bilingual subtitles when no recording is configured.

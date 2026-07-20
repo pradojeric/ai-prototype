@@ -687,6 +687,105 @@
       opacity: 1;
     }
 
+    /* ---- Final cinematic overlays ---- */
+    #ending-black {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 24;
+      transition: opacity 1.4s ease;
+    }
+
+    #ending-black.active {
+      opacity: 1;
+    }
+
+    #ending-subtitle {
+      position: fixed;
+      left: 50%;
+      bottom: 9%;
+      width: min(760px, 86vw);
+      transform: translateX(-50%);
+      padding: 18px 28px;
+      text-align: center;
+      border-radius: 14px;
+      background: rgba(5, 12, 14, .7);
+      border: 1px solid rgba(255, 224, 174, .28);
+      color: #fff8e9;
+      text-shadow: 0 2px 12px #000;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 25;
+      transition: opacity .5s ease;
+    }
+
+    #ending-subtitle.active {
+      opacity: 1;
+    }
+
+    #ending-subtitle .en {
+      font-size: clamp(18px, 2.2vw, 25px);
+      line-height: 1.45;
+    }
+
+    #ending-subtitle .fil {
+      margin-top: 7px;
+      font-size: clamp(13px, 1.5vw, 16px);
+      line-height: 1.45;
+      font-style: italic;
+      color: #bde9df;
+    }
+
+    #ending-credits {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: radial-gradient(circle at 50% 40%, #153b3a 0%, #020506 75%);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 27;
+      transition: opacity 2s ease;
+    }
+
+    #ending-credits.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #ending-credits h1 {
+      font-size: clamp(58px, 11vw, 124px);
+      font-weight: normal;
+      letter-spacing: .13em;
+      text-transform: lowercase;
+      color: #dffbf5;
+      text-shadow: 0 0 34px rgba(111, 216, 208, .55);
+    }
+
+    #ending-credits .ending-rule {
+      width: 90px;
+      height: 1px;
+      background: #d7ad70;
+    }
+
+    #ending-credits .ending-copy {
+      max-width: 520px;
+      text-align: center;
+      font-size: 15px;
+      line-height: 1.8;
+      letter-spacing: 2px;
+      color: rgba(234, 246, 244, .72);
+    }
+
+    #ending-credits .menu-btn {
+      margin-top: 18px;
+    }
+
     /* ---- White flash + Discovery ---- */
     #flash {
       position: fixed;
@@ -888,6 +987,7 @@
     <div class="menu">
       <button class="menu-btn primary" id="btn-awaken">Awaken</button>
       <button class="menu-btn" id="skipmuseum">Skip to Museum</button>
+      <button class="menu-btn" id="test-ending">Test Final Cutscene</button>
       <button class="menu-btn" id="btn-settings">Settings</button>
     </div>
     <div class="ver">A drowned-city prototype — Dagupan, Pangasinan</div>
@@ -924,6 +1024,20 @@
   <div id="gspeak"></div>
   <div id="zintro"></div>
   <div id="flash"></div>
+  <div id="ending-black"></div>
+  <div id="ending-subtitle">
+    <div class="en" id="ending-subtitle-en"></div>
+    <div class="fil" id="ending-subtitle-fil"></div>
+  </div>
+  <div id="ending-credits">
+    <h1>strings</h1>
+    <div class="ending-rule"></div>
+    <div class="ending-copy">
+      A cultural preservation experience for Pangasinan.<br />
+      Created for AI Game On! — Giving Our History a New Heartbeat.
+    </div>
+    <button class="menu-btn primary" id="ending-return">Return to Aking Museo</button>
+  </div>
 
   <div id="discovery">
     <div class="card">
