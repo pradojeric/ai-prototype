@@ -9,7 +9,7 @@
 //   3. echo voices    — one spatialized ping per artifact (the locator)
 // ============================================================
 import * as THREE from 'three';
-import { ECHO, MUSIC_SWELL_RANGE, COMBAT, clamp01, mulberry32 } from '../config.js';
+import { ECHO, ENDING, MUSIC_SWELL_RANGE, COMBAT, clamp01, mulberry32 } from '../config.js';
 import { EchoVoice } from './EchoVoice.js';
 import { BGM_BPM, BGM_LOOP_BEATS, BGM_SCORE } from './BgmScore.js';
 
@@ -62,6 +62,12 @@ export class AudioManager {
       this.sfxBus.connect(this.master);
       this.sfxBus.connect(this.delay);
 
+      // Ending bus stays dry: narration and restored-world ambience must not
+      // inherit the underwater feedback delay.
+      this.endingBus = ctx.createGain();
+      this.endingBus.gain.value = this.sfxVolume;
+      this.endingBus.connect(this.master);
+
       // Echo bus: spatialized voices route here, into the SFX group.
       this.echoBus = ctx.createGain();
       this.echoBus.connect(this.sfxBus);
@@ -71,7 +77,17 @@ export class AudioManager {
       this._buildMelody();
 
       this.ready = true;
+      this._preloadEndingVoiceover();
     } catch (e) { /* audio optional */ }
+  }
+
+  async _preloadEndingVoiceover() {
+    if (!ENDING.VOICEOVER_URL) return;
+    try {
+      const response = await fetch(ENDING.VOICEOVER_URL);
+      if (!response.ok) return;
+      this.endingVoiceBuffer = await this.ctx.decodeAudioData(await response.arrayBuffer());
+    } catch (e) { /* optional asset — timed subtitles are the fallback */ }
   }
 
   // The original proximity sine ("string drawing taut"); driven by setProximity.
@@ -415,6 +431,98 @@ export class AudioManager {
     });
   }
 
+  // ---- final sequence ------------------------------------------------------
+  playPortalCharge() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const at = ctx.currentTime + 0.02;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(42, at);
+    osc.frequency.exponentialRampToValueAtTime(260, at + 7.5);
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(180, at);
+    filter.frequency.exponentialRampToValueAtTime(3200, at + 7.5);
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(0.18, at + 2.0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + 8.4);
+    osc.connect(filter).connect(gain).connect(this.sfxBus);
+    osc.start(at);
+    osc.stop(at + 8.5);
+    this._portalOsc = osc;
+  }
+
+  playPortalImpact() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const at = ctx.currentTime + 0.01;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, at);
+    osc.frequency.exponentialRampToValueAtTime(34, at + 1.1);
+    gain.gain.setValueAtTime(0.55, at);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + 1.2);
+    osc.connect(gain).connect(this.sfxBus);
+    osc.start(at);
+    osc.stop(at + 1.25);
+  }
+
+  fadeUnderwater(seconds = 2) {
+    if (!this.ready) return;
+    const now = this.ctx.currentTime;
+    this.clearEchoes();
+    this.musicBus.gain.cancelScheduledValues(now);
+    this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now);
+    this.musicBus.gain.linearRampToValueAtTime(0.04 * this.musicVolume, now + seconds);
+    this.hum.gain.setTargetAtTime(0, now, 0.08);
+    this.delayFb.gain.setTargetAtTime(0, now, Math.max(0.05, seconds / 4));
+  }
+
+  playEndingVoiceover() {
+    if (!this.ready || !this.endingVoiceBuffer) return false;
+    if (this._endingVoice) { try { this._endingVoice.stop(); } catch (e) { /* ended */ } }
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.endingVoiceBuffer;
+    source.connect(this.endingBus);
+    source.start();
+    this._endingVoice = source;
+    return true;
+  }
+
+  startDryAmbience() {
+    if (!this.ready || this._dryWind) return;
+    const ctx = this.ctx;
+    const seconds = 3;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const wind = ctx.createBufferSource();
+    wind.buffer = buffer;
+    wind.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 720;
+    filter.Q.value = 0.45;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.035;
+    wind.connect(filter).connect(gain).connect(this.endingBus);
+    wind.start();
+    this._dryWind = wind;
+  }
+
+  restoreAfterEnding() {
+    if (!this.ready) return;
+    if (this._dryWind) { try { this._dryWind.stop(); } catch (e) { /* ended */ } this._dryWind = null; }
+    if (this._endingVoice) { try { this._endingVoice.stop(); } catch (e) { /* ended */ } this._endingVoice = null; }
+    const now = this.ctx.currentTime;
+    this.musicBus.gain.setTargetAtTime(this.musicVolume, now, 0.8);
+    this.sfxBus.gain.setTargetAtTime(this.sfxVolume, now, 0.4);
+    this.delayFb.gain.setTargetAtTime(0.35, now, 0.8);
+  }
+
   // ---- user volumes ---------------------------------------------------------
   // Safe to call before init(); values are applied when the context is built.
   setMusicVolume(v) {
@@ -427,6 +535,7 @@ export class AudioManager {
     this.sfxVolume = clamp01(v);
     if (!this.ready) return;
     this.sfxBus.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
+    this.endingBus.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
   }
 
   // ---- string hum (unchanged behavior) -------------------------------------
@@ -486,7 +595,7 @@ export class AudioManager {
     } else { // deprecated fallback
       l.setPosition(this._lpos.x, this._lpos.y, this._lpos.z);
       l.setOrientation(this._lfwd.x, this._lfwd.y, this._lfwd.z,
-                       this._lup.x, this._lup.y, this._lup.z);
+        this._lup.x, this._lup.y, this._lup.z);
     }
 
     const now = this.ctx.currentTime;

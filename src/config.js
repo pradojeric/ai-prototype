@@ -20,6 +20,7 @@ export const CONFIG = {
   DEBUG_UNLOCK_ALL_ZONES: true, // true → all 3 museum portals start unlocked (walk the hub into
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
+  DEBUG_TEST_ENDING_BUTTON: true, // true → show a title-menu shortcut for the full final cutscene
 };
 
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).
@@ -54,6 +55,41 @@ export const FAINT = {
   DROOP: 0.9,        // camera sinks/tilts as vision goes (under the black fade)
   SINK: 1.2,         // how far the camera drops while fainting (world units)
   BLACK_HOLD: 1.0,   // unconscious in the dark before waking (user: ~1s)
+};
+
+// Final sequence — portal pull, completed-museum reveal, and restored province.
+// The restored timeline is also the timing contract for the optional narration
+// asset at assets/audio/ending-voiceover.mp3.
+export const ENDING = {
+  // Set to './assets/audio/ending-voiceover.mp3' when the recorded narration is
+  // supplied. Null keeps the subtitle-led fallback silent and avoids a 404.
+  VOICEOVER_URL: null,
+  PORTAL: {
+    APPEAR: 2.6,
+    TURN: 2.2,
+    PULL: 4.6,
+    DISTANCE: 6.5,
+    RADIUS: 2.35,
+  },
+  MUSEUM_DURATION: 11,
+  RESTORED_DURATION: 31,
+  SUBTITLES: [
+    { start: 0.4, end: 5.0,
+      en: 'When memory is carried home, the waters loosen their hold.',
+      fil: 'Kapag naiuwi ang alaala, bumibitaw ang pagkakahawak ng tubig.' },
+    { start: 5.0, end: 11.0,
+      en: 'The food of Pangasinan returns to tables, streets, and living hands.',
+      fil: 'Nagbabalik sa hapag, lansangan, at buhay na kamay ang pagkaing Pangasinense.' },
+    { start: 11.0, end: 17.5,
+      en: 'Drums answer the morning. Festivals gather every scattered voice.',
+      fil: 'Sumasagot ang mga tambol sa umaga. Muling nagtitipon ang bawat tinig.' },
+    { start: 17.5, end: 24.0,
+      en: 'Landmarks stand beneath a clear sky, holding faith and homecoming.',
+      fil: 'Nakatindig sa maaliwalas na langit ang mga pook ng pananampalataya at pag-uwi.' },
+    { start: 24.0, end: 29.0,
+      en: 'The Strings fade, but what they joined will not be forgotten.',
+      fil: 'Naglalaho ang mga Hibla, ngunit hindi malilimutan ang kanilang pinag-ugnay.' },
+  ],
 };
 
 // Zone-entry dialogue: per-zone lines shown one at a time as a subtitle right

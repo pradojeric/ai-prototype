@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
   CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
@@ -24,6 +25,9 @@ import { Museum } from '../museum/Museum.js';
 import { IntroCutscene } from '../cutscene/IntroCutscene.js';
 import { DefeatCutscene } from '../cutscene/DefeatCutscene.js';
 import { FaintCutscene } from '../cutscene/FaintCutscene.js';
+import { FinalPortal, chooseFinalPortalPosition } from '../cutscene/FinalPortal.js';
+import { PortalPullCutscene, MuseumEndingCutscene } from '../cutscene/EndingCutscenes.js';
+import { RestoredProvince } from '../cutscene/RestoredProvince.js';
 
 const HOLD_TIME = 2.5;          // seconds to hold E to collect an artifact
 const HOLD_DRAIN = 1.8;         // progress units/sec lost when you release early
@@ -79,6 +83,38 @@ export class Game {
     this.composer.addPass(this.renderPass);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.6, 0.2);
     this.composer.addPass(this.bloom);
+    // Disabled outside the portal pull. Radial UV wobble + split RGB channels
+    // produce the close-range distortion without changing normal gameplay.
+    this.endingDistortion = new ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        uAmount: { value: 0 },
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float uAmount;
+        uniform float uTime;
+        varying vec2 vUv;
+        void main() {
+          vec2 p = vUv - .5;
+          float r = length(p);
+          vec2 warp = p * sin(r * 35. - uTime * 8.) * .025 * uAmount;
+          float split = .008 * uAmount * (0.4 + r);
+          vec2 dir = normalize(p + vec2(.0001));
+          float red = texture2D(tDiffuse, vUv + warp + dir * split).r;
+          float green = texture2D(tDiffuse, vUv + warp).g;
+          float blue = texture2D(tDiffuse, vUv + warp - dir * split).b;
+          gl_FragColor = vec4(red, green, blue, 1.0);
+        }
+      `,
+    });
+    this.endingDistortion.enabled = false;
+    this.composer.addPass(this.endingDistortion);
     // Final pass: apply tone mapping + linear->sRGB encoding. With a composer
     // the renderer's automatic output conversion is bypassed, so this is what
     // gets the colors onto the canvas correctly (replaces the old GammaCorrection
@@ -92,10 +128,16 @@ export class Game {
     // Zone progression: the hub unlocks the next zone in order on completion.
     this.zoneOrder = ['zone1', 'zone2', 'zone3'];
     this.completed = new Set();   // zone ids the player has finished
+    this.endingPlayed = false;    // session guard: global completion can only end once
     this.currentZone = 'zone1';   // the active gameplay zone (built above)
     this.holdKey = false;     // E currently held
     this.holdProgress = 0;    // 0..1 hold-to-collect progress
     this._ui();
+    this.portalCutscene = new PortalPullCutscene();
+    this.museumEndingCutscene = new MuseumEndingCutscene(this.museum);
+    this.restoredProvince = new RestoredProvince(
+      this.elEndingSubtitle, this.elEndingSubtitleEn, this.elEndingSubtitleFil,
+    );
     this._events();
 
     document.getElementById('loading').style.display = 'none';
@@ -125,10 +167,17 @@ export class Game {
     this.elZcTrans = document.getElementById('zc-trans');
     this.elZcEnter = document.getElementById('zc-enter');
     this.elSkipMuseum = document.getElementById('skipmuseum');
+    this.elTestEnding = document.getElementById('test-ending');
     this.elAwaken = document.getElementById('btn-awaken');
     this.elSettings = document.getElementById('settings');
     this.elRingWrap = document.getElementById('holdring');
     this.elRing = this.elRingWrap.querySelector('.prog');
+    this.elEndingBlack = document.getElementById('ending-black');
+    this.elEndingSubtitle = document.getElementById('ending-subtitle');
+    this.elEndingSubtitleEn = document.getElementById('ending-subtitle-en');
+    this.elEndingSubtitleFil = document.getElementById('ending-subtitle-fil');
+    this.elEndingCredits = document.getElementById('ending-credits');
+    this.elEndingReturn = document.getElementById('ending-return');
   }
 
   _events() {
@@ -137,6 +186,11 @@ export class Game {
     this.elAwaken.addEventListener('click', (e) => { e.stopPropagation(); this._runIntro(); });
     // Skip the intro + gameplay and drop straight into the walkable museum hub.
     this.elSkipMuseum.addEventListener('click', (e) => { e.stopPropagation(); this._skipToMuseum(); });
+    this.elTestEnding.style.display = CONFIG.DEBUG_TEST_ENDING_BUTTON ? '' : 'none';
+    this.elTestEnding.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (CONFIG.DEBUG_TEST_ENDING_BUTTON) this._testEnding();
+    });
     this._wireSettings();
     // A click during the cutscene skips to the white fade.
     addEventListener('click', () => { if (this.phase === 'cutscene') this.cutscene.skip(); });
@@ -148,6 +202,10 @@ export class Game {
     // Zone complete -> walk the finished gallery; resume re-locks after ESC.
     this.elZoneDone.addEventListener('click', () => { if (this.phase === 'complete') this._enterMuseum(); });
     this.elResume.addEventListener('click', () => { if (this.phase === 'museum') this.player.controls.lock(); });
+    this.elEndingReturn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.phase === 'endingCredits') this._enterEpilogueMuseum();
+    });
     this.player.controls.addEventListener('lock', () => {
       this.elStart.style.display = 'none';
       this.elResume.style.display = 'none';
@@ -195,6 +253,9 @@ export class Game {
       this.cutscene.resize(innerWidth, innerHeight);
       this.defeatCutscene.resize(innerWidth, innerHeight);
       this.faintCutscene.resize(innerWidth, innerHeight);
+      this.portalCutscene.resize(innerWidth, innerHeight);
+      this.museumEndingCutscene.resize(innerWidth, innerHeight);
+      this.restoredProvince.resize(innerWidth, innerHeight);
       this.renderer.setSize(innerWidth, innerHeight);
       this.composer.setSize(innerWidth, innerHeight);
       this.artifacts.setResolution(innerWidth, innerHeight); // fat-line thickness
@@ -274,7 +335,9 @@ export class Game {
     });
     this.busy = false;
 
-    if (this.artifacts.zoneComplete) {
+    if (this._allArtifactsCollected() && !this.endingPlayed) {
+      this._runEnding();
+    } else if (this.artifacts.zoneComplete) {
       this._zoneComplete();             // all 11 recovered: unlock next zone
     } else if (this.artifacts.batchComplete) {
       this._batchComplete();            // this visit's batch done; more remain
@@ -317,6 +380,12 @@ export class Game {
       (byZone[d.zone] ||= []).push(d);
     }
     return byZone;
+  }
+
+  _allArtifactsCollected() {
+    const ids = new Set();
+    for (const set of Object.values(this.collectedByZone)) for (const id of set) ids.add(id);
+    return ARTIFACT_DATA.every((data) => ids.has(data.id));
   }
 
   // Walking within range of the guardian starts the bugtong challenge. The
@@ -559,6 +628,114 @@ export class Game {
     }
   }
 
+  // All 27 memories are home. This async director only performs scene swaps
+  // while a black/white overlay fully covers them; per-frame animation remains
+  // in animate() so the normal renderer/composer owns every frame.
+  async _runEnding() {
+    if (this.endingPlayed) return;
+    this.endingPlayed = true;
+    this.busy = true;
+    this.phase = 'endingPortal';
+    this._introToken = (this._introToken || 0) + 1;
+    this.holdKey = false;
+    this.holdProgress = 0;
+    this.elHud.classList.remove('active');
+    this.elGhint.classList.remove('active');
+    this.elPrompt.classList.remove('active');
+    this.elCross.classList.remove('active');
+    this.elRingWrap.classList.remove('active');
+    this.player.elStaminaWrap.classList.remove('active');
+    this.viewmodel.group.visible = false;
+    if (this.player.controls.isLocked) this.player.controls.unlock();
+
+    const start = this.camera.getWorldPosition(new THREE.Vector3());
+    const forward = this.camera.getWorldDirection(new THREE.Vector3());
+    const portalPos = chooseFinalPortalPosition(this.world, start, forward);
+    this.finalPortal = new FinalPortal(this.world.scene, portalPos, start);
+    this.renderPass.camera = this.portalCutscene.camera;
+    this.endingDistortion.enabled = true;
+    this.audio.playPortalCharge();
+    await this.portalCutscene.play(start, forward, portalPos);
+
+    this.audio.playPortalImpact();
+    this.elFlash.style.transition = 'none';
+    this.elFlash.style.opacity = '1';
+    void this.elFlash.offsetHeight;
+    this.elFlash.style.transition = '';
+    await wait(420);
+    this.elEndingBlack.classList.add('active');
+    await wait(1450);
+    this.elFlash.style.opacity = '0';
+    this.endingDistortion.enabled = false;
+    this.endingDistortion.uniforms.uAmount.value = 0;
+
+    // Re-parent the player before freeing the old zone, as with normal zone swaps.
+    this.finalPortal.dispose();
+    this.finalPortal = null;
+    this.guardian.dispose();
+    this.audio.fadeUnderwater(2.2);
+    this.museum.scene.add(this.player.controls.getObject());
+    const oldWorld = this.world;
+    oldWorld.dispose();
+
+    this.museum.unlockPortal(2);
+    this.museum.unlockPortal(3);
+    this.museum.setHubLighting(true);
+    this.museum.populate(this._collectedArtifacts());
+    this.phase = 'endingMuseum';
+    this.renderPass.scene = this.museum.scene;
+    this.renderPass.camera = this.museumEndingCutscene.camera;
+    const museumPlay = this.museumEndingCutscene.play();
+    requestAnimationFrame(() => this.elEndingBlack.classList.remove('active'));
+    await museumPlay;
+    this.elEndingBlack.classList.add('active');
+    await wait(1450);
+
+    this.phase = 'endingRestored';
+    this.renderPass.scene = this.restoredProvince.scene;
+    this.renderPass.camera = this.restoredProvince.camera;
+    this.audio.startDryAmbience();
+    this.audio.playEndingVoiceover();
+    const restoredPlay = this.restoredProvince.play();
+    requestAnimationFrame(() => this.elEndingBlack.classList.remove('active'));
+    await restoredPlay;
+
+    this.elEndingBlack.classList.add('active');
+    await wait(1450);
+    this.phase = 'endingCredits';
+    this.elEndingCredits.classList.add('active');
+  }
+
+  // Credits button destination: a peaceful, fully populated museum with solid
+  // portal boundaries. The button click itself supplies the pointer-lock gesture.
+  _enterEpilogueMuseum() {
+    this.elEndingBlack.classList.add('active');
+    this.elEndingCredits.classList.remove('active');
+    this.restoredProvince.dispose();
+    this.audio.restoreAfterEnding();
+    this.museum.setHubLighting(true);
+    this.museum.populate(this._collectedArtifacts());
+    this.museum.setEpilogueMode(true);
+    this.museum.scene.add(this.player.controls.getObject());
+    this.renderPass.scene = this.museum.scene;
+    this.renderPass.camera = this.camera;
+    this.player.setCollider((x, z) => this.museum.collidesAt(x, z, PLAYER_RADIUS));
+    this.player.setGroundHeight((x, z) => this.museum.groundHeightAt(x, z));
+    const sp = this.museum.spawnPoint;
+    const obj = this.player.controls.getObject();
+    obj.position.set(sp.x, CONFIG.EYE_HEIGHT, sp.z);
+    this.camera.rotation.set(0, 0, 0);
+    this.player.velocity.set(0, 0, 0);
+    this.player.eyeBase = 0;
+    this.viewmodel.group.visible = true;
+    this.busy = false;
+    this._loadingZone = false;
+    this._ePressed = false;
+    this.phase = 'museum';
+    this.player.controls.lock();
+    requestAnimationFrame(() => this.elEndingBlack.classList.remove('active'));
+  }
+
   _zoneComplete() {
     this.phase = 'complete';      // the card is up; controls already unlocked by discovery
     // Record this zone as done and open the next portal in the hub (sequential unlock).
@@ -604,6 +781,21 @@ export class Game {
     this.elTitle.style.display = 'none';
     this.museum.setHallLit(true);     // light the open Zone 1 portal (the intro would have)
     this._enterMuseum();
+  }
+
+  // Development shortcut from the title menu. Seed session progress with every
+  // authored artifact, then use the real ending director so this exercises the
+  // same portal, museum, restored-province, credits, and epilogue paths as play.
+  _testEnding() {
+    if (this.endingPlayed) return;
+    this.audio.init();
+    this.elTitle.style.display = 'none';
+    for (const data of ARTIFACT_DATA) {
+      const zoneId = `zone${data.zone}`;
+      (this.collectedByZone[zoneId] ||= new Set()).add(data.id);
+    }
+    this._updateArtifactCount();
+    this._runEnding();
   }
 
   // Return to the now-finished museum, walkable. Runs synchronously inside the
@@ -737,6 +929,40 @@ export class Game {
       return;
     }
 
+    if (this.phase === 'endingPortal') {
+      this.portalCutscene.update(dt);
+      if (this.finalPortal) {
+        this.finalPortal.update(dt, t, this.portalCutscene.appearProgress);
+        this.world.update(dt, t, this.portalCutscene.camera.position);
+        this.guardian.update(dt, t, this.portalCutscene.camera.position);
+      }
+      // Move Hil's rig with the cinematic camera even though the dedicated
+      // cutscene camera is what is rendered.
+      this.player.controls.getObject().position.copy(this.portalCutscene.camera.position);
+      this.endingDistortion.uniforms.uAmount.value = this.portalCutscene.distortion;
+      this.endingDistortion.uniforms.uTime.value = t;
+      this.composer.render();
+      return;
+    }
+
+    if (this.phase === 'endingMuseum') {
+      this.museum.update(dt, t);
+      this.museumEndingCutscene.update(dt);
+      this.composer.render();
+      return;
+    }
+
+    if (this.phase === 'endingRestored') {
+      this.restoredProvince.update(dt);
+      this.composer.render();
+      return;
+    }
+
+    if (this.phase === 'endingCredits') {
+      this.composer.render();
+      return;
+    }
+
     // Walkable museum hub: free-roam between zones. Walking into an unlocked
     // portal's corridor loads that zone; locked corridors are sealed off.
     if (this.phase === 'museum') {
@@ -746,7 +972,7 @@ export class Game {
       if (!this.busy && !this._loadingZone) {
         const pos = this.player.controls.getObject().position;
         let entered = false;
-        for (const p of this.museum.portals) {
+        for (const p of this.museum.epilogueMode ? [] : this.museum.portals) {
           if (!p.locked && p.entry && pos.distanceTo(p.entry) < MUSEUM.EXIT_RADIUS) {
             this._enterZoneFromHub('zone' + p.zone);
             entered = true;
