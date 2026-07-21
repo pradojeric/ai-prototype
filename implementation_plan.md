@@ -275,18 +275,329 @@ riddle/Zephyr slow profiles, full-encounter restart, and Zone 2 Soul/scatter ret
 
 ## Phase 5 — Zone 3 Arena: "Tower Ascension" (vertical climb)
 
-- **New** `arena3.js`: a hollow tower interior with ramps/spiral stairs; a **rising
-  lethal water plane** climbs on a timer (drowning = death). Reuses `World.groundHeightAt`
-  for stair support.
-- Enemies: **Gargoyle Sentinels** (heavy melee that block stairs, multi-hit) and **Gale
-  Whispers** (flying ranged evasive). Both are `Enemy` variants with tuned HP/behavior.
-- Riddle: periodic **locked gate** blocking the stairs with 3 mechanism `AnswerNode`s;
-  correct opens the gate, wrong spawns Gargoyles + a temporary movement slow (buff
-  system from Phase 2, inverted).
-- Keeper of Memories = the arena boss controlling water level.
+Phase 5 is delivered as separately approved increments. Each increment stops for a
+manual browser check before the next begins.
 
-**Verify:** water rises, climb outpaces it, gate-riddle gates progress, wrong answer
-penalizes, reach the top / defeat Keeper → Zone 3 Soul → all-Souls → Final Memory.
+### Phase 5A — player + lighthouse level blockout (accepted)
+
+- Add `arena3.js` as a Bolinao Lighthouse-inspired hollow tower: twelve ascending
+  ramp flights, corner landings, three enlarged future-gate landings, an open Keeper
+  shaft, and a summit ring around 18 m. Water stays static and harmless.
+- Extend `World` with authored support surfaces and optional vertical collider bounds.
+  `groundHeightAt(x,z,currentY)` selects the nearest reachable surface so overlapping
+  levels cannot snap the player upward.
+- Pass the player's current support height through collision/ground queries while
+  preserving the existing WASD, sprint, stamina, look, bob, and slide behavior.
+- Add only the minimal Arena 3 lifecycle needed to enter and traverse the blockout.
+  No Guardian, combat manager, enemies, riddles, rising tide, Lumina, rewards, new
+  HUD, audio, victory, Soul, or artifact-scatter behavior is created in this phase.
+- Route Zone 3's Memory Rift to Arena 3. The blockout intentionally has no completion
+  path; reload is the temporary exit during manual testing.
+
+**Phase 5A verify:** enter the Zone 3 Rift; traverse all twelve flights; test ramp
+transitions, overlapping floors, rails/walls, deliberate falls, sprint/stamina, and
+pointer-lock release/resume; confirm the scene contains no combat or active hazards.
+Stop after reporting static checks and the manual-test instructions.
+
+#### Phase 5A manual-test correction — landing rail clearance
+
+- Shorten each flight's paired rail meshes and collision spans at both endpoints so
+  the corner landing remains open for the required ninety-degree turn.
+- Apply the same endpoint clearance to summit-ring rails so its corners remain
+  traversable while the middle of every exposed edge stays protected.
+- Keep ramp supports, widths, heights, and all excluded later-phase systems unchanged.
+- Re-run syntax, whitespace, line-count, and scoped-diff checks, then return the same
+  build to the user for another manual traversal attempt.
+
+#### Phase 5A manual-test correction — summit overlap
+
+- Remove the summit slabs that duplicate the upper ramp circuit and form a narrowing
+  ceiling over the final ascent.
+- Rebuild the 18 m summit as a smaller ring around the open central shaft, connected
+  to flight 12's enlarged landing by a dedicated level bridge.
+- Give the new ring and bridge authored support surfaces plus vertically bounded
+  edge-rail colliders, without changing the twelve-flight route or later-phase scope.
+- Re-run the Phase 5A static checks and return the blockout for summit retesting.
+
+#### Phase 5A manual-test correction — final bridge pinch
+
+- The bridge centerline intersects the player-radius envelope around flight 12's
+  inner rail endpoint even though the visible rail stops before the landing.
+- Give flights adjoining enlarged future-gate landings the landing's full 3 m rail
+  clearance, scaling and offsetting their instanced rails and matching colliders.
+- Keep ordinary corner clearances at 2.15 m and preserve the ramp/support geometry.
+- Numerically assert the flight-12-to-bridge centerline is clear, then repeat syntax,
+  whitespace, line-count, and scope checks before another manual handoff.
+
+### Phase 5B — rising tide + drowning retry (accepted)
+
+**Player promise:** keep climbing while the tower floods beneath you. Normal movement
+must gain height faster than the tide, while hesitation, backtracking, and falls let
+the water close the air gap.
+
+**Core loop:** climb toward the 18 m summit while the water rises after a short grace
+period; the ascent HUD reports altitude, progress, and breathable clearance; reaching
+the waterline triggers a readable drowning blackout and automatically restarts the
+complete attempt at the base with water and stamina reset.
+
+- Add a `TOWER_ARENA` config block with named summit height, grace duration, rise
+  speed, maximum water height, warning thresholds, and drowning clearance.
+- Upgrade `TowerArenaController` to own attempt time, water elevation, drowning state,
+  HUD state, and one-shot failure consumption. Pause the tide while pointer lock is
+  released and reset all attempt state from `begin()`.
+- Add a compact top-left ascent HUD: fixed-width altitude, air-gap readout, progress
+  meter, and warning/critical states. Add a centered drowning message over the
+  existing blackout rather than creating a second cinematic system.
+- Extend the generic arena loop to consume controller failures, and make the shared
+  arena faint/retry path safe when no combat manager exists.
+- Preserve the accepted tower geometry, movement, collision, stamina mechanics, and
+  existing arena controllers. Do not add summit victory, enemies, combat, knockback,
+  riddles, Keeper, Lumina, Soul/scatter, new audio, or later-phase VFX.
+
+**Tuning contract:** the player starts with an 8 s grace period; water then rises at
+0.16 m/s. Walking continuously uphill gains support height faster than the tide.
+Failure occurs when the water reaches within 0.12 m of eye height. The tide is capped
+above the summit only as a numeric safety bound; Phase 5B intentionally has no win.
+
+**Phase 5B verify:** confirm delayed rise, HUD accuracy, pause under released pointer
+lock, warning thresholds, drowning at the base and after a fall, automatic reset of
+water/player/stamina/HUD, and a clean second attempt. Traverse to the summit without a
+completion event, then stop for user approval before Phase 5C.
+
+#### Phase 5B manual-test correction — final decorative gate collision
+
+- Keep the visible final gate frame as a future-riddle landmark, but do not register
+  collision for its pillars while gates are intentionally inactive in Phase 5B.
+- Preserve the bridge rails, summit supports, twelve-flight route, tide, HUD, and
+  retry behavior; the correction is limited to collision ownership at the top frame.
+- Re-run syntax, whitespace, line-count, and scoped-diff checks, then return the same
+  build for a focused final-gate traversal test.
+
+#### Phase 5B manual-test correction — summit connector clearance
+
+- The first correction proved the inactive gate pillars are not the blocker. Widen
+  the diagonal landing-to-summit bridge while keeping the accepted ring and shaft.
+- Match every summit-bridge rail collider to the rail mesh's true half-width instead
+  of registering a collision proxy twice as thick as the visible rail.
+- Preserve the final frame landmark, bridge rails, tide/HUD/retry systems, and all
+  later-phase exclusions; verify the full connector centerline remains traversable.
+
+#### Phase 5B manual-test correction — tower-shell proxy root cause
+
+- Replace the tower shell's rotated-mesh AABB approximations with matching oriented
+  box colliders. The AABB corners pinch all route corners and are most visible at the
+  sharp final turn into the summit connector.
+- Use the wall mesh's true half-width and half-depth for each proxy, preserving the
+  visible shell and its intended solid boundary without inward invisible corners.
+- Numerically compare old/new clearance at the final landing, then repeat syntax,
+  whitespace, line-count, and scope checks before the next focused user retest.
+
+#### Phase 5B manual-test correction — final-ramp/bridge rail intersection
+
+- Validate the complete approach polyline, not only the diagonal bridge centerline.
+  The outer diagonal bridge rail crosses the incoming final ramp before the landing.
+- Start both bridge rails after the enlarged landing and offset their shortened spans
+  toward the summit, preserving visible fall protection without crossing the route.
+- Assert the final-ramp, bridge, and summit-ring centerlines as one continuous path
+  against shell and rail colliders before returning the build for manual verification.
+
+### Phase 5C — altitude-aware tower combat (authorized; implement first)
+
+**Player promise:** fight without abandoning the climb. Gargoyle Sentinels turn
+narrow ramps into positioning problems, while Gale Whispers pressure exposed turns
+and can knock an inattentive player from the route.
+
+**Core loop:** climb into four authored threat bands; cast light at heavy grounded
+Sentinels and evasive shaft fliers; manage health, stamina, tide, knockback, and
+vertical Lumina; recover or continue upward before the water closes the route.
+
+- Add `TowerCombatManager` and `TowerThreat` rather than projecting the generic
+  flat `Enemy`/`NavGrid` over stacked floors. Reuse pooled bolts, health/death,
+  firing, hit feedback, HUD, Lumina callbacks, and arena faint/retry contracts.
+- Add four altitude milestones with a capped authored mix: one teaching Sentinel,
+  two mixed Sentinel/Whisper bands, and one final pre-summit mix. Threats never
+  respawn merely because the player waits; each milestone triggers once per attempt.
+- Gargoyle Sentinels use four bolt hits, slow support-aware pursuit, an 18-damage
+  melee strike, and a decaying 5.2 m/s horizontal knockback. Their live bodies block
+  only the player at the matching vertical tier, never player bolts.
+- Gale Whispers use two bolt hits, continuous shaft orbit/evasion, a telegraphed
+  10-damage shot every 2.8 s, and a 3.6 m/s horizontal knockback on impact.
+- Add composable player APIs for world-space knockback and external movement slow.
+  Process impulses through existing axis-separated collision sliding; never write
+  `eyeBase` upward or teleport the player. Reset both effects on faint/dispose.
+- Pass projectile Y into static collision tests so rails on unrelated floors cannot
+  absorb bolts. Dynamic enemies and gates remain player-only collision channels.
+- Add opt-in vertical Lumina: tower drops preserve kill altitude and require both
+  horizontal and vertical pickup proximity. Arena 1 and Arena 2 retain defaults.
+- Preserve the accepted tower route, tide/drowning, sprint/stamina, pointer-lock
+  pause, existing arenas, existing audio assets, and generic zone progression.
+
+**Phase 5C pacing:** maximum six simultaneous threats; threats wake only near the
+player's vertical band; combat and tide pause together when pointer lock is released.
+The tide remains at 0.16 m/s so steady mixed walking/sprinting still leaves time for
+the authored encounters.
+
+### Phase 5D — three seals, Keeper fight, and Zone 3 victory (authorized second)
+
+**Player promise:** earn each section of the climb by reading and shooting the right
+memory mechanism, then confront the Keeper over the open shaft before the tide wins.
+
+**Core loop:** reach the 6/12/18 m gate landings; read one traditional riddle; shoot
+the correct one of three mechanisms to open the visible seal; endure a Gargoyle and
+temporary slow after mistakes; open all seals; defeat the Keeper at the summit;
+return to Pananisia for the existing Soul and artifact-scatter collection loop.
+
+- Add `TowerGateManager` around the three authored frame descriptors. Each sealed
+  gate has a visible player-only barrier bounded to its height and activates before
+  contact. A correct shot removes the barrier completely; no invisible proxy remains.
+- Reuse `drawRiddles`, the non-blocking arena banner, and `AnswerNode`. Make node bob
+  height relative to its authored position and support a compact tower label scale,
+  preserving Arena 1 behavior.
+- A wrong mechanism stays non-terminal: break that decoy, spawn one capped Sentinel,
+  and apply a clearly reported 55% movement scale for four seconds while the tide
+  continues. The correct mechanism remains available.
+- Add a procedural `TowerKeeper` using the existing Zone 3 Keeper body builder,
+  hovering in the central shaft with its chest near summit eye level. It activates
+  only after gate three opens and the player reaches the 18 m ring.
+- The Keeper takes twelve bolt hits, telegraphs a 12-damage knockback shot every
+  2.4 s, and summons a small Gale reinforcement every eight seconds, respecting the
+  six-threat cap. Enemy → mechanism → Keeper → Lumina remains the hit priority.
+- Extend the ascent HUD with a compact objective line. Reposition the shared ward
+  display to the top-right in tower mode for seal progress and Keeper resolve; keep
+  player health, threat count, tide, and buffs in their existing clusters.
+- On Keeper defeat: freeze tower pressure, clear threats/buffs/slow/knockback, hide
+  tower combat UI, expose `guardianCenter()`, and set `won`. Reuse the generic arena
+  return unchanged for Zone 3 artifact scatter, Guardian Soul, museum pedestal, and
+  final-memory progression.
+
+**Attempt/reset contract:** drowning, zero health, or falling into the tide restarts
+the whole attempt: water/grace, player/stamina/health, four threat milestones, all
+three gates/riddles/barriers, slow/knockback, Lumina, Keeper HP/timers, projectiles,
+and every HUD state. Pointer unlock freezes all tower timers and simulation.
+
+**Architecture:** keep `TowerArenaController` as the thin orchestrator; add focused
+`TowerCombatManager`, `TowerThreat`, `TowerGateManager`, and `TowerKeeper` modules.
+`arena3` exposes per-World gate/threat descriptors. Shared-module edits stay limited
+to opt-in vertical behavior and generic hooks; `Game.js`, Zone 1–2 layouts, existing
+combat archetypes, Guardian progression, and `AudioManager` remain unchanged.
+
+**Static verification:** syntax-check every modified/new JavaScript module; run
+`git diff --check`; search for stale tower controller names and non-height-aware
+tower collision calls; assert the summit route, three vertical gate bands, threat
+cap, complete reset state, and every file below 1000 lines; inspect the scoped diff
+for Arena 1–2/progression regressions.
+
+**Manual-test gate:** test clean ascent combat, every correct/wrong gate path,
+knockback/falls, vertical Lumina, health death and drowning retries, pointer-lock
+pause, Keeper activation/attacks/defeat, return to Zone 3, artifact scatter, Soul,
+console errors, and a second full attempt. Stop for approval before Phase 5E.
+
+### Original later increment (scope narrowed by user)
+
+- **5E:** only VFX and HUD polish are authorized below. Audio, diagnostics, profiling,
+  and broader integration QA remain excluded.
+
+### Phase 5E — tower VFX and HUD polish (authorized scope)
+
+**Scope boundary:** implement only Arena 3 VFX and HUD polish. Do not add audio,
+diagnostic overlays, external/generated assets, new post-processing, new gameplay,
+enemy retuning, or progression changes.
+
+**Keeper model reuse:** replace the temporary TowerKeeper icosahedron with
+`buildZone3Guardian` from `src/core/guardians/zone3Guardian.js`. Mount the existing
+builder output under a tower-owned root so its 3.8 m chest anchor remains at the
+current summit target height while its internal animation continues to face the
+player. TowerKeeper still owns HP, shots, reinforcements, hit testing, victory, and
+disposal; no roaming Guardian shell, beacon, or duplicate combat rules are introduced.
+
+**Visual language:** cold cyan memory energy marks safe/objective state; amber marks
+warning and incorrect seals; coral-red marks damage/tide danger. Effects use rings,
+short shard bursts, scale pulses, and route-aligned telegraphs so state is readable by
+shape and motion as well as color.
+
+**Technical-art contract:** add one focused `TowerVfxSystem` with shared geometries,
+shared additive/basic materials, and fixed pools. No per-effect lights, textures,
+custom shaders, or permanent particle clutter. Budget no more than 24 pooled transient
+effects, five idle draw calls, twenty transient draw calls, and approximately 5,000
+additional visible triangles at peak. Prefer existing bloom and scene fog; respect
+`prefers-reduced-motion` for HUD animations.
+
+#### VFX states
+
+- Telegraph each authored threat spawn on its actual ramp with a contracting ground
+  ring before the silhouette becomes fully readable; never obscure the route edge.
+- Add distinct pooled bolt impact, enemy defeat, and hostile-projectile impact bursts.
+  Gargoyle impacts use short stone-like shards; Gale impacts use a light ring.
+- Give every sealed gate a visible, height-bounded memory veil matching its collision
+  footprint. Correct answers dissolve it cyan; wrong answers pulse amber/coral while
+  leaving the correct mechanism available.
+- Add a restrained Keeper shaft aura, shot telegraph pulse, hit response, and defeat
+  collapse burst. Effects remain event-driven and stop/reset on faint, victory, and
+  arena disposal.
+- Drive the reused Zone 3 Guardian body's `animate` contract from TowerKeeper and
+  fade its returned materials during activation/defeat. Keep the existing visual
+  geometry separate from the tower's simple chest-radius hit test.
+
+#### HUD hierarchy and states
+
+- Consolidate ascent and objective information into an authored tower cluster:
+  altitude/progress secondary, breathable air gap primary, tide state immediately
+  below, and three stable seal pips. Remove the isolated top-right objective text.
+- When the Keeper activates, morph the seal row into a fixed-width Keeper Resolve
+  meter driven by the existing HP source of truth.
+- Add compact transient status chips for movement slow, threat awakening, seal
+  correct/wrong feedback, and Keeper activation. Use one event slot so banners never
+  stack over the aiming path.
+- Preserve health, stamina, Lumina, riddle text, pointer-lock resume, and the removed
+  wave panel. Add narrow/laptop rules and reduced-motion fallbacks; desktop keyboard
+  and mouse remain the target, so no touch controls enter this pass.
+
+#### Verification and handoff
+
+- Syntax-check every changed JavaScript module, run `git diff --check`, enforce the
+  1000-line limit, and inspect the scoped diff for gameplay/collision changes.
+- Manual test threat spawn/hit/death VFX, Gale impact, all correct/wrong seal states,
+  slow status, tide warning/critical states, Keeper activation/hits/defeat, faint and
+  drowning cleanup, pointer-lock pause, 1366×768 and narrow viewport fit, reduced
+  motion, and a clean console. Stop for user approval after the handoff.
+
+#### Phase 5C correction — support-bound threats and accurate HUD
+
+- Treat each Arena 3 threat anchor as an authored movement support, including its
+  rotation, half-width, half-length, and support height. Gargoyles clamp movement to
+  that footprint and keep their visual center above the assigned surface; Gales use
+  a bounded orbit around the same anchor instead of unconstrained world movement.
+- Reject candidate Gargoyle movement that collides at the threat's vertical tier.
+  This prevents lower and upper ramp geometry from interfering with one another.
+- Hide the wave panel in Arena 3 because threats are pre-authored altitude encounters,
+  not waves. Arena 1 and Arena 2 retain their existing wave/encounter labels.
+- Dispose every tower threat mesh during faint/retry cleanup and reset the altitude
+  milestone index so a second attempt neither leaves frozen enemies nor skips spawns.
+- Verify every changed module with `node --check`, `git diff --check`, the 1000-line
+  limit, and a focused manual climb through all four threat bands.
+
+#### Phase 5C correction — visible Gargoyles and stable knockback
+
+- Keep input velocity in camera-local movement space. Apply the tower's external
+  knockback once per frame as a world-space displacement through the same X/Z slide
+  tests, then decay the impulse; a hit must never accumulate impulse into WASD speed.
+- Use the flight being approached at each altitude milestone rather than the nearest
+  midpoint chosen without route direction. Spawn the Gargoyle toward the upcoming end
+  of that flight so it is visible in the player's path while remaining support-bound.
+- Strengthen the Gargoyle silhouette with shared procedural wings/eyes while keeping
+  the existing support footprint, hit radius, and four-hit tuning unchanged.
+- Retest the first Sentinel encounter and a Gale projectile impact, including movement
+  immediately after the hit and another attempt after death/drowning.
+
+#### Phase 5C runtime correction — finite knockback contract
+
+- Add the planned 3.6 m/s Gale knockback value that was missing from `TOWER_ARENA`.
+  The absent value currently multiplies projectile direction by `undefined`, producing
+  `NaN` player/camera coordinates; AudioListener is only the first strict consumer.
+- Validate direction and strength at `PlayerController.applyKnockback`. Ignore invalid
+  impulses rather than allowing any combat effect to corrupt the shared camera rig.
+- Verify all tower impulse call sites resolve finite configuration and re-run the
+  Gale-hit browser check; do not mask the symptom inside `AudioManager`.
 
 ---
 
@@ -315,3 +626,31 @@ prompt without buttons, Soul/Lumina/boat-HP HUD bits).
 - Preserve per-frame no-allocation discipline (scratch vectors on `this`) in all new
   hot paths (arena update, AnswerNode/Lumina hit tests).
 - Preserve Filipino/Pangasinan cultural text + diacritics.
+
+---
+
+## Artifact collection API POST placeholder (2026-07-21)
+
+### Current flow
+
+`Game._completeInteract()` opens `DiscoveryScreen`, whose save callback commits the
+artifact through `ArtifactManager.collect()`. `fetchArtifactData()` in `src/data.js`
+is only a local asynchronous mock for reading discovery-card content; no collection
+request currently exists.
+
+### Implementation
+
+1. Add an `ARTIFACT_API.COLLECTION_URL` value in `src/config.js` using an obvious
+   `example.com` placeholder that can later be replaced with the real endpoint.
+2. Add `src/core/APIManager.js` as the I/O boundary. It owns a session identifier,
+   builds the GDD payload (`artifact_id`, `artifact_name`, `zone`, `discovered_at`,
+   `player_session`, `real_world_data`), and sends it as JSON with `fetch(..., {
+   method: 'POST' })`.
+3. Instantiate the manager in `Game` and invoke it immediately after the artifact is
+   saved locally. The POST is non-blocking; a placeholder endpoint or temporary
+   network failure must not undo collection, freeze the discovery modal, or prevent
+   zone completion.
+4. Verify changed JavaScript with `node --check`, audit the 1000-line limit, run
+   `git diff --check`, and inspect the final diff. Browser Network-panel validation
+   remains the manual end-to-end check because the endpoint is intentionally a
+   placeholder.

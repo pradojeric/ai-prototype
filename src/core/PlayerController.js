@@ -17,6 +17,8 @@ export class PlayerController {
     this.stamina = CONFIG.STAMINA_MAX; // sprint "tank", drains on sprint and regens otherwise
     this.zephyrActive = false;       // Lumina surge: automatic sprint + stamina recovery
     this.zephyrSpeedMultiplier = 1;
+    this.externalSpeedScale = 1;
+    this.knockback = new THREE.Vector3();
     this.movementLocked = false;     // rail encounters keep aim but suppress WASD movement
     this.movementAnchor = new THREE.Vector3();
     this.collide = null;             // (x, z) => boolean, injected by Game
@@ -35,7 +37,7 @@ export class PlayerController {
   // Game wires the world's collision test in after both exist.
   setCollider(fn) { this.collide = fn; }
 
-  // Game wires the world's support-height function (raised dock + ladder ramp).
+  // Game wires the world's support-height function (ramps, landings, dock, ladder).
   setGroundHeight(fn) { this.groundHeight = fn; }
 
   setMovementLocked(locked, anchor = null) {
@@ -55,6 +57,18 @@ export class PlayerController {
     if (!active) this.sprinting = false;
     this._updateStaminaUi();
   }
+
+  setMovementSlow(scale = 1) { this.externalSpeedScale = Math.max(0.1, Math.min(1, scale)); }
+  applyKnockback(dx, dz, strength) {
+    if (![dx, dz, strength].every(Number.isFinite)) return;
+    const length = Math.hypot(dx, dz);
+    if (length < 0.001 || strength <= 0) return;
+    this.knockback.x += dx / length * strength;
+    this.knockback.z += dz / length * strength;
+    const magnitude = this.knockback.length();
+    if (magnitude > 8) this.knockback.multiplyScalar(8 / magnitude);
+  }
+  clearExternalMotion() { this.knockback.set(0, 0, 0); this.externalSpeedScale = 1; }
 
   update(dt) {
     if (!this.controls.isLocked) return false;
@@ -86,7 +100,7 @@ export class PlayerController {
     const speedMultiplier = this.zephyrActive
       ? this.zephyrSpeedMultiplier
       : (this.sprinting ? CONFIG.SPRINT_MULT : 1);
-    const speed = CONFIG.WADE_SPEED * speedMultiplier;
+    const speed = CONFIG.WADE_SPEED * speedMultiplier * this.externalSpeedScale;
     // smooth accel/decel for the heavy wade feel
     this.velocity.x += (s * speed - this.velocity.x) * Math.min(1, dt * 4);
     this.velocity.z += (f * speed - this.velocity.z) * Math.min(1, dt * 4);
@@ -97,15 +111,24 @@ export class PlayerController {
     // Apply full intended move, then read the resulting horizontal delta.
     this.controls.moveRight(this.velocity.x * dt);
     this.controls.moveForward(this.velocity.z * dt);
-    const dx = obj.position.x - beforeX;
-    const dz = obj.position.z - beforeZ;
+    const dx = obj.position.x - beforeX + this.knockback.x * dt;
+    const dz = obj.position.z - beforeZ + this.knockback.z * dt;
+    this.knockback.multiplyScalar(Math.exp(-dt * 7));
 
     // Axis-separated resolution so the player SLIDES along obstacles instead of
     // stopping dead: reject each axis independently if it would enter a collider.
     obj.position.x = beforeX;
     obj.position.z = beforeZ;
-    if (!this.collide || !this.collide(beforeX + dx, beforeZ)) obj.position.x = beforeX + dx;
-    if (!this.collide || !this.collide(obj.position.x, beforeZ + dz)) obj.position.z = beforeZ + dz;
+    if (!this.collide || !this.collide(beforeX + dx, beforeZ, this.eyeBase)) {
+      obj.position.x = beforeX + dx;
+    } else {
+      this.knockback.x = 0;
+    }
+    if (!this.collide || !this.collide(obj.position.x, beforeZ + dz, this.eyeBase)) {
+      obj.position.z = beforeZ + dz;
+    } else {
+      this.knockback.z = 0;
+    }
 
     // hard clamp to the zone as a safety net (perimeter buildings also block)
     const L = CONFIG.ZONE_HALF;
@@ -118,9 +141,11 @@ export class PlayerController {
     this.bobT += dt * (moving ? (this.sprinting ? 9 : 6) : 1.4);
     const breath = Math.sin(this.bobT) * (moving ? 0.05 : 0.018);
 
-    // Vertical follow: rest on the platform / ladder ramp / water baseline,
-    // smoothed so stepping on or off the dock eases instead of snapping.
-    const ground = this.groundHeight ? this.groundHeight(obj.position.x, obj.position.z) : 0;
+    // Vertical follow: rest on the nearest reachable support or water baseline,
+    // smoothed so ramps and deliberate drops move continuously instead of snapping.
+    const ground = this.groundHeight
+      ? this.groundHeight(obj.position.x, obj.position.z, this.eyeBase)
+      : 0;
     this.eyeBase += (ground - this.eyeBase) * Math.min(1, dt * 8);
     obj.position.y = this.eyeBase + CONFIG.EYE_HEIGHT + breath;
 

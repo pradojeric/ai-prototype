@@ -13,6 +13,7 @@ import { zone3 } from './zone3.js';
 import { zoneDebug } from './zoneDebug.js';
 import { arena1 } from './arena1.js';
 import { arena2 } from './arena2.js';
+import { arena3 } from './arena3.js';
 
 export const ZONES = {
   zone1,
@@ -23,6 +24,7 @@ export const ZONES = {
   // Memory Rift. Built via createWorld() like any zone; Game swaps in/out of them.
   arena1,
   arena2,
+  arena3,
 };
 
 export function createWorld(zoneId = 'zone1') {

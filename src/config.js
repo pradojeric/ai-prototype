@@ -23,6 +23,12 @@ export const CONFIG = {
   DEBUG_TEST_ENDING_BUTTON: true, // true → show a title-menu shortcut for the full final cutscene
 };
 
+// Replace this reserved example URL with the deployed City-Wide Portal endpoint.
+// Artifact collection remains local when this placeholder cannot be reached.
+export const ARTIFACT_API = {
+  COLLECTION_URL: 'https://api.example.com/artifacts/collect',
+};
+
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).
 // Beat durations in seconds; the camera path is interpolated across them.
 export const CUTSCENE = {
@@ -291,6 +297,32 @@ export const RAIL_ARENA = {
     HP: 2, RADIUS: 0.58, SPEED: 4.2, TELEGRAPH: 0.8,
     DAMAGE: 14, ATTACK_INTERVAL: 1.25,
   },
+};
+
+// Zone 3 tower ascent. Walking uphill gains roughly 0.23 m/s at the base
+// movement speed, so a 0.16 m/s tide rewards steady traversal while still
+// allowing short landing turns and one recoverable hesitation.
+export const TOWER_ARENA = {
+  BASE_WATER_HEIGHT: CONFIG.WATER_LEVEL,
+  SUMMIT_HEIGHT: 18,
+  GRACE_DURATION: 8,
+  RISE_SPEED: 0.16,
+  MAX_WATER_HEIGHT: 19.5,
+  WARNING_CLEARANCE: 2.5,
+  CRITICAL_CLEARANCE: 0.85,
+  DROWN_CLEARANCE: 0.12,
+  MAX_THREATS: 6,
+  THREAT_BANDS: [2.8, 7.2, 11.8, 16.2],
+  GARGOYLE: { HP: 4, SPEED: 2.4, DAMAGE: 18, KNOCKBACK: 5.2, RADIUS: 0.55 },
+  GALE: {
+    HP: 2, DAMAGE: 10, SHOT_INTERVAL: 2.8, SHOT_SPEED: 9,
+    KNOCKBACK: 3.6, RADIUS: 0.42,
+  },
+  GATE_HEIGHTS: [6, 12, 18],
+  KEEPER: { HP: 12, DAMAGE: 12, SHOT_INTERVAL: 2.4, KNOCKBACK: 5.2, REINFORCE: 8 },
+  WRONG_SLOW: 0.55,
+  WRONG_SLOW_TIME: 4,
+  VERTICAL_LUMINA_BAND: 1.5,
 };
 
 // Memory Lumina — short-lived arena drops from lesser echoes. Visuals are

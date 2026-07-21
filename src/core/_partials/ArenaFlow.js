@@ -13,8 +13,13 @@ import { CombatManager } from '../combat/CombatManager.js';
 import { ArenaController } from '../arena/ArenaController.js';
 import { RailCombatManager } from '../arena/RailCombatManager.js';
 import { RailArenaController } from '../arena/RailArenaController.js';
+import { TowerArenaController } from '../arena/TowerArenaController.js';
+import { TowerCombatManager } from '../arena/TowerCombatManager.js';
 
 function arenaTypes(definition) {
+  if (definition.controller === 'tower') {
+    return { Combat: TowerCombatManager, Controller: TowerArenaController };
+  }
   if (definition.controller === 'rail') {
     return { Combat: RailCombatManager, Controller: RailArenaController };
   }
@@ -45,19 +50,23 @@ export const arenaFlowMethods = {
     this.world.scene.add(this.player.controls.getObject());
     oldWorld.dispose();
 
-    this.player.setCollider((x, z) => this.world.collidesAt(x, z, PLAYER_RADIUS));
-    this.player.setGroundHeight((x, z) => this.world.groundHeightAt(x, z));
+    this.player.setCollider((x, z, y) => this.world.collidesAt(x, z, PLAYER_RADIUS, y) || this.arena?.collidesPlayerAt?.(x, z, PLAYER_RADIUS, y));
+    this.player.setGroundHeight((x, z, y) => this.world.groundHeightAt(x, z, y));
     this.renderPass.scene = this.world.scene;
     this.renderPass.camera = this.camera;
 
     const definition = this.world.zone;
     const { Combat, Controller } = arenaTypes(definition);
-    this.guardian = new Guardian(
-      this.world.scene, this.world, definition.guardianVariant || 'zone1',
-    );
-    this.combat = new Combat(
-      this.world.scene, this.world, this.player, this.camera, this.viewmodel, this.audio,
-    );
+    this.guardian = definition.spawnGuardian === false
+      ? null
+      : new Guardian(
+        this.world.scene, this.world, definition.guardianVariant || 'zone1',
+      );
+    this.combat = Combat
+      ? new Combat(
+        this.world.scene, this.world, this.player, this.camera, this.viewmodel, this.audio,
+      )
+      : null;
     this.arena = new Controller(
       this.world.scene, this.audio, this.player, definition.seed, this.world,
     );
@@ -113,8 +122,8 @@ export const arenaFlowMethods = {
     this.world.scene.add(this.player.controls.getObject());
     oldWorld.dispose();
 
-    this.player.setCollider((x, z) => this.world.collidesAt(x, z, PLAYER_RADIUS));
-    this.player.setGroundHeight((x, z) => this.world.groundHeightAt(x, z));
+    this.player.setCollider((x, z, y) => this.world.collidesAt(x, z, PLAYER_RADIUS, y));
+    this.player.setGroundHeight((x, z, y) => this.world.groundHeightAt(x, z, y));
     this.renderPass.scene = this.world.scene;
     this.renderPass.camera = this.camera;
 
@@ -164,7 +173,7 @@ export const arenaFlowMethods = {
     if (this.busy) return;
     this.busy = true;
     this.arena.resetLumina();
-    this.combat.abortFight();
+    if (this.combat) this.combat.abortFight();
     await this._faintOnly(() => this._spawnAtArenaCenter());
     this.arena.begin(this.combat, this.guardian);
     this.busy = false;

@@ -252,6 +252,8 @@ export const zone3 = {
   name: 'Pananisia',
   label: 'Zone 3 — Pananisia (Drowned Landmarks)',   // descend-screen heading
   seed: 20260714,
+  arenaId: 'arena3',
+  riftSpot: { x: 0, z: 15 },
   guardianStart: { x: 0, z: 15 },   // center of the nave, just before the altar
   guardianRebuke: 'The archive does not open for a clouded mind. Kneel with the stones a while longer, and return.',
   guardianName: { fil: 'Ang Tagapag-ingat ng mga Alaala', eng: 'The Keeper of Memories' },

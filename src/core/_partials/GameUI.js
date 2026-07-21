@@ -18,6 +18,8 @@ export function bindGameUi(game) {
   game.elStart = document.getElementById('start');
   game.elStartZone = document.getElementById('start-zone');
   game.elResume = document.getElementById('resume');
+  game.elResumeSub = document.getElementById('resume-sub');
+  game.elResumeEnter = document.getElementById('resume-enter');
   game.elFlash = document.getElementById('flash');
   game.elFaint = document.getElementById('faint');
   game.elGspeak = document.getElementById('gspeak');
@@ -73,7 +75,7 @@ export function wireGameEvents(game) {
     if (game.phase === 'complete') game._enterMuseum();
   });
   game.elResume.addEventListener('click', () => {
-    if (game.phase === 'museum') game.player.controls.lock();
+    if (game.phase === 'museum' || game.phase === 'arena') game.player.controls.lock();
   });
   game.elEndingReturn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -82,10 +84,13 @@ export function wireGameEvents(game) {
   game.player.controls.addEventListener('lock', () => {
     game.elStart.style.display = 'none';
     game.elResume.style.display = 'none';
-    // The defeat/faint cinematics + the arena phase re-lock mid-sequence and
-    // manage their own UI; don't let this async lock event flip on the
-    // crosshair or clobber their phase via _startGameplayPhase.
-    if (game.phase === 'defeat' || game.phase === 'faint' || game.phase === 'arena') return;
+    // Arena/faint phases own their state transitions; tower resume only needs
+    // to restore its exploration crosshair without entering main-zone gameplay.
+    if (game.phase === 'arena') {
+      if (game.world.zone.controller === 'tower') game.elCross.classList.add('active');
+      return;
+    }
+    if (game.phase === 'defeat' || game.phase === 'faint') return;
     game.elCross.classList.add('active');
     // A fresh descend into the zone (vs. an ESC-resume) plays the zone-intro dialogue.
     const wasDescending = game.phase === 'descend';
@@ -97,6 +102,14 @@ export function wireGameEvents(game) {
       // A view-only artifact re-read unlocks the pointer too; don't surface the
       // Resume screen behind the discovery card (it re-locks on dismiss).
       if (game.busy) return;
+      game.elResumeSub.textContent = '"The gallery waits in the quiet."';
+      game.elResumeEnter.textContent = 'Click to keep looking';
+      game.elResume.style.display = 'flex';
+      game.elCross.classList.remove('active');
+    } else if (!game.busy && game.phase === 'arena' &&
+               game.world.zone.controller === 'tower') {
+      game.elResumeSub.textContent = '"The tide waits while you catch your breath."';
+      game.elResumeEnter.textContent = 'Click to resume ascent';
       game.elResume.style.display = 'flex';
       game.elCross.classList.remove('active');
     } else if (!game.busy && game.phase === 'playing') {

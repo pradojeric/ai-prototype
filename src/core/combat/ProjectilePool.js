@@ -70,7 +70,7 @@ export class ProjectilePool {
       if (s.life <= 0) { this.deactivate(s); continue; }
       const p = s.mesh.position;
       p.addScaledVector(s.vel, dt);
-      if (p.y < -0.3 || world.collidesAt(p.x, p.z, 0.1)) this.deactivate(s);
+      if (p.y < -0.3 || world.collidesAt(p.x, p.z, 0.1, p.y)) this.deactivate(s);
     }
   }
 

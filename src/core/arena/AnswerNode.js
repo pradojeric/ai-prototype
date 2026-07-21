@@ -45,7 +45,7 @@ export function makeAnswerLabelTexture(text) {
 
 export class AnswerNode {
   // `choice` is { text, correct }; `pos` is the world-space ring position.
-  constructor(scene, choice, pos) {
+  constructor(scene, choice, pos, options = {}) {
     this.scene = scene;
     this.choice = choice;
     this.correct = !!choice.correct;
@@ -54,6 +54,7 @@ export class AnswerNode {
     this.dead = false;
     this._fade = 1;
     this._t0 = Math.random() * Math.PI * 2;   // bob phase offset
+    this._labelScale = options.labelScale || 1;
 
     this.group = new THREE.Group();
     this.group.position.copy(this.pos);
@@ -86,7 +87,7 @@ export class AnswerNode {
     this.labelTex = makeAnswerLabelTexture(choice.text);
     this.labelMat = new THREE.SpriteMaterial({ map: this.labelTex, transparent: true, depthWrite: false });
     this.label = new THREE.Sprite(this.labelMat);
-    this.label.scale.set(3.2, 1.0, 1);
+    this.label.scale.set(3.2 * this._labelScale, 1.0 * this._labelScale, 1);
     this.label.position.y = 1.4;
     this.group.add(this.label);
 
@@ -165,7 +166,7 @@ export class AnswerNode {
     }
 
     // Idle: gentle bob + spin so the target reads as alive, plus a soft glow pulse.
-    const y = ARENA.NODE_HEIGHT + Math.sin(t * 1.8 + this._t0) * 0.14;
+    const y = this.pos.y + Math.sin(t * 1.8 + this._t0) * 0.14;
     this.group.position.set(this.pos.x, y, this.pos.z);
     this.group.rotation.y = t * 0.7;
     this.coreMat.emissiveIntensity = 1.2 + Math.sin(t * 3 + this._t0) * 0.4;

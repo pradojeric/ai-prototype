@@ -4,12 +4,13 @@
 import * as THREE from 'three';
 import {
   CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
-  ENDING, wait,
+  ENDING, ARTIFACT_API, wait,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { createWorld, ZONES } from './zones/index.js';
 import { PlayerController } from './PlayerController.js';
 import { ArtifactManager } from './ArtifactManager.js';
+import { APIManager } from './APIManager.js';
 import { MemoryRift } from './MemoryRift.js';
 import { ViewModel } from './ViewModel.js';
 import { createGameRenderer, createPostProcessing } from './_partials/GameRendering.js';
@@ -38,14 +39,15 @@ export class Game {
     this.player = new PlayerController(this.camera, this.renderer.domElement);
     this.world.scene.add(this.player.controls.getObject());
     // Inject the world's collision test so the player slides off solid props.
-    this.player.setCollider((x, z) => this.world.collidesAt(x, z, PLAYER_RADIUS));
+    this.player.setCollider((x, z, y) => this.world.collidesAt(x, z, PLAYER_RADIUS, y));
     // Inject support-height so the player stands on the dock + climbs the ladder.
-    this.player.setGroundHeight((x, z) => this.world.groundHeightAt(x, z));
+    this.player.setGroundHeight((x, z, y) => this.world.groundHeightAt(x, z, y));
     // Per-zone recovered-artifact ids, persisted across zone reloads so a
     // re-entered zone remembers what was already collected (session only — a
     // browser reload restarts progress).
     this.collectedByZone = { zone1: new Set(), zone2: new Set(), zone3: new Set() };
     this.artifacts = new ArtifactManager(this.world.scene, this.world, this.collectedByZone.zone1);
+    this.api = new APIManager(ARTIFACT_API.COLLECTION_URL);
     this.viewmodel = new ViewModel(this.camera);   // first-person hand
     this.audio = new AudioManager();
     // Strings v2.0: the main zone hosts a Memory Rift gateway; the Guardian
@@ -121,6 +123,7 @@ export class Game {
     this.player.controls.unlock();
     await this.discovery.show(nearest.data, this.world.zone.name, () => {
       this.artifacts.collect(nearest);
+      void this.api.recordArtifactCollection(nearest.data, this.world.zone.name);
       this.audio.removeEcho(nearest);   // silence this artifact's echo on pickup
       this._updateArtifactCount();      // whole-zone progress (e.g. 4 / 11)
     });
@@ -585,8 +588,8 @@ export class Game {
     oldWorld.dispose();
 
     // Re-wire physics + rendering at the new world.
-    this.player.setCollider((x, z) => this.world.collidesAt(x, z, PLAYER_RADIUS));
-    this.player.setGroundHeight((x, z) => this.world.groundHeightAt(x, z));
+    this.player.setCollider((x, z, y) => this.world.collidesAt(x, z, PLAYER_RADIUS, y));
+    this.player.setGroundHeight((x, z, y) => this.world.groundHeightAt(x, z, y));
     this.player.setMovementLocked(false);
     this.renderPass.scene = this.world.scene;
     this.renderPass.camera = this.camera;
@@ -736,6 +739,9 @@ export class Game {
       }
       if (this.arena && !this.busy) {
         this.arena.update(dt, t, playerPos);
+        if (this.arena.consumeFailure?.()) {
+          this._arenaFaint(); this.composer.render(); return;
+        }
         if (this.arena.won) this._returnFromArena();
       }
       this.audio.updateListener(this.camera);

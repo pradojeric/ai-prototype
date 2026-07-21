@@ -1,7 +1,7 @@
 // ============================================================
 // WORLD — reusable submerged-zone engine (GDD §3/§13)
 // Owns the scene, atmosphere (lights/fog/water/floor/particles), the
-// circle-vs-AABB collision registry, support-height (dock/ladder), and a set of
+// circle-vs-box collision registry, authored support heights, and a set of
 // reusable building PRIMITIVES (buildings, stalls, mangroves, the spawn dock,
 // floating debris). It is intentionally zone-agnostic: the actual district
 // layout, palette overrides, fog, seed, and spawn nodes come from a *zone
@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { CONFIG, mulberry32 } from '../config.js';
 
 const W = CONFIG.WATER_LEVEL;
+const SUPPORT_SNAP = 1.25;
 
 export class World {
   // `zone` is a zone definition: { id, name, seed, background, fog:{color,density},
@@ -24,7 +25,8 @@ export class World {
     this.scene.background = new THREE.Color(zone.background);
     this.scene.fog = new THREE.FogExp2(zone.fog.color, zone.fog.density);
 
-    this.colliders = [];   // XZ footprints {minX,maxX,minZ,maxZ} for solid props
+    this.colliders = [];   // XZ footprints, optionally limited to one vertical tier
+    this.supportSurfaces = []; // authored ramps/landings sampled by groundHeightAt()
     this.debris = [];      // floating props that bob in update() (also lantern bodies/glows)
     this.shafts = [];      // additive god-ray cones that shimmer in update() (also lantern glow flicker)
     this.moundSpots = [];  // rubble mound centers (elevated_rubble spawn anchors)
@@ -42,19 +44,66 @@ export class World {
   }
 
   // ---- Collision registry --------------------------------------------------
-  addCollider(cx, cz, halfW, halfD) {
-    this.colliders.push({ minX: cx - halfW, maxX: cx + halfW, minZ: cz - halfD, maxZ: cz + halfD });
+  addCollider(cx, cz, halfW, halfD, options = {}) {
+    const rotation = options.rotation ?? 0;
+    const collider = {
+      cx,
+      cz,
+      halfW,
+      halfD,
+      minX: cx - halfW,
+      maxX: cx + halfW,
+      minZ: cz - halfD,
+      maxZ: cz + halfD,
+      rotation,
+      cos: Math.cos(rotation),
+      sin: Math.sin(rotation),
+      minY: options.minY ?? -Infinity,
+      maxY: options.maxY ?? Infinity,
+      enabled: options.enabled ?? true,
+    };
+    this.colliders.push(collider);
+    return collider;
   }
 
-  // circle-vs-AABB: is a disc of radius r at (x,z) overlapping any footprint?
-  collidesAt(x, z, r) {
+  // Circle-vs-box: supports both legacy axis-aligned and authored rotated bounds.
+  collidesAt(x, z, r, y = null) {
     for (const c of this.colliders) {
-      const px = Math.max(c.minX, Math.min(x, c.maxX));
-      const pz = Math.max(c.minZ, Math.min(z, c.maxZ));
-      const dx = x - px, dz = z - pz;
+      if (!c.enabled) continue;
+      if (Number.isFinite(y) && (y < c.minY || y > c.maxY)) continue;
+      let dx, dz;
+      if (c.rotation) {
+        const offsetX = x - c.cx, offsetZ = z - c.cz;
+        const localX = offsetX * c.cos - offsetZ * c.sin;
+        const localZ = offsetX * c.sin + offsetZ * c.cos;
+        const px = Math.max(-c.halfW, Math.min(localX, c.halfW));
+        const pz = Math.max(-c.halfD, Math.min(localZ, c.halfD));
+        dx = localX - px;
+        dz = localZ - pz;
+      } else {
+        const px = Math.max(c.minX, Math.min(x, c.maxX));
+        const pz = Math.max(c.minZ, Math.min(z, c.maxZ));
+        dx = x - px;
+        dz = z - pz;
+      }
       if (dx * dx + dz * dz < r * r) return true;
     }
     return false;
+  }
+
+  // Register a rectangular walkable plane in local coordinates. Height changes
+  // linearly along local +Z, which covers both flat landings and straight ramps.
+  // The player's current support height disambiguates vertically stacked floors.
+  addSupportSurface(cx, cz, halfW, halfD, rotation, startHeight, endHeight = startHeight) {
+    const surface = {
+      cx, cz, halfW, halfD,
+      cos: Math.cos(rotation),
+      sin: Math.sin(rotation),
+      startHeight,
+      endHeight,
+    };
+    this.supportSurfaces.push(surface);
+    return surface;
   }
 
   // Footprint half-extents of a box of (w,d) rotated about Y by rot.
@@ -144,6 +193,10 @@ export class World {
     this.water.rotation.x = -Math.PI / 2;
     this.water.position.y = W;
     this.scene.add(this.water);
+  }
+
+  setWaterLevel(height) {
+    this.water.position.y = height;
   }
 
   // ---- Reusable building primitives ----------------------------------------
@@ -278,10 +331,29 @@ export class World {
     this.scene.add(anchor);
   }
 
-  // Support height under (x,z): deck top over the platform, a ramp down the
-  // ladder strip, else 0 (water-standing baseline). Consumed by PlayerController
-  // so the camera rests on the platform and climbs the ladder both ways.
-  groundHeightAt(x, z) {
+  // Support height under (x,z): nearest reachable authored plane, then the dock
+  // and ladder, else 0 (water-standing baseline). Consumed by PlayerController.
+  groundHeightAt(x, z, currentY = null) {
+    let supportHeight = null;
+    let nearestDelta = Infinity;
+    for (const s of this.supportSurfaces) {
+      const dx = x - s.cx, dz = z - s.cz;
+      const lx = dx * s.cos - dz * s.sin;
+      const lz = dx * s.sin + dz * s.cos;
+      if (Math.abs(lx) > s.halfW || Math.abs(lz) > s.halfD) continue;
+      const progress = (lz + s.halfD) / (s.halfD * 2);
+      const height = s.startHeight + (s.endHeight - s.startHeight) * progress;
+      if (Number.isFinite(currentY)) {
+        const delta = Math.abs(height - currentY);
+        if (delta > SUPPORT_SNAP || delta >= nearestDelta) continue;
+        nearestDelta = delta;
+      } else if (supportHeight !== null && height <= supportHeight) {
+        continue;
+      }
+      supportHeight = height;
+    }
+    if (supportHeight !== null) return supportHeight;
+
     const d = this.dock;
     if (!d) return 0;
     if (Math.abs(x - d.cx) <= d.halfX && z >= d.zFront && z <= d.zBack) return d.top;
@@ -645,6 +717,7 @@ export class World {
     this.debris.length = 0;
     this.shafts.length = 0;
     this.colliders.length = 0;
+    this.supportSurfaces.length = 0;
   }
 
   update(dt, t, camPos = null) {

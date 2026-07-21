@@ -49,6 +49,37 @@
     <div class="count"><span id="ward-count">3 / 3</span> wards</div>
   </div>
 
+  <div id="tower-ascent" aria-label="Tower ascent status">
+    <div class="heading-row">
+      <div class="heading">Tower Ascent</div>
+      <div class="risk" id="tower-risk">Tide dormant</div>
+    </div>
+    <div class="readouts">
+      <div class="primary"><span class="label">Air gap</span><strong><span id="tower-clearance">1.2</span> m</strong></div>
+      <div class="secondary"><span class="label">Altitude</span><strong><span id="tower-altitude">0.0</span> m</strong></div>
+    </div>
+    <div class="track"><div class="fill" id="tower-progress"></div></div>
+    <div class="status" id="tower-status">Tide dormant · 8.0s</div>
+    <div class="seals" aria-label="Memory seals">
+      <span class="label">Memory seals</span>
+      <div class="seal-pips" id="tower-seals" aria-hidden="true">
+        <i></i><i></i><i></i>
+      </div>
+      <span class="seal-count" id="tower-seal-count">0 / 3</span>
+    </div>
+    <div class="keeper" id="tower-keeper">
+      <div class="keeper-row"><span>Keeper resolve</span><strong id="tower-keeper-count">12 / 12</strong></div>
+      <div class="keeper-track"><div id="tower-keeper-fill"></div></div>
+    </div>
+    <div class="slow" id="tower-slow">Burdened · <span id="tower-slow-time">0.0</span>s</div>
+  </div>
+  <div id="tower-event" role="status" aria-live="polite"></div>
+
+  <div id="tower-fail" role="status" aria-live="assertive">
+    <div class="title">Submerged</div>
+    <div class="sub">The tide rewinds. Begin the ascent again.</div>
+  </div>
+
   <div id="lumina-status">
     <div class="lumina-buff zephyr" id="lumina-zephyr">
       <span class="name">Zephyr</span>
@@ -171,8 +202,8 @@
 
   <div id="resume" style="display:none">
     <button class="gear" data-settings aria-label="Settings">⚙</button>
-    <div class="sub">"The gallery waits in the quiet."</div>
-    <div class="enter">Click to keep looking</div>
+    <div class="sub" id="resume-sub">"The gallery waits in the quiet."</div>
+    <div class="enter" id="resume-enter">Click to keep looking</div>
   </div>
 
   <script type="importmap">

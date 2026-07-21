@@ -410,3 +410,176 @@ and answers three staggered lantern volleys thrown by The Reveler.
 - [x] Preserve Zone 2 Soul, artifact scatter, pedestal, and final-memory progression
 - [x] Static verify: node syntax, diff whitespace, line counts, and stale-name search
 - [ ] Local HTTP/browser verify: localhost bind permission was declined; user smoke-test pending
+
+## Artifact collection API POST placeholder (2026-07-21)
+
+Goal: notify a future backend whenever an artifact is committed to the player's
+session collection, using the collection payload documented in `STRINGS_GDD.md`.
+
+- [x] Trace the artifact collection path and existing mock artifact-data lookup
+- [x] Define the endpoint location, request payload, and non-blocking failure behavior
+- [x] Add the placeholder endpoint configuration and focused API manager
+- [x] Trigger one POST for each newly collected artifact
+- [x] Verify syntax, mocked POST payload, file lengths, and whitespace
+- [ ] User browser verify: collect an artifact and inspect the Network request payload
+
+## Strings v2.0 — Phase 5A: Tower Player + Level Blockout (2026-07-21)
+
+Goal: prove first-person vertical traversal through a Bolinao Lighthouse-inspired
+Arena 3 before adding any combat or encounter systems. Stop for user verification
+after this checklist; Phases 5B–5E require separate go signals.
+
+- [x] Record the approved multi-phase execution boundary and manual-test gate
+- [x] Add/register Arena 3 with 12 ramp flights, landings, central shaft, summit,
+      future gate spaces, and static non-lethal water
+- [x] Add height-aware support surfaces and vertically bounded collision proxies
+- [x] Preserve player movement/sprint/stamina/look/slide across vertical traversal
+- [x] Add the minimal combat-free Arena 3 lifecycle and route the Zone 3 Rift
+- [x] Confirm no Guardian, enemies, combat, riddles, tide, Lumina, rewards, new HUD,
+      audio, victory, Soul, or scatter behavior enters Phase 5A
+- [x] Static verify: JavaScript syntax, diff whitespace, file lengths, and final diff
+- [x] User manual verify: full base-to-summit traversal, overlaps, collision, falls,
+      sprint/stamina, pointer-lock resume, and clean browser console
+
+### Phase 5A manual-test correction — blocked first landing
+
+- [x] Diagnose the screenshot against ramp and landing collision footprints
+- [x] Shorten flight and summit rails/colliders to leave corner-turn clearance
+- [x] Re-run Phase 5A static verification and hand back for manual retest
+
+### Phase 5A manual-test correction — summit slab overlap
+
+- [x] Diagnose the upper slab clipping from the screenshot and authored footprints
+- [x] Move the summit ring inward and connect flight 12 with a level bridge
+- [x] Verify final-ramp headroom, summit supports/colliders, syntax, and diff scope
+
+### Phase 5A manual-test correction — final bridge pinch
+
+- [x] Reproduce the blocked centerline against authored top colliders
+- [x] Match rail endpoint clearances to enlarged future-gate landings
+- [x] Assert the top route is open and repeat Phase 5A static verification
+
+## Strings v2.0 — Phase 5B: Rising Tide + Drowning Retry (2026-07-21)
+
+Goal: turn the accepted tower route into a timed ascent by adding only the rising
+water pressure, readable ascent status, drowning failure, and complete retry loop.
+Stop for user verification afterward; Phases 5C–5E still require separate approval.
+
+- [x] Record the Phase 5B gameplay/UI contract and keep later systems excluded
+- [x] Add named tower tide and drowning tunables to config
+- [x] Upgrade the tower controller with rising water, pause, failure, and reset state
+- [x] Add responsive altitude, progress, air-gap, warning, and drowning UI states
+- [x] Route tower failure through a combat-optional arena retry path
+- [x] Verify water/player/stamina/HUD reset for repeated attempts
+- [x] Confirm no victory, enemies, combat, riddles, Keeper, Lumina, rewards, audio,
+      Soul/scatter, or Phase 5C+ behavior enters this increment
+- [x] Run JavaScript syntax, whitespace, line-count, and scoped-diff checks
+- [x] User manual verify: tide timing, HUD, pause, drowning/falls, retry, summit, console
+
+### Phase 5B manual-test correction — final decorative gate collision
+
+- [x] Identify the reported blocker as the final future-gate frame
+- [x] Keep the final frame visible while removing its inactive collision proxies
+- [x] Re-run static verification and hand back for focused top-connector retesting
+
+### Phase 5B manual-test correction — summit connector clearance
+
+- [x] Confirm from the retest HUD that the player remains below the 18 m summit
+- [x] Widen the diagonal summit connector and correct its rail-proxy half-width
+- [x] Assert centerline clearance and repeat the Phase 5B static checks
+- [x] User retest: cross the final connector and register 18.0 m altitude
+
+### Phase 5B manual-test correction — tower-shell proxy root cause
+
+- [x] Trace all colliders active around the final landing and identify shell AABB intrusion
+- [x] Replace shell AABBs with mesh-matched rotated colliders
+- [x] Verify final-corner clearance, syntax, whitespace, line count, and diff scope
+- [x] User retest: clear the final landing, connector, and 18.0 m summit ring
+
+### Phase 5B manual-test correction — final-ramp/bridge rail intersection
+
+- [x] Simulate the complete final-ramp-to-ring path and reproduce the blocker
+- [x] Move shortened bridge rails beyond the enlarged final landing
+- [x] Assert the continuous route against all active top-level shell/rail colliders
+- [x] Re-run static checks and hand back for manual summit verification
+
+## Strings v2.0 — Phase 5C: Altitude-Aware Tower Combat (2026-07-21)
+
+Goal: add only the tower's authored enemy pressure, knockback, combat health, and
+vertical Lumina on top of the accepted traversal/tide loop.
+
+- [x] Inspect shared combat, collision, firing, Lumina, and retry contracts
+- [x] Record the player promise, encounter pacing, physics choice, tunings, and scope
+- [x] Add tower-specific combat manager and Gargoyle/Gale threat entities
+- [x] Add support-aware Sentinel movement and player-only vertical blocking
+- [x] Add Gale orbit, telegraphed ranged shots, and altitude-aware hit resolution
+- [x] Add player knockback/slow APIs and height-aware projectile collision
+- [x] Add four one-shot altitude threat milestones with a six-threat cap
+- [x] Add opt-in vertical Lumina drops and three-dimensional walk pickup
+- [x] Verify combat death, drowning, fall, pause, and complete retry cleanup
+- [x] Static verify all modules, file lengths, diff whitespace, and Arena 1–2 scope
+
+## Strings v2.0 — Phase 5D: Tower Seals + Keeper Victory (2026-07-21)
+
+Goal: finish Arena 3 with three altitude-bounded riddle gates, readable wrong-answer
+penalties, the summit Keeper fight, and the existing Zone 3 reward/progression return.
+
+- [x] Trace riddle, Guardian body, arena victory, Soul, scatter, and museum reuse paths
+- [x] Record gate/Keeper rules, UI states, reset contract, and progression boundary
+- [x] Expose per-World gate and threat descriptors from Arena 3
+- [x] Add three visible player-only seal barriers and altitude triggers
+- [x] Add vertical answer mechanisms, seeded riddles, correct unlock, and wrong penalty
+- [x] Add four-second 55% movement slow plus capped wrong-answer Sentinel spawn
+- [x] Add the shaft-hovering Keeper, HP/hit test, shot cadence, and reinforcements
+- [x] Add tower objective/seal/Keeper HUD states without overlapping the ascent HUD
+- [x] Set victory and reuse generic Zone 3 scatter/Soul/museum progression unchanged
+- [x] Verify whole-attempt resets for gates, riddles, Keeper, threats, buffs, and UI
+- [x] Static verify syntax, route/gate assertions, file limits, whitespace, and diff scope
+- [ ] User manual verify both phases end-to-end; stop before Phase 5E
+
+### Phase 5C manual-test correction — threat support and HUD
+
+- [x] Diagnose threat drift/clipping against Arena 3's authored support surfaces
+- [x] Keep Gargoyles on their assigned ramp or landing footprint and vertical tier
+- [x] Keep Gales inside the tower route bounds at their authored altitude
+- [x] Hide the misleading wave HUD throughout the tower encounter
+- [x] Dispose stale threat scene objects and reset altitude milestones on retry
+- [x] Re-run syntax, whitespace, line-limit, and scoped-diff checks
+- [ ] User retest threat placement/motion across all altitude bands
+
+### Phase 5C manual-test correction — missing Gargoyles and projectile freeze
+
+- [x] Trace projectile-hit knockback through player movement integration
+- [x] Apply knockback as a decaying world-space displacement, not accumulated input velocity
+- [x] Spawn each Gargoyle on the currently approached ramp segment with a visible offset
+- [x] Add a readable Gargoyle silhouette without changing its collision footprint
+- [x] Verify projectile hits preserve movement and retry state
+- [x] Run syntax, whitespace, file-limit, and focused source checks
+- [ ] User retest the first Gargoyle and first Gale projectile
+
+### Phase 5C runtime correction — non-finite Gale knockback
+
+- [x] Trace the AudioListener exception back to the first non-finite simulation value
+- [x] Add the missing Gale knockback tuning
+- [x] Reject non-finite impulse inputs at the PlayerController boundary
+- [x] Verify every tower knockback reference resolves to a finite number
+- [x] Run syntax, whitespace, and file-limit checks
+- [ ] User confirm a Gale hit no longer stops the animation loop
+
+## Strings v2.0 — Phase 5E: Tower VFX + HUD Polish (2026-07-21)
+
+Goal: improve Arena 3 combat/objective readability with restrained pooled VFX and a
+cohesive tower HUD, without changing gameplay, audio, progression, or render pipeline.
+
+- [x] Inspect current tower event hooks, HUD states, CSS fit, and effect ownership
+- [x] Record the art direction, technical-art budget, UI hierarchy, and scope boundary
+- [x] Replace the placeholder Keeper mesh with the existing Zone 3 Guardian builder
+- [x] Preserve Keeper chest placement, animation, hit test, HP, attacks, and disposal
+- [x] Add pooled tower spawn, hit, defeat, projectile-impact, gate, and Keeper VFX
+- [x] Add visible seal veils matching the existing player-only gate collision
+- [x] Consolidate altitude, air gap, tide, seal progress, and Keeper resolve HUD
+- [x] Add one transient event/status slot plus a timed slow indicator
+- [x] Preserve wave-panel removal, health/stamina/Lumina/riddle UI, and reduced motion
+- [x] Verify faint/retry/victory cleanup leaves no VFX or stale HUD state
+- [x] Run syntax, whitespace, file-limit, and scoped-diff checks
+- [ ] User manual verify VFX/readability/fit; stop before any excluded Phase 5E work

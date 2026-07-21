@@ -22,6 +22,8 @@ export class LuminaManager {
       heal: LUMINA.HEAL,
       zephyrDuration: LUMINA.ZEPHYR_DURATION,
       onZephyr: null,
+      preserveDropHeight: false,
+      walkVerticalRadius: Infinity,
       ...profile,
     };
     this.combat = null;
@@ -100,7 +102,7 @@ export class LuminaManager {
     slot.collecting = false;
     slot.type = type;
     slot.life = LUMINA.LIFETIME;
-    slot.baseY = LUMINA.HEIGHT;
+    slot.baseY = this.profile.preserveDropHeight ? position.y : LUMINA.HEIGHT;
     slot.bobPhase = this._rng() * Math.PI * 2;
     slot.collectTime = 0;
     slot.effectApplied = false;
@@ -156,7 +158,9 @@ export class LuminaManager {
 
       const dx = playerPos.x - slot.group.position.x;
       const dz = playerPos.z - slot.group.position.z;
-      if (dx * dx + dz * dz <= walkRadiusSq) this._collect(slot);
+      const dy = playerPos.y - slot.group.position.y;
+      if (dx * dx + dz * dz <= walkRadiusSq &&
+          Math.abs(dy) <= this.profile.walkVerticalRadius) this._collect(slot);
     }
 
     // Combat resolves enemy hits before ArenaController reaches this update,
