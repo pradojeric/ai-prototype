@@ -11,7 +11,7 @@
 // seeded RNG in a fixed order. Registered in zones/index.js.
 // ============================================================
 import * as THREE from 'three';
-import { CONFIG, ARENA } from '../../config.js';
+import { CONFIG, ARENA, COMBAT } from '../../config.js';
 
 const W = CONFIG.WATER_LEVEL;
 
@@ -69,6 +69,29 @@ function kitchen(world) {
   world.shafts.push({ mesh: glow, mat: glowMat, base: 0.5, phase: 0 });  // reuse the shimmer loop
 }
 
+// A cold ring drawn on the water at `radius`, added to the shimmer loop.
+function waterRing(world, radius, opacity, color = 0x2f6f6a) {
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.07, 6, 48), mat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(ARENA.CENTER.x, W + 0.03, ARENA.CENTER.z);
+  world.scene.add(ring);
+  world.shafts.push({ mesh: ring, mat, base: opacity, phase: radius });
+}
+
+// The band the drowned echoes rise from. CombatManager telegraphs each spawn
+// with a contracting ground ring (CombatVfx.spawnTelegraph) — these faint marks
+// give that warning somewhere to land, so the threat is legible before it forms.
+function spawnBand(world) {
+  waterRing(world, COMBAT.SPAWN_RADIUS_MIN, 0.16);
+  waterRing(world, COMBAT.SPAWN_RADIUS_MAX, 0.13);
+  // Cold rim glow along the foot of the wall ring, closing the space visually.
+  waterRing(world, ARENA.WALL_RADIUS - 1.2, 0.22, 0x27585c);
+}
+
 // Minimal spawn nodes: the arena spawns enemies on a ring around the center
 // (CombatManager owns that), so these only feed NavGrid fallbacks + any generic
 // world query. A few open points near the dais keep those safe.
@@ -96,6 +119,7 @@ export const arena1 = {
   build(world) {
     wallRing(world);
     kitchen(world);
+    spawnBand(world);
     setSpawnNodes(world);
     // A little drifting flotsam for life; keep it off the center spawn.
     world._debris({ count: 16, clear: { x: ARENA.CENTER.x, z: ARENA.CENTER.z, r: 7 } });

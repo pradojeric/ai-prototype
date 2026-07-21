@@ -34,6 +34,8 @@
   <div id="health">
     <div class="label" id="health-label">Liwanag</div>
     <div class="track">
+      <!-- Ghost fill: drains behind the real bar so a hit's size is readable. -->
+      <div class="lag" id="health-lag"></div>
       <div class="fill" id="health-fill"></div>
     </div>
   </div>
@@ -44,10 +46,15 @@
     <div class="sub"><span id="wave-left">0</span> remain</div>
   </div>
 
+  <!-- Guardian armor/wards: one pip per layer still standing. -->
   <div id="guardian-wards">
     <div class="label" id="ward-name">The Reveler</div>
-    <div class="count"><span id="ward-count">3 / 3</span> wards</div>
+    <div class="pips" id="ward-pips"></div>
   </div>
+
+  <!-- Pooled combat overlays; CombatHud fills these once at construction. -->
+  <div id="dmg-arcs"></div>
+  <div id="threat-markers"></div>
 
   <div id="tower-ascent" aria-label="Tower ascent status">
     <div class="heading-row">

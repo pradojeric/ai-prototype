@@ -29,11 +29,8 @@ export class RailCombatManager extends CombatManager {
     this._railWave = 0;
     this._riddleScale = 1;
     this._zephyrScale = 1;
-    this.elHealth.classList.add('active');
-    this.elWave.classList.add('active');
-    this.elCross.classList.add('combat');
-    this.elWaveN.textContent = '0';
-    this.elWaveT.textContent = '∞';
+    this.hud.show();
+    this.hud.setWave(0, '∞');
     this._updateHealthUi();
     this._updateWaveLeft();
   }
@@ -64,7 +61,7 @@ export class RailCombatManager extends CombatManager {
       spawned++;
     }
     this._railWave++;
-    this.elWaveN.textContent = this._railWave;
+    this.hud.setWave(this._railWave, '∞');
     this._updateWaveLeft();
     this._punchWaveHud();
     return spawned;
@@ -75,8 +72,11 @@ export class RailCombatManager extends CombatManager {
   _defeatThreat(threat, position, reflected = false) {
     if (!threat.hit(reflected ? threat.hp : COMBAT.BOLT.DAMAGE, reflected)) {
       this.audio.playHit();
+      this.vfx.impact(position, threat.type);
       return false;
     }
+    this.vfx.death(position, threat.type);
+    this.vfx.residue(position, threat.type);
     this.audio.playEnemyDeath();
     this._hitstop = COMBAT.FEEL.HITSTOP;
     this._updateWaveLeft();
@@ -159,15 +159,20 @@ export class RailCombatManager extends CombatManager {
       const dz = shot.mesh.position.z - playerPos.z;
       const dy = shot.mesh.position.y - playerPos.y;
       if (dx * dx + dz * dz > 0.85 ** 2 || Math.abs(dy) > 1.6) continue;
+      // Trace back along the shot so the damage arc points at the sniper.
+      this._vSource.copy(shot.mesh.position).addScaledVector(shot.vel, -0.5);
+      this.vfx.projectileImpact(shot.mesh.position);
       this.spits.deactivate(shot);
-      this.damage(RAIL_ARENA.SNIPER.DAMAGE);
+      this.damage(RAIL_ARENA.SNIPER.DAMAGE, this._vSource);
     }
 
+    this.hud.trackThreats(this.enemies, this.camera, dt);
     this._reapRail(threatDt, t, playerPos, dt);
     for (const threat of this.enemies) {
       if (threat.attackReady) {
         threat.attackReady = false;
-        this.damage(RAIL_ARENA.BOARDER.DAMAGE);
+        threat.center(this._vSource);
+        this.damage(RAIL_ARENA.BOARDER.DAMAGE, this._vSource);
       }
       if (threat.shotRequested) {
         threat.shotRequested = false;

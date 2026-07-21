@@ -38,9 +38,7 @@ export class RailArenaController {
     this.elFil = document.getElementById('ar-fil');
     this.elEng = document.getElementById('ar-eng');
     this.elHint = document.getElementById('ar-hint');
-    this.elWards = document.getElementById('guardian-wards');
-    this.elWardName = document.getElementById('ward-name');
-    this.elWardCount = document.getElementById('ward-count');
+    // The ward row itself lives on the combat HUD (CombatHud.setWards).
 
     this.combat = null;
     this.guardian = null;
@@ -87,7 +85,6 @@ export class RailArenaController {
     this.combat.spawnWave(opening.snipers, opening.boarders);
     this._waveIndex = 1;
     this._syncWardHud();
-    this.elWards.classList.add('active');
     this.elBanner.classList.remove('active');
     if (this.elHint) this.elHint.textContent = 'Shoot the correct lantern before it reaches the boat.';
   }
@@ -222,7 +219,7 @@ export class RailArenaController {
       // begins the arena-collapse wait, while removing combat pressure now.
       this._phase = 'victory-deflect';
       this._victoryTimer = 0.6;
-      this.elWards.classList.remove('active');
+      this.combat.hud.hideWards();
       this.resetLumina();
       this.combat.stop();
     }
@@ -238,15 +235,14 @@ export class RailArenaController {
   }
 
   _syncWardHud() {
-    if (this.elWardName) this.elWardName.textContent = 'The Reveler';
-    if (this.elWardCount) this.elWardCount.textContent = `${this.wards} / ${RAIL_ARENA.ROUNDS}`;
+    this.combat?.hud.setWards('The Reveler', this.wards, RAIL_ARENA.ROUNDS);
   }
 
   _win() {
     this.won = true;
     this._phase = 'won';
     this.elBanner.classList.remove('active');
-    this.elWards.classList.remove('active');
+    this.combat.hud.hideWards();
     this.resetLumina();
     this.combat.stop();
     this.guardian.defeat();
@@ -270,7 +266,7 @@ export class RailArenaController {
     this.lumina.dispose();
     this.scenery.dispose();
     this.elBanner.classList.remove('active');
-    this.elWards.classList.remove('active');
+    this.combat?.hud.hideWards();
     this.combat = null;
     this.guardian = null;
   }

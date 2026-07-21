@@ -141,6 +141,19 @@
   background: rgba(234, 246, 244, 0.12);
 }
 
+#health .track { position: relative; }
+
+/* Damage-lag ghost: sits under the live fill and drains toward it, so the
+   size of the hit you just took is legible for about a second. */
+#health .lag {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  background: rgba(255, 226, 214, .45);
+}
+
+#health .fill { position: relative; }
+
 #stamina .track { border: 1px solid rgba(111, 216, 208, .25); }
 #health .track { border: 1px solid rgba(232, 144, 122, .3); }
 
@@ -488,18 +501,39 @@
   text-transform: uppercase;
   color: #e8907a;
   opacity: .8;
+  border-right: 2px solid rgba(232, 144, 122, .55);
+  padding-right: 8px;
 }
 
 #wavehud .count {
   font-size: 30px;
   font-weight: bold;
   letter-spacing: 2px;
+  padding-right: 8px;
 }
 
 #wavehud .sub {
   font-size: 11px;
   letter-spacing: 2px;
   color: rgba(234, 246, 244, .6);
+  padding-right: 8px;
+}
+
+/* Low Liwanag: a slow red breath at the screen edge, under the hurt flash. */
+#health.low::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center,
+      rgba(0, 0, 0, 0) 58%, rgba(190, 40, 30, 0.3) 100%);
+  animation: lowhealth-breath 2.2s ease-in-out infinite;
+  z-index: 5;
+}
+
+@keyframes lowhealth-breath {
+  0%, 100% { opacity: .35; }
+  50% { opacity: .9; }
 }
 
 /* ---- Guardian ward counter (Arena 2) ---- */
@@ -524,18 +558,95 @@
   text-transform: uppercase;
 }
 
-#guardian-wards .count {
-  margin-top: 3px;
-  color: rgba(244, 251, 255, .78);
-  font-size: 13px;
-  letter-spacing: 1.4px;
-  font-variant-numeric: tabular-nums;
+/* One pip per armor layer: lit while standing, hollow once broken. */
+#guardian-wards .pips {
+  display: flex;
+  gap: 7px;
+  margin-top: 7px;
 }
 
-#guardian-wards .count span {
-  color: #fff0c3;
-  font-size: 22px;
-  font-weight: 700;
+#guardian-wards .pips i {
+  width: 20px;
+  height: 8px;
+  border-radius: 3px;
+  background: #ffd98a;
+  box-shadow: 0 0 10px rgba(255, 189, 103, .8);
+  transition: background .25s, box-shadow .25s, opacity .25s;
+}
+
+#guardian-wards .pips i.spent {
+  background: rgba(255, 217, 138, .18);
+  box-shadow: none;
+  opacity: .6;
+}
+
+#guardian-wards .pips i.breaking { animation: ward-break .5s ease-out; }
+
+@keyframes ward-break {
+  0% { transform: scaleX(1.35) scaleY(1.8); background: #fff6de; }
+  100% { transform: scale(1); }
+}
+
+/* ---- Directional damage arcs ---- */
+#dmg-arcs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.dmg-arc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 340px;
+  height: 340px;
+  margin: -170px 0 0 -170px;
+  opacity: 0;
+}
+
+/* The visible mark sits at the top of the box; rotating the box swings it
+   around the crosshair to the attacker's bearing. */
+.dmg-arc::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 120px;
+  height: 9px;
+  margin-left: -60px;
+  border-radius: 50%;
+  background: linear-gradient(90deg,
+      rgba(227, 91, 79, 0) 0%, rgba(255, 138, 120, .95) 50%, rgba(227, 91, 79, 0) 100%);
+  filter: blur(1px);
+}
+
+/* ---- Off-screen threat markers ---- */
+#threat-markers {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.threat-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  margin: -8px 0 0 -8px;
+  border-left: 15px solid #e8907a;   /* triangle pointing +x at rotation 0 */
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  filter: drop-shadow(0 0 6px rgba(232, 144, 122, .8));
+  opacity: 0;
+  transition: opacity .15s linear;
+}
+
+.threat-marker.spitter {
+  border-left-color: #ff9a5a;
+  filter: drop-shadow(0 0 6px rgba(255, 154, 90, .85));
 }
 
 /* ---- Lumina timers ---- */
@@ -749,9 +860,16 @@
 @media (prefers-reduced-motion: reduce) {
   #crosshair.overcharge,
   #health.low .fill,
-  #health.lumina-heal .fill {
+  #health.low::after,
+  #health.lumina-heal .fill,
+  #guardian-wards .pips i.breaking {
     animation: none;
   }
+
+  #health.low::after { opacity: .5; }
+
+  #guardian-wards .pips i,
+  .threat-marker { transition: none; }
 
   #tower-ascent.critical .fill { animation: none; }
 

@@ -35,7 +35,7 @@ export class ArenaController {
     this.elFil = document.getElementById('ar-fil');
     this.elEng = document.getElementById('ar-eng');
     this.elHint = document.getElementById('ar-hint');
-    this.elWards = document.getElementById('guardian-wards');
+    // The armor row itself lives on the combat HUD (CombatHud.setWards).
 
     this.combat = null;
     this.guardian = null;
@@ -63,7 +63,6 @@ export class ArenaController {
     this._roundActive = false;
     this._timer = 0;
     if (this.elHint) this.elHint.textContent = "Shoot the correct answer to break the Feastkeeper's armor.";
-    if (this.elWards) this.elWards.classList.remove('active');
 
     // Draw one distinct riddle per armor layer (extra +2 as spares in case a
     // round needs re-issuing; only ROUNDS are used in the happy path).
@@ -78,6 +77,13 @@ export class ArenaController {
     // Endless waves centered on the arena, no leash (the player is walled in).
     this._v.set(ARENA.CENTER.x, 0, ARENA.CENTER.z);
     this.combat.startFight(this._v, { endless: true });
+    this._showArmor();
+  }
+
+  // Surface the win condition: one pip per armor layer still standing.
+  _showArmor() {
+    const name = this.combat?.world?.zone?.guardianName?.eng || 'The Guardian';
+    this.combat?.hud.setWards(name, this.armor, ARENA.ROUNDS);
   }
 
   update(dt, t, playerPos) {
@@ -182,6 +188,7 @@ export class ArenaController {
       this._timer = 0;
       this.elBanner.classList.remove('active');
       this.armor = Math.max(0, this.armor - 1);
+      this._showArmor();
       this.audio.playWaveClear();
       if (this.armor <= 0) this._win();
     } else {

@@ -5,10 +5,12 @@
 // penalties, and the genuine-kill reward callback.
 // ============================================================
 import * as THREE from 'three';
-import { CONFIG, COMBAT, clamp01 } from '../../config.js';
+import { CONFIG, COMBAT } from '../../config.js';
 import { ProjectilePool } from './ProjectilePool.js';
 import { Enemy } from './Enemy.js';
 import { NavGrid } from './NavGrid.js';
+import { CombatVfx } from './CombatVfx.js';
+import { CombatHud } from '../../ui/CombatHud.js';
 
 export class CombatManager {
   constructor(scene, world, player, camera, viewmodel, audio, options = {}) {
@@ -29,12 +31,16 @@ export class CombatManager {
       color: COMBAT.SPITTER.SPIT_COLOR, size: COMBAT.BOLT.SIZE * 1.4,
     });
 
+    // Pooled spawn/impact/death effects, shared by every arena subclass.
+    this.vfx = new CombatVfx(scene);
+
     // Pathfinding: walkability grid baked once per zone; the BFS flow field
     // toward the player is rebuilt on a timer only while a fight is active.
     this.nav = options.navigation === false ? null : new NavGrid(world);
     this._flowTimer = 0;
 
     this._origin = null;           // XZ center the waves spawn around (arena center)
+    this._pending = [];            // echoes telegraphing, not yet materialised
     this._endless = false;         // arena mode: waves keep coming until stop()ed
     this._leash = null;            // optional Vector3; wandering past LEASH_RADIUS resets
     this._wave = 0;                // index into COMBAT.WAVES (wraps in endless mode)
@@ -50,24 +56,16 @@ export class CombatManager {
     this._baseFov = camera.fov;
     this._hitstop = 0;             // seconds of scaled-time left on enemy sim
 
-    // HUD elements (plain DOM, .active convention — see index.html).
-    this.elHealth = document.getElementById('health');
-    this.elHealthLabel = document.getElementById('health-label');
-    this.elHealthFill = document.getElementById('health-fill');
-    this.elWave = document.getElementById('wavehud');
-    this.elWaveLabel = document.getElementById('wave-label');
-    this.elWaveN = document.getElementById('wave-n');
-    this.elWaveT = document.getElementById('wave-t');
-    this.elWaveLeft = document.getElementById('wave-left');
-    this.elHurt = document.getElementById('hurt');
-    this.elCross = document.getElementById('crosshair');
-    this.setHudProfile();
+    // Every DOM overlay a fight owns lives in CombatHud; this class only calls it.
+    this.hud = new CombatHud();
 
     // scratch vectors — combat runs every frame, so no per-frame allocation
     this._vMuzzle = new THREE.Vector3();
     this._vDir = new THREE.Vector3();
     this._vEnemy = new THREE.Vector3();
     this._vSpit = new THREE.Vector3();
+    this._vSpawn = new THREE.Vector3();
+    this._vSource = new THREE.Vector3();
   }
 
   // Arena-owned reward systems subscribe here instead of reaching into the
@@ -77,31 +75,22 @@ export class CombatManager {
 
   get maxHp() { return COMBAT.PLAYER_HP; }
 
-  damage(amount) { this._damagePlayer(Math.max(0, amount)); }
+  damage(amount, sourcePos = null) { this._damagePlayer(Math.max(0, amount), sourcePos); }
 
-  setHudProfile({ healthLabel = 'Liwanag', waveLabel = 'Drowned Echoes' } = {}) {
-    if (this.elHealthLabel) this.elHealthLabel.textContent = healthLabel;
-    if (this.elWaveLabel) this.elWaveLabel.textContent = waveLabel;
-  }
+  setHudProfile(profile) { this.hud.setProfile(profile); }
 
   heal(amount) {
     const before = this.hp;
     this.hp = Math.min(COMBAT.PLAYER_HP, this.hp + Math.max(0, amount));
     this._updateHealthUi();
-    if (this.hp > before) {
-      this.elHealth.classList.remove('lumina-heal');
-      void this.elHealth.offsetHeight;
-      this.elHealth.classList.add('lumina-heal');
-      clearTimeout(this._healTimeout);
-      this._healTimeout = setTimeout(() => this.elHealth.classList.remove('lumina-heal'), 420);
-    }
+    if (this.hp > before) this.hud.healFlash();
     return this.hp - before;
   }
 
   setOvercharge(active, shotsPerSecond = 0) {
     this._overchargeRate = active ? Math.max(0, shotsPerSecond) : 0;
     this._overchargeCooldown = 0;
-    this.elCross.classList.toggle('overcharge', this._overchargeRate > 0);
+    this.hud.setOvercharge(this._overchargeRate > 0);
   }
 
   // Begin a fight: waves spawn around `origin` (a THREE.Vector3). Options:
@@ -122,9 +111,7 @@ export class CombatManager {
     if (this.nav) this.nav.computeFlow(p.x, p.z);
     this._flowTimer = 0;
     this._spawnWave();
-    this.elHealth.classList.add('active');
-    this.elWave.classList.add('active');
-    this.elCross.classList.add('combat');
+    this.hud.show();
     this._updateHealthUi();
   }
 
@@ -153,22 +140,18 @@ export class CombatManager {
   abortFight() {
     if (!this.active) return;
     for (const e of this.enemies) e.vanish();
+    this._pending.length = 0;   // telegraphed echoes never arrive
     this.bolts.clear();
     this.spits.clear();
     this.active = false;
     this._origin = null;
     this.hp = COMBAT.PLAYER_HP;
     this.setOvercharge(false);
+    this.vfx.reset();
     this._hideHud();
   }
 
-  _hideHud() {
-    this.elHealth.classList.remove('active');
-    this.elHealth.classList.remove('lumina-heal');
-    this.elWave.classList.remove('active');
-    this.elCross.classList.remove('combat');
-    this.elHurt.classList.remove('active');
-  }
+  _hideHud() { this.hud.hide(); }
 
   _zoneKey() { return this.world.zone?.id || 'zone1'; }
 
@@ -183,14 +166,15 @@ export class CombatManager {
     const hpBonus = COMBAT.ZONE_HP_BONUS[zone] || 0;
     for (let i = 0; i < chasers; i++) this._spawnEnemy('chaser', hpBonus, 1);
     for (let i = 0; i < def.spitters; i++) this._spawnEnemy('spitter', hpBonus, 1);
-    this.elWaveN.textContent = this._wave + 1;
-    this.elWaveT.textContent = this._endless ? '∞' : COMBAT.WAVES.length;
+    this.hud.setWave(this._wave + 1, this._endless ? '∞' : COMBAT.WAVES.length);
     this._updateWaveLeft();
     this._punchWaveHud();
   }
 
   // Ring spawn around the fight origin, kept out of walls and off the player's
-  // face (retry-loop idiom shared with Guardian._pickSpot).
+  // face (retry-loop idiom shared with Guardian._pickSpot). The echo does not
+  // exist yet: the spot is telegraphed first (see _updatePending) so nothing
+  // ever materialises unannounced behind the player.
   _spawnEnemy(type, hpBonus, dropMultiplier) {
     const a = this._origin;
     const playerPos = this.player.controls.getObject().position;
@@ -209,37 +193,49 @@ export class CombatManager {
       x = cx; z = cz;
       break;
     }
-    this.enemies.push(new Enemy(
-      this.scene, this.world, type, x, z, hpBonus, dropMultiplier,
-    ));
+    this._pending.push({ type, x, z, hpBonus, dropMultiplier, delay: COMBAT.SPAWN_TELEGRAPH });
+    this._vSpawn.set(x, CONFIG.WATER_LEVEL + 0.06, z);
+    this.vfx.spawnTelegraph(this._vSpawn, type);
   }
 
+  // Land the telegraphed echoes whose warning has run out. Driven on real dt so
+  // hitstop never stalls a spawn mid-warning.
+  _updatePending(dt) {
+    for (let i = this._pending.length - 1; i >= 0; i--) {
+      const p = this._pending[i];
+      p.delay -= dt;
+      if (p.delay > 0) continue;
+      this._pending.splice(i, 1);
+      this.enemies.push(new Enemy(
+        this.scene, this.world, p.type, p.x, p.z, p.hpBonus, p.dropMultiplier,
+      ));
+      this._vSpawn.set(p.x, CONFIG.WATER_LEVEL + 0.5, p.z);
+      this.vfx.spawnArrive(this._vSpawn, p.type);
+    }
+  }
+
+  // Pending echoes count as live: a wave is not "cleared" while one is still
+  // telegraphing, or the next wave would stack on top of it.
   _aliveCount() {
-    let n = 0;
+    let n = this._pending.length;
     for (const e of this.enemies) if (e.alive) n++;
     return n;
   }
 
-  _updateWaveLeft() { this.elWaveLeft.textContent = this._aliveCount(); }
+  _updateWaveLeft() { this.hud.setWaveLeft(this._aliveCount()); }
 
-  _punchWaveHud() {
-    this.elWave.animate(
-      [{ transform: 'scale(1.15)' }, { transform: 'scale(1)' }],
-      { duration: 150, easing: 'ease-out' },
-    );
-  }
+  _punchWaveHud() { this.hud.punchWave(); }
 
-  _updateHealthUi() {
-    const pct = clamp01(this.hp / COMBAT.PLAYER_HP) * 100;
-    this.elHealthFill.style.width = pct + '%';
-    this.elHealth.classList.toggle('low', this.hp < COMBAT.PLAYER_HP * 0.3);
-  }
+  _updateHealthUi() { this.hud.setHealth(this.hp, COMBAT.PLAYER_HP); }
 
-  _damagePlayer(dmg) {
+  // `sourcePos` (optional) is where the blow came from — it drives the
+  // directional arc on the HUD, so the player can turn toward the attacker.
+  _damagePlayer(dmg, sourcePos = null) {
     if (this._playerDied || this.hp <= 0) return;
     this.hp -= dmg;
     this._hurtTimer = COMBAT.HURT_FLASH;
-    this.elHurt.classList.add('active');
+    this.hud.hurt(true);
+    if (sourcePos) this.hud.damageFrom(sourcePos, this.camera);
     this._fovPunch = Math.min(10, this._fovPunch + COMBAT.FEEL.FOV_PUNCH);
     this._playDamageSound();
     this._updateHealthUi();
@@ -248,11 +244,7 @@ export class CombatManager {
 
   _playDamageSound() { this.audio.playPlayerHurt(); }
 
-  _hitMarker() {
-    this.elCross.classList.add('hit');
-    clearTimeout(this._hitTimeout);
-    this._hitTimeout = setTimeout(() => this.elCross.classList.remove('hit'), 80);
-  }
+  _hitMarker() { this.hud.hitMarker(); }
 
   _fireBolt() {
     this.viewmodel.getMuzzleWorld(this._vMuzzle);
@@ -267,9 +259,11 @@ export class CombatManager {
   }
 
   _updateFeel(dt) {
+    this.vfx.update(dt);
+    this.hud.update(dt);
     if (this._hurtTimer > 0) {
       this._hurtTimer -= dt;
-      if (this._hurtTimer <= 0) this.elHurt.classList.remove('active');
+      if (this._hurtTimer <= 0) this.hud.hurt(false);
     }
     if (this._fovPunch > 0.001) {
       this._fovPunch *= Math.exp(-dt / 0.2);
@@ -338,6 +332,10 @@ export class CombatManager {
     // Fire a light-bolt from the lure along the camera's aim.
     this._updatePlayerFire(dt);
 
+    // Telegraphed echoes land on real dt; markers point at the ones behind you.
+    this._updatePending(dt);
+    this.hud.trackThreats(this.enemies, this.camera, dt);
+
     // Advance projectiles, then resolve hits inline (squared distances only).
     this.bolts.update(simDt, this.world);
     this.spits.update(simDt, this.world);
@@ -349,17 +347,25 @@ export class CombatManager {
         e.center(this._vEnemy);
         const rr = (e.radius + COMBAT.BOLT.RADIUS) ** 2;
         if (s.mesh.position.distanceToSquared(this._vEnemy) > rr) continue;
+        // Push direction for the impact nudge, taken before the slot is reused.
+        this._vDir.copy(s.vel).setY(0).normalize();
         this.bolts.deactivate(s);
         this._hitMarker();
         if (e.hit(COMBAT.BOLT.DAMAGE)) {
           this.audio.playEnemyDeath();
           this._hitstop = COMBAT.FEEL.HITSTOP;
+          this.vfx.death(this._vEnemy, e.type);
+          this.vfx.residue(this._vEnemy, e.type);
           this._updateWaveLeft();
           if (this._onEnemyDefeated) {
             this._onEnemyDefeated(e.type, this._vEnemy, e.dropMultiplier);
           }
         } else {
           this.audio.playHit();
+          this.vfx.impact(this._vEnemy, e.type);
+          // Heavier bodies shrug the shot off; the shove sells the connection.
+          const push = COMBAT.FEEL.HIT_NUDGE * (e.type === 'chaser' ? 1 : 0.5);
+          e.nudge(this._vDir.x * push, this._vDir.z * push);
         }
         break;
       }
@@ -373,8 +379,12 @@ export class CombatManager {
       const dy = s.mesh.position.y - playerPos.y;
       const rr = (0.6 + COMBAT.BOLT.RADIUS) ** 2;
       if (dx * dx + dz * dz > rr || Math.abs(dy) > 1.4) continue;
+      // Point the damage arc back down the spit's flight path, not at the
+      // impact point (which is the player's own position).
+      this._vSource.copy(s.mesh.position).addScaledVector(s.vel, -0.5);
+      this.vfx.projectileImpact(s.mesh.position);
       this.spits.deactivate(s);
-      this._damagePlayer(COMBAT.SPITTER.DAMAGE);
+      this._damagePlayer(COMBAT.SPITTER.DAMAGE, this._vSource);
     }
 
     this._reapAndUpdate(simDt, t, playerPos, dt);
@@ -383,7 +393,7 @@ export class CombatManager {
     for (const e of this.enemies) {
       if (e.attackReady) {
         e.attackReady = false;
-        this._damagePlayer(COMBAT.CHASER.DAMAGE);
+        this._damagePlayer(COMBAT.CHASER.DAMAGE, e.pos);
       }
       if (e.spitRequested) {
         e.spitRequested = false;
@@ -437,10 +447,11 @@ export class CombatManager {
   dispose() {
     for (const e of this.enemies) e.dispose();
     this.enemies.length = 0;
+    this._pending.length = 0;
     this.bolts.dispose();
     this.spits.dispose();
-    clearTimeout(this._hitTimeout);
-    clearTimeout(this._healTimeout);
+    this.vfx.dispose();
+    this.hud.dispose();
     this._onEnemyDefeated = null;
     this.setOvercharge(false);
     this.camera.fov = this._baseFov;

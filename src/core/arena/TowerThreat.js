@@ -1,23 +1,33 @@
+// ============================================================
+// TOWER THREAT — Arena 3's Gargoyle Sentinels and Gale Whispers, pinned to the
+// ledge anchors of the ascent. The tower combat manager owns damage and
+// projectiles; this only walks its support and raises intents. Materialising,
+// the hit flash, the dissolve, and the death puff come from ThreatBody, shared
+// with the other two arenas.
+// ============================================================
 import * as THREE from 'three';
 import { TOWER_ARENA } from '../../config.js';
+import { ThreatBody } from '../combat/ThreatBody.js';
 
 const EDGE_MARGIN = 0.18;
 const GALE_HOVER = 1.45;
 
-export class TowerThreat {
+export class TowerThreat extends ThreatBody {
   constructor(scene, world, type, anchor, player) {
-    this.scene = scene;
+    const cfg = type === 'gargoyle' ? TOWER_ARENA.GARGOYLE : TOWER_ARENA.GALE;
+    super(scene, type, {
+      hp: cfg.HP,
+      radius: cfg.RADIUS,
+      // Snappier than the flooded arenas: the tower's threats are stone, and
+      // the climb gives the player less room to wait one out.
+      fadeIn: 0.35,
+      flashGain: 1.2,
+      poofColor: type === 'gargoyle' ? 0x9fd8c8 : 0x91a8ff,
+    });
     this.world = world;
-    this.type = type;
     this.player = player;
     this.anchor = anchor;
-    this.cfg = type === 'gargoyle' ? TOWER_ARENA.GARGOYLE : TOWER_ARENA.GALE;
-    this.hp = this.cfg.HP;
-    this.radius = this.cfg.RADIUS;
-    this.alive = true;
-    this.dead = false;
-    this.attackReady = false;
-    this.spitRequested = false;
+    this.cfg = cfg;
     this._timer = 1 + Math.random();
     this._phase = Math.random() * Math.PI * 2;
     this._cos = Math.cos(anchor.rotation || 0);
@@ -25,7 +35,6 @@ export class TowerThreat {
     this._localX = 0;
     this._localZ = 0;
 
-    this.group = new THREE.Group();
     const material = new THREE.MeshStandardMaterial({
       color: type === 'gargoyle' ? 0x7892a0 : 0x6d83c7,
       emissive: type === 'gargoyle' ? 0x285968 : 0x183a52,
@@ -35,16 +44,13 @@ export class TowerThreat {
       ? new THREE.DodecahedronGeometry(0.55, 0)
       : new THREE.IcosahedronGeometry(0.42, 1);
     this.group.add(new THREE.Mesh(geometry, material));
+    this._mat = this.registerFlash(this.registerFade(material, 1));
     if (type === 'gargoyle') this._buildGargoyleSilhouette(material);
-    this._mat = material;
     const spawnZ = type === 'gargoyle'
       ? (anchor.halfD - this.radius - EDGE_MARGIN) * 0.97
       : 0;
     this._placeOnSupport(0, spawnZ, 0);
-    scene.add(this.group);
   }
-
-  get pos() { return this.group.position; }
 
   _buildGargoyleSilhouette(material) {
     const wingGeometry = new THREE.BoxGeometry(0.75, 0.12, 0.5);
@@ -55,7 +61,9 @@ export class TowerThreat {
       wing.rotation.y = side * 0.22;
       this.group.add(wing);
     }
-    this._eyeMat = new THREE.MeshBasicMaterial({ color: 0x9ff7ff });
+    this._eyeMat = this.registerFade(
+      new THREE.MeshBasicMaterial({ color: 0x9ff7ff }), 1,
+    );
     const eyeGeometry = new THREE.SphereGeometry(0.07, 6, 4);
     for (const side of [-1, 1]) {
       const eye = new THREE.Mesh(eyeGeometry, this._eyeMat);
@@ -103,21 +111,6 @@ export class TowerThreat {
 
   center(out) { return out.copy(this.group.position); }
 
-  hit(damage) {
-    if (!this.alive) return false;
-    this.hp -= damage;
-    this._mat.emissiveIntensity = 3;
-    if (this.hp > 0) return false;
-    this.alive = false;
-    this.dead = true;
-    return true;
-  }
-
-  vanish() {
-    this.alive = false;
-    this.dead = true;
-  }
-
   blocksPlayerAt(x, z, radius, supportY) {
     return this.alive && this.type === 'gargoyle' &&
       Math.abs(supportY - (this.pos.y - this.radius)) < 1.15 &&
@@ -125,8 +118,7 @@ export class TowerThreat {
   }
 
   update(dt, t, playerPos) {
-    if (!this.alive) return;
-    this._mat.emissiveIntensity = Math.max(1.2, this._mat.emissiveIntensity - dt * 8);
+    if (!this.updateLifecycle(dt)) return;
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
     const dist = Math.hypot(dx, dz) || 1;
@@ -159,10 +151,4 @@ export class TowerThreat {
 
   muzzle(out) { return out.copy(this.pos); }
 
-  dispose() {
-    this.scene.remove(this.group);
-    this.group.traverse((object) => object.geometry?.dispose());
-    this._mat.dispose();
-    this._eyeMat?.dispose();
-  }
 }

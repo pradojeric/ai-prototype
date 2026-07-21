@@ -4,33 +4,26 @@
 //   'chaser'  — STARVED FISHER: fast skeletal melee swarmer, steers straight in
 //   'spitter' — BRINE SPITTER: keeps its distance and lobs slow corrosive spits
 // Bodies are built from the shared guardian primitives (fadeMat) so they read
-// as kin of the arena's Guardian; the fade in/out mirrors Guardian's easing.
+// as kin of the arena's Guardian; the materialise/dissolve/flash/puff lifecycle
+// comes from ThreatBody, shared with the Rail and Tower threats.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, COMBAT, GUARDIAN } from '../../config.js';
 import { fadeMat, angDelta } from '../guardians/primitives.js';
+import { ThreatBody } from './ThreatBody.js';
 
-const POOF_COUNT = 16;   // small per-enemy death puff (Guardian uses 48)
-
-export class Enemy {
+export class Enemy extends ThreatBody {
   constructor(scene, world, type, x, z, hpBonus = 0, dropMultiplier = 1) {
-    this.scene = scene;
-    this.world = world;
-    this.type = type;
     const cfg = type === 'chaser' ? COMBAT.CHASER : COMBAT.SPITTER;
+    super(scene, type, {
+      hp: cfg.HP + hpBonus,
+      radius: cfg.RADIUS,
+      poofColor: type === 'chaser' ? GUARDIAN.CORE_COLOR : COMBAT.SPITTER.SPIT_COLOR,
+    });
+    this.world = world;
     this.cfg = cfg;
-    this.hp = cfg.HP + hpBonus;
-    this.radius = cfg.RADIUS;
     this.dropMultiplier = dropMultiplier;
-    this.alive = true;
 
-    // Flags the manager consumes each frame (the enemy never touches pools/hp).
-    this.spitRequested = false;   // spitter: fire a spit at the player now
-    this.attackReady = false;     // chaser: in range + cooldown elapsed
-
-    this._fade = 0;               // spawn: fade in from nothing
-    this._fadeTarget = 1;
-    this._flash = 0;              // 1→0 hit-flash envelope on the glow material
     this._attackTimer = 0;
     this._spitTimer = cfg.SPIT_INTERVAL ? cfg.SPIT_INTERVAL * (0.5 + Math.random() * 0.5) : 0;
     this._windup = 0;             // >0 while the spitter telegraphs its shot
@@ -44,27 +37,8 @@ export class Enemy {
     this._losTimer = (this._bobPhase / (Math.PI * 2)) * COMBAT.NAV.LOS_INTERVAL;
     this._flowDir = { x: 0, z: 0 };   // scratch for NavGrid.dirAt
 
-    this.group = new THREE.Group();
     this.group.position.set(x, 0, z);
     this._buildBody();
-    scene.add(this.group);
-
-    // Per-enemy one-shot death puff (allocated once at spawn — only per-frame
-    // allocation is banned; mirrors Guardian._spawnPoof at a smaller scale).
-    const pg = new THREE.BufferGeometry();
-    this._poofPos = new Float32Array(POOF_COUNT * 3);
-    this._poofVel = new Float32Array(POOF_COUNT * 3);
-    pg.setAttribute('position', new THREE.BufferAttribute(this._poofPos, 3));
-    this._poofMat = new THREE.PointsMaterial({
-      color: this._glowColor, size: 0.22, transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    this._poof = new THREE.Points(pg, this._poofMat);
-    this._poof.frustumCulled = false;
-    this._poofLife = 0;
-    scene.add(this._poof);
-
-    this._v = new THREE.Vector3();   // scratch
   }
 
   // Distinct silhouettes per archetype so threats read at a glance:
@@ -76,10 +50,10 @@ export class Enemy {
 
     // Per-enemy materials (fade + hit-flash are per-instance state). The Starved
     // Fisher tints bonier/paler; the Brine Spitter keeps a rusty brine hue.
-    this._bodyMat = fadeMat(0x1c3a40, isChaser ? 0x5f6f66 : 0x6a4530, 0.5, 0.85);
-    this._glowMat = fadeMat(0xdffbff, this._glowColor, 2.0, 0.95, 0.3, 0);
-    this._glowBase = this._glowMat.emissiveIntensity;
-    this.fadeMats = [[this._bodyMat, this._bodyMat.opacity], [this._glowMat, this._glowMat.opacity]];
+    this._bodyMat = this.registerFade(fadeMat(0x1c3a40, isChaser ? 0x5f6f66 : 0x6a4530, 0.5, 0.85));
+    this._glowMat = this.registerFlash(
+      this.registerFade(fadeMat(0xdffbff, this._glowColor, 2.0, 0.95, 0.3, 0)),
+    );
 
     this.figure = new THREE.Group();
     this.figure.position.y = CONFIG.WATER_LEVEL + this.cfg.HOVER;
@@ -116,31 +90,6 @@ export class Enemy {
     }
   }
 
-  // A bolt landed. Returns true if this hit killed the enemy.
-  hit(dmg) {
-    if (!this.alive) return false;
-    this._flash = 1;
-    this.hp -= dmg;
-    if (this.hp > 0) return false;
-    this.alive = false;
-    this._fadeTarget = 0;
-    this._spawnPoof();
-    return true;
-  }
-
-  // Silent removal (leash reset / faint abort): poof out without counting as a kill.
-  vanish() {
-    if (!this.alive) return;
-    this.alive = false;
-    this._fadeTarget = 0;
-    this._spawnPoof();
-  }
-
-  // Fully dead once the dissolve AND the puff have finished — safe to reap.
-  get dead() { return !this.alive && this._fade < 0.02 && this._poofLife <= 0; }
-
-  get pos() { return this.group.position; }
-
   // World-space center used for bolt hit-tests (chest height, not the feet).
   center(out) {
     return out.set(
@@ -148,25 +97,6 @@ export class Enemy {
       CONFIG.WATER_LEVEL + this.cfg.HOVER,
       this.group.position.z,
     );
-  }
-
-  _spawnPoof() {
-    this._poof.position.set(
-      this.group.position.x, CONFIG.WATER_LEVEL + this.cfg.HOVER, this.group.position.z,
-    );
-    for (let i = 0; i < POOF_COUNT; i++) {
-      this._poofPos[i * 3] = 0;
-      this._poofPos[i * 3 + 1] = 0;
-      this._poofPos[i * 3 + 2] = 0;
-      const ax = Math.random() * 2 - 1, ay = Math.random() * 1.4 - 0.3, az = Math.random() * 2 - 1;
-      const inv = (1.4 + Math.random() * 1.8) / Math.max(0.001, Math.hypot(ax, ay, az));
-      this._poofVel[i * 3] = ax * inv;
-      this._poofVel[i * 3 + 1] = ay * inv;
-      this._poofVel[i * 3 + 2] = az * inv;
-    }
-    this._poof.geometry.attributes.position.needsUpdate = true;
-    this._poofLife = 1;
-    this._poofMat.opacity = 0.85;
   }
 
   // Axis-separated collision slide (same idiom as PlayerController) so echoes
@@ -178,28 +108,17 @@ export class Enemy {
     if (!this.world.collidesAt(p.x, p.z + dz, this.radius)) p.z = Math.max(-L, Math.min(L, p.z + dz));
   }
 
+  // Shove from a bolt impact. Routed through _move so the push respects
+  // collision exactly like pursuit does — an echo can't be knocked into a wall.
+  nudge(dx, dz) {
+    if (!this.alive) return;
+    this._move(dx, dz);
+  }
+
   update(dt, t, playerPos, nav) {
-    // Death puff keeps advancing after alive=false so the dissolve reads.
-    if (this._poofLife > 0) {
-      this._poofLife = Math.max(0, this._poofLife - dt * 1.8);
-      for (let i = 0; i < POOF_COUNT; i++) {
-        this._poofPos[i * 3] += this._poofVel[i * 3] * dt;
-        this._poofPos[i * 3 + 1] += (this._poofVel[i * 3 + 1] - 0.5) * dt;
-        this._poofPos[i * 3 + 2] += this._poofVel[i * 3 + 2] * dt;
-      }
-      this._poof.geometry.attributes.position.needsUpdate = true;
-      this._poofMat.opacity = 0.85 * this._poofLife;
-    }
-
-    // Fade easing (mirrors Guardian) + hit-flash decay on the glow material.
-    this._fade += (this._fadeTarget - this._fade) * Math.min(1, dt / COMBAT.FADE_IN);
-    const f = this._fade;
-    this.group.visible = f > 0.01;
-    for (const [m, base] of this.fadeMats) m.opacity = base * f;
-    this._flash = Math.max(0, this._flash - dt / COMBAT.FEEL.FLASH_DECAY);
-    this._glowMat.emissiveIntensity =
-      this._glowBase * (1 + this._flash * 1.5) + this._windupGlow();
-
+    // Presence, hit-flash, and the death puff (ThreatBody); `solid` is false
+    // while the echo is still materialising — it can turn, but not act.
+    const solid = this.updateLifecycle(dt);
     if (!this.alive) return;
 
     // Hover bob.
@@ -239,7 +158,7 @@ export class Enemy {
     this.group.rotation.y += angDelta(this.group.rotation.y, targetYaw) * Math.min(1, dt * 6);
 
     // Can't act (move/attack) until fully faded in — no instant-spawn damage.
-    if (f < 0.85) return;
+    if (!solid) return;
 
     if (this.type === 'chaser') {
       // Pursuit (direct or flow-routed); lunge-pulse + attack flag in range.
@@ -285,7 +204,7 @@ export class Enemy {
   }
 
   // Extra emissive during the spit wind-up — the readable "about to fire" tell.
-  _windupGlow() {
+  _extraGlow() {
     if (this._windup <= 0) return 0;
     return (1 - this._windup / COMBAT.SPIT_WINDUP) * 3;
   }
@@ -295,13 +214,4 @@ export class Enemy {
     return this._mouth.getWorldPosition(out);
   }
 
-  dispose() {
-    this.scene.remove(this.group);
-    this.scene.remove(this._poof);
-    this.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-    this._bodyMat.dispose();
-    this._glowMat.dispose();
-    this._poof.geometry.dispose();
-    this._poofMat.dispose();
-  }
 }

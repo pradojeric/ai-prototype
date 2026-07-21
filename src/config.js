@@ -216,6 +216,7 @@ export const COMBAT = {
   WAVE_GAP: 1.6,              // breather between cleared wave and the next
   FADE_IN: 0.5,               // enemies can't act until fully faded in
   SPIT_WINDUP: 0.4,           // spitter glow telegraph before each spit
+  SPAWN_TELEGRAPH: 0.7,       // ground-ring warning shown before an echo arrives
   SPAWN_RADIUS_MIN: 7,        // spawn ring around the contested artifact
   SPAWN_RADIUS_MAX: 12,
   SPAWN_MIN_PLAYER_DIST: 5,
@@ -236,7 +237,32 @@ export const COMBAT = {
   FEEL: {
     HITSTOP: 0.05, HITSTOP_SCALE: 0.1, FOV_PUNCH: 5,
     FLASH_DECAY: 0.2, SFX_PITCH_VAR: 0.06,
+    HIT_NUDGE: 0.25,          // metres a non-lethal bolt shoves an echo back
   },
+};
+
+// Shared combat VFX (src/core/combat/CombatVfx.js). Two pre-allocated instanced
+// pools — expanding rings and tumbling shards — carry every spawn/impact/death
+// beat in all three arenas. Pooled and additive by design: no dynamic lights,
+// no per-frame allocation. Sizes are the hard ceiling; when a pool is full the
+// oldest slot is recycled rather than growing.
+export const VFX = {
+  RING_POOL: 16,
+  SHARD_POOL: 40,
+  SHARDS_PER_BURST: 6,
+  WISPS_PER_DEATH: 5,         // upward gravity-free motes left by a kill
+  RESIDUE_LIFE: 1.6,          // seconds the water ripple lingers after a death
+};
+
+// Combat HUD (src/ui/CombatHud.js) — pooled DOM overlays. Element counts are
+// fixed at construction so a busy wave never creates nodes mid-fight.
+export const HUD = {
+  DMG_ARCS: 6,                // directional damage indicators in flight
+  DMG_ARC_LIFE: 0.9,          // seconds an arc takes to fade out
+  THREAT_MARKERS: 8,          // off-screen echo markers
+  THREAT_INTERVAL: 0.05,      // seconds between marker refreshes (~20 Hz)
+  THREAT_MARGIN: 0.86,        // screen-edge inset markers clamp to (0..1 of half-extent)
+  HEALTH_LAG: 1.1,            // ghost-fill drain rate, fraction of the bar per second
 };
 
 // Memory Arena (Strings v2.0) — the instanced combat space entered from a main

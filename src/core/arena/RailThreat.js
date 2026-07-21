@@ -1,44 +1,44 @@
 // ============================================================
-// RAIL THREAT — Arena 2 target lifecycle shared by River Snipers and Frenzied
-// Boarders. The rail combat manager owns damage/projectiles; threats only emit
-// shot/attack intents and expose the same alive/hit/vanish/dead/center contract
-// used by the existing arena enemies.
+// RAIL THREAT — Arena 2 target shared by River Snipers and Frenzied Boarders.
+// The rail combat manager owns damage/projectiles; threats only emit shot and
+// attack intents. Materialising, the hit flash, the dissolve, and the death
+// puff all come from ThreatBody, so a hit here reads exactly as it does in the
+// other two arenas.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, RAIL_ARENA } from '../../config.js';
 import { fadeMat, angDelta } from '../guardians/primitives.js';
+import { ThreatBody } from '../combat/ThreatBody.js';
 
-export class RailThreat {
+export class RailThreat extends ThreatBody {
   constructor(scene, type, x, z, rng) {
-    this.scene = scene;
-    this.type = type;
-    this.cfg = type === 'sniper' ? RAIL_ARENA.SNIPER : RAIL_ARENA.BOARDER;
-    this.hp = this.cfg.HP;
-    this.radius = this.cfg.RADIUS;
-    this.alive = true;
+    const cfg = type === 'sniper' ? RAIL_ARENA.SNIPER : RAIL_ARENA.BOARDER;
+    super(scene, type, {
+      hp: cfg.HP,
+      radius: cfg.RADIUS,
+      fadeIn: 0.45,
+      flashDecay: 0.18,
+      flashGain: 1.7,
+      poofColor: type === 'sniper' ? 0x7fe8ff : 0xff765f,
+    });
+    this.cfg = cfg;
     this.shotRequested = false;
-    this.attackReady = false;
-    this._fade = 0;
-    this._fadeTarget = 1;
-    this._flash = 0;
     this._phase = rng() * Math.PI * 2;
-    this._timer = type === 'sniper' ? this.cfg.SHOT_INTERVAL * (0.45 + rng() * 0.35) : 0;
+    this._timer = type === 'sniper' ? cfg.SHOT_INTERVAL * (0.45 + rng() * 0.35) : 0;
     this._boardState = 'approach';
 
-    this.group = new THREE.Group();
     this.group.position.set(x, 0, z);
     this.figure = new THREE.Group();
     this.figure.position.y = CONFIG.WATER_LEVEL + (type === 'sniper' ? 2.3 : 1.1);
     this.group.add(this.figure);
 
     const isSniper = type === 'sniper';
-    this.bodyMat = fadeMat(isSniper ? 0x213b42 : 0x543238,
-      isSniper ? 0x56cbd0 : 0xe46f5b, 0.5, 0.9);
-    this.glowMat = fadeMat(0xfff2c4, isSniper ? 0x7fe8ff : 0xff765f, 1.7, 0.95, 0.35, 0);
-    this._glowBase = this.glowMat.emissiveIntensity;
-    this.fadeMats = [[this.bodyMat, 0.9], [this.glowMat, 0.95]];
+    this.bodyMat = this.registerFade(fadeMat(isSniper ? 0x213b42 : 0x543238,
+      isSniper ? 0x56cbd0 : 0xe46f5b, 0.5, 0.9), 0.9);
+    this.glowMat = this.registerFlash(this.registerFade(
+      fadeMat(0xfff2c4, isSniper ? 0x7fe8ff : 0xff765f, 1.7, 0.95, 0.35, 0), 0.95,
+    ));
     this._buildBody(isSniper);
-    scene.add(this.group);
 
     this._center = new THREE.Vector3();
   }
@@ -79,23 +79,11 @@ export class RailThreat {
     this.muzzleNode = face;
   }
 
+  // A reflected shot always finishes a sniper, whatever its remaining hp.
   hit(damage, reflected = false) {
     if (!this.alive) return false;
-    this._flash = 1;
-    this.hp -= reflected && this.type === 'sniper' ? this.hp : damage;
-    if (this.hp > 0) return false;
-    this.alive = false;
-    this._fadeTarget = 0;
-    return true;
+    return super.hit(reflected && this.type === 'sniper' ? this.hp : damage);
   }
-
-  vanish() {
-    if (!this.alive) return;
-    this.alive = false;
-    this._fadeTarget = 0;
-  }
-
-  get dead() { return !this.alive && this._fade < 0.02; }
 
   center(out) {
     return out.set(
@@ -108,12 +96,7 @@ export class RailThreat {
   muzzle(out) { return this.muzzleNode.getWorldPosition(out); }
 
   update(dt, t, target) {
-    this._fade += (this._fadeTarget - this._fade) * Math.min(1, dt / 0.45);
-    this.group.visible = this._fade > 0.01;
-    for (const [material, base] of this.fadeMats) material.opacity = base * this._fade;
-    this._flash = Math.max(0, this._flash - dt / 0.18);
-    this.glowMat.emissiveIntensity = this._glowBase * (1 + this._flash * 1.7);
-    if (!this.alive || this._fade < 0.85) return;
+    if (!this.updateLifecycle(dt)) return;
 
     this.figure.position.y = CONFIG.WATER_LEVEL + (this.type === 'sniper' ? 2.3 : 1.1) +
       Math.sin(t * 2.1 + this._phase) * 0.12;
@@ -161,10 +144,4 @@ export class RailThreat {
     }
   }
 
-  dispose() {
-    this.scene.remove(this.group);
-    this.group.traverse((object) => { if (object.geometry) object.geometry.dispose(); });
-    this.bodyMat.dispose();
-    this.glowMat.dispose();
-  }
 }

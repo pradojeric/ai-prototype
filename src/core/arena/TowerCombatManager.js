@@ -1,7 +1,6 @@
 import { CombatManager } from '../combat/CombatManager.js';
 import { COMBAT, TOWER_ARENA } from '../../config.js';
 import { TowerThreat } from './TowerThreat.js';
-import { TowerVfxSystem } from './TowerVfxSystem.js';
 
 export class TowerCombatManager extends CombatManager {
   constructor(scene, world, player, camera, viewmodel, audio) {
@@ -10,8 +9,7 @@ export class TowerCombatManager extends CombatManager {
     this._anchors = world.towerThreatAnchors || [];
     this._stage = -1;
     this._time = 0;
-    this._onTowerEvent = null;
-    this.vfx = new TowerVfxSystem(scene);
+    this._onTowerEvent = null;   // `this.vfx` comes from CombatManager
   }
 
   setTowerEventHandler(handler) { this._onTowerEvent = handler; }
@@ -21,9 +19,7 @@ export class TowerCombatManager extends CombatManager {
     this.hp = COMBAT.PLAYER_HP;
     this._playerDied = false;
     this._stage = -1;
-    this.elHealth.classList.add('active');
-    this.elWave.classList.remove('active');
-    this.elCross.classList.add('combat');
+    this.hud.show({ wave: false });   // the ascent HUD replaces the wave readout
     this._updateHealthUi();
   }
 
@@ -101,8 +97,9 @@ export class TowerCombatManager extends CombatManager {
       const vx = shot.vel.x;
       const vz = shot.vel.z;
       this.vfx.projectileImpact(shot.mesh.position);
+      this._vSource.copy(shot.mesh.position).addScaledVector(shot.vel, -0.5);
       this.spits.deactivate(shot);
-      this._damagePlayer(TOWER_ARENA.GALE.DAMAGE);
+      this._damagePlayer(TOWER_ARENA.GALE.DAMAGE, this._vSource);
       this.player.applyKnockback(vx, vz, TOWER_ARENA.GALE.KNOCKBACK);
     }
   }
@@ -112,7 +109,7 @@ export class TowerCombatManager extends CombatManager {
       enemy.update(dt, t, playerPos);
       if (enemy.attackReady) {
         enemy.attackReady = false;
-        this._damagePlayer(TOWER_ARENA.GARGOYLE.DAMAGE);
+        this._damagePlayer(TOWER_ARENA.GARGOYLE.DAMAGE, enemy.pos);
         const dx = playerPos.x - enemy.pos.x;
         const dz = playerPos.z - enemy.pos.z;
         const distance = Math.hypot(dx, dz) || 1;
@@ -135,11 +132,11 @@ export class TowerCombatManager extends CombatManager {
   }
 
   update(dt, t, playerPos) {
-    this._updateFeel(dt);
-    this.vfx.update(dt);
+    this._updateFeel(dt);   // advances the shared vfx + hud too
     if (!this.active || !this.player.controls.isLocked) return;
     this._time += dt;
     this._updatePlayerFire(dt);
+    this.hud.trackThreats(this.enemies, this.camera, dt);
     this.bolts.update(dt, this.world);
     this.spits.update(dt, this.world);
     this._testPlayerBolts();
@@ -155,8 +152,7 @@ export class TowerCombatManager extends CombatManager {
   abortFight() {
     this._disposeThreats();
     this._stage = -1;
-    super.abortFight();
-    this.vfx.reset();
+    super.abortFight();   // resets the shared vfx pools
   }
 
   stop() {
@@ -171,7 +167,6 @@ export class TowerCombatManager extends CombatManager {
 
   dispose() {
     super.dispose();
-    this.vfx.dispose();
     this._onTowerEvent = null;
   }
 }
