@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import {
   CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
-  ENDING, ARTIFACT_API, wait,
+  ENDING, PLATFORM_API, wait,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { createWorld, ZONES } from './zones/index.js';
@@ -47,7 +47,7 @@ export class Game {
     // browser reload restarts progress).
     this.collectedByZone = { zone1: new Set(), zone2: new Set(), zone3: new Set() };
     this.artifacts = new ArtifactManager(this.world.scene, this.world, this.collectedByZone.zone1);
-    this.api = new APIManager(ARTIFACT_API.COLLECTION_URL);
+    this.api = new APIManager(PLATFORM_API);
     this.viewmodel = new ViewModel(this.camera);   // first-person hand
     this.audio = new AudioManager();
     // Strings v2.0: the main zone hosts a Memory Rift gateway; the Guardian
@@ -123,7 +123,7 @@ export class Game {
     this.player.controls.unlock();
     await this.discovery.show(nearest.data, this.world.zone.name, () => {
       this.artifacts.collect(nearest);
-      void this.api.recordArtifactCollection(nearest.data, this.world.zone.name);
+      void this.api.requestArtifactUnlock();
       this.audio.removeEcho(nearest);   // silence this artifact's echo on pickup
       this._updateArtifactCount();      // whole-zone progress (e.g. 4 / 11)
     });

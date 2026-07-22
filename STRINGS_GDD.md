@@ -188,17 +188,18 @@ When the player interacts with an artifact, the following sequence plays:
 4. **"Saved to your Digital Museum"** confirmation
 5. **Fade back** to the submerged world
 
-The API call logs:
-```json
-{
-  "artifact_id": "bubu_001",
-  "artifact_name": "Bubu (Bamboo Fish Trap)",
-  "zone": "Bonuan Bangus Fishponds",
-  "discovered_at": "[timestamp]",
-  "player_session": "[session_id]",
-  "real_world_data": "Fetched from City-Wide Portal API"
-}
-```
+The platform connection uses a browser-authorized game session. The title and
+Settings screens expose **Connect Platform Account**; the game sends its configured
+Game ID to `POST /api/session`, opens the returned `signinUrl`, then polls
+`GET /api/session` every three seconds with the returned Session Token as a bearer
+token. `pending` continues polling, `authorized` stops it, and `expired` creates a
+replacement session.
+
+After an in-game artifact is committed to Aking Museo, the game requests the single
+platform artifact through `POST /api/artifacts/unlock` with the same bearer token. If
+authorization is incomplete, the unlock is queued and flushed when authorization
+succeeds. Platform errors never roll back local collection or block zone progression,
+and duplicate unlock requests remain safe through the platform's idempotency.
 
 ---
 

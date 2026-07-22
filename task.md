@@ -583,3 +583,20 @@ cohesive tower HUD, without changing gameplay, audio, progression, or render pip
 - [x] Verify faint/retry/victory cleanup leaves no VFX or stale HUD state
 - [x] Run syntax, whitespace, file-limit, and scoped-diff checks
 - [ ] User manual verify VFX/readability/fit; stop before any excluded Phase 5E work
+
+## Platform session + artifact unlock API (2026-07-22)
+
+Goal: connect a player's platform account through the browser-managed authorization
+flow and unlock the game's platform artifact after an in-game artifact is recovered.
+
+- [x] Inspect the existing placeholder API client, collection call site, title/settings UI, and configuration
+- [x] Load the gameplay-systems, game-UI, and QA/release workflow guidance required for this integration
+- [x] Record the session lifecycle, unlock trigger, UI states, failure behavior, and verification plan
+- [ ] User review and approve `implementation_plan.md`
+- [ ] Supply the deployed platform API base URL and Game ID
+- [x] Replace the placeholder collection notifier with the session-token API client
+- [x] Add connect/reconnect controls and accessible pending/authorized/error status
+- [x] Queue unlocks until authorization and keep duplicate unlock calls idempotent
+- [x] Add focused mocked API lifecycle tests without persistent database data
+- [x] Verify all JavaScript syntax, nine mocked lifecycle tests, file limits, whitespace, and stale API names
+- [ ] Browser verify popup, live platform responses, artifact unlock, console/network state, and responsive fit

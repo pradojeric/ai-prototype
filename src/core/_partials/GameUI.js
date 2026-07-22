@@ -2,6 +2,7 @@
 // GAME UI — DOM references + browser input wiring
 // ============================================================
 import { CONFIG } from '../../config.js';
+import { PlatformAccountUI } from '../../ui/PlatformAccountUI.js';
 
 // Keep DOM ownership outside the orchestration class without changing Game's
 // existing element fields. The fields remain on Game because its state-machine
@@ -61,6 +62,11 @@ export function wireGameEvents(game) {
     if (CONFIG.DEBUG_TEST_ENDING_BUTTON) game._testEnding();
   });
   wireSettings(game);
+  game.platformAccountUi = new PlatformAccountUI(game.api);
+  addEventListener('beforeunload', () => {
+    game.platformAccountUi.dispose();
+    game.api.dispose();
+  }, { once: true });
   // A click during the cutscene skips to the white fade.
   addEventListener('click', () => {
     if (game.phase === 'cutscene') game.cutscene.skip();

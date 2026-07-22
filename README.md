@@ -85,6 +85,24 @@ Install the **Live Server** extension, then right-click `index.html` → **Open 
 - **Three.js 0.160.0** (loaded from unpkg via import map)
 - Vanilla JavaScript (ES modules), HTML, CSS — no build step required
 
+## Platform API Configuration
+
+Set `PLATFORM_API.BASE_URL` and `PLATFORM_API.GAME_ID` in `src/config.js` to the
+values assigned by the platform. The checked-in placeholders deliberately disable
+connection attempts. The platform must allow browser CORS requests from the game's
+deployed origin to:
+
+- `POST /api/session` with `{ "gameId": "<GAME_ID>" }`
+- `GET /api/session` with `Authorization: Bearer <sessionToken>`
+- `POST /api/artifacts/unlock` with the same bearer token
+
+The Session Token is stored only in `sessionStorage`; account credentials remain in
+the platform's sign-in page. To run the mocked lifecycle suite:
+
+```bash
+node --experimental-default-type=module --test tests/APIManager.test.mjs
+```
+
 ## Optional Ending Narration
 
 Place the approximately 31-second recording at `assets/audio/ending-voiceover.mp3`, then set `ENDING.VOICEOVER_URL` in `src/config.js` to that path. The ending remains fully timed and uses bilingual subtitles when no recording is configured.

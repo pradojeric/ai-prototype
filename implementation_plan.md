@@ -654,3 +654,118 @@ request currently exists.
    `git diff --check`, and inspect the final diff. Browser Network-panel validation
    remains the manual end-to-end check because the endpoint is intentionally a
    placeholder.
+
+---
+
+## Platform session + artifact unlock API (2026-07-22)
+
+### Scope and player-facing contract
+
+Replace the temporary fire-and-forget collection endpoint with the platform's
+browser authorization flow. The player can connect from the title screen or
+Settings, sees a compact connection state, completes sign-in in a new tab, and can
+continue playing while the game polls authorization. Recovering the first local
+artifact requests the single platform artifact unlock; if sign-in is still pending,
+the request is queued and sent immediately after authorization. Local collection and
+zone progression never depend on platform availability.
+
+Open deployment inputs:
+
+- `BASE_URL`: the platform origin that owns `/api/session` and
+  `/api/artifacts/unlock`.
+- `GAME_ID`: the identifier assigned to Strings by the platform.
+- Request schema assumption pending confirmation: session creation sends JSON
+  `{ "gameId": GAME_ID }`; unlock sends no body because the authorized session's
+  Game ID identifies the platform artifact.
+
+### Technical design
+
+1. Replace `ARTIFACT_API.COLLECTION_URL` in `src/config.js` with a focused
+   `PLATFORM_API` block containing `BASE_URL`, `GAME_ID`, the 3000 ms poll interval,
+   and session-storage keys. Fail configuration validation with a player-readable
+   state instead of issuing requests to placeholder URLs.
+2. Refactor `src/core/APIManager.js` into the only network/session boundary:
+   - create a session with `POST /api/session` and validate `sessionToken` plus
+     `signinUrl` before storing them in `sessionStorage`;
+   - open the sign-in URL from the connect click (pre-open a blank tab so async
+     session creation does not lose browser user activation, then navigate it);
+   - poll `GET /api/session` every three seconds with
+     `Authorization: Bearer <sessionToken>`;
+   - stop on `authorized`, renew on `expired`, and expose stable pending,
+     authorized, expired, and error state events;
+   - call `POST /api/artifacts/unlock` with the same bearer token, coalesce concurrent
+     calls, and treat duplicate-success responses as success;
+   - restore a same-tab browser session from `sessionStorage`, but never persist the
+     token to durable `localStorage` or log it.
+3. Preserve the current `Game._completeInteract()` commit boundary. After
+   `ArtifactManager.collect()` succeeds, request the platform unlock without awaiting
+   it. When unauthorized, `APIManager` records a pending unlock and flushes it once
+   polling reaches `authorized`. Network failures remain retryable and never roll
+   back the museum save, block the discovery card, or interrupt pointer-lock flow.
+4. Extend the existing title and Settings markup using the project's `.menu-btn`
+   patterns. Add Connect/Reconnect controls and an `aria-live` status with concise
+   states: not connected, opening sign-in, waiting for authorization, connected,
+   unlock saved, configuration error, and retryable network error. Keep the state
+   outside the central play path and reuse one UI binding function rather than
+   duplicate rules in event handlers.
+5. Keep lifecycle cleanup explicit: only one poll timer and one in-flight request per
+   operation, abort polling on page teardown, ignore stale responses after session
+   replacement, and preserve the pending unlock across same-tab reloads.
+
+### Verification plan
+
+- Add `tests/APIManager.test.mjs` using Node's built-in test runner with mocked fetch,
+  storage, timers, and browser-opening dependencies. Cover session creation/response
+  validation, bearer headers, pending-to-authorized polling, expiration renewal,
+  queued unlock flush, duplicate coalescing, retryable failures, and token redaction.
+- Run `node --check` for every changed JavaScript file and
+  `node --experimental-default-type=module --test tests/APIManager.test.mjs`.
+- Serve over HTTP and exercise Connect, popup navigation/fallback, pending,
+  authorized, expired/reconnect, artifact collection, queued unlock, API failure,
+  and same-tab reload restoration with the browser console/network panel open.
+- Check title and Settings at desktop and narrow/mobile widths, including focus,
+  disabled, long error-text fit, and `aria-live` updates. A visual regression harness
+  is not warranted for this small status/control addition; targeted screenshots and
+  interaction checks are sufficient.
+- Run `git diff --check`, verify every file remains below 1000 lines, re-read all
+  changes, and inspect the final scoped diff. No database commands or persistent test
+  data are involved.
+
+### Workflow ledgers
+
+Skill loading: director active; gameplay systems loaded from
+`threejs-gameplay-systems/SKILL.md`; UI loaded from
+`threejs-game-ui-designer/SKILL.md`; QA/release loaded from
+`threejs-qa-release/SKILL.md`; AAA graphics, debug/profile, and 3D/image/audio
+generators are not needed because no rendering, profiling, or asset work is in scope.
+
+References: gameplay workflows loaded from
+`threejs-gameplay-systems/references/gameplay-workflows.md`; UI patterns loaded from
+`threejs-game-ui-designer/references/ui-patterns.md`; UI quality, HUD readability,
+and responsive-fit checklists loaded; QA/release, visual verification, playtest, and
+release checklists loaded. Design/level, physics, game-feel, premium graphics, and
+asset-generation references are not needed for this narrow account integration.
+
+Phase ledger: gameplay systems implemented and covered by mocked lifecycle tests; UI
+implemented with shared state binding, accessible status, and responsive constraints;
+QA/release static checks passed, while the local HTTP/browser check is blocked by the
+declined localhost bind permission and missing deployed API values. External asset
+sourcing, AAA graphics, and debug/profile skipped as out of scope.
+
+### Verification evidence (2026-07-22)
+
+- All `src/**/*.js` modules pass `node --check`.
+- `node --experimental-default-type=module --test tests/APIManager.test.mjs` passes
+  9/9 cases covering creation, token-only storage, sign-in navigation, exact 3000 ms
+  pending polling, bearer authorization, queued unlock flush, expiration renewal,
+  reload restoration, concurrent-call coalescing, unsafe URL rejection, retryable
+  unlock failure, redacted logs, and inert placeholder configuration.
+- `git diff --check` passes; no changed runtime file reaches the 1000-line limit;
+  stale placeholder collection API symbols are absent from runtime source.
+- UI checklist static evidence: shared state source, `.menu-btn` reuse, 44 px minimum
+  targets, focus/hover/pressed/disabled states, `aria-live` status, constrained title
+  layout, and scroll-safe Settings at narrow heights. Browser screenshots, popup
+  behavior, console/network checks, and live CORS/API responses remain unverified.
+- Visual regression harness skipped: this is a small deterministic text/control state
+  addition with no canvas, generated-asset, or render-pipeline changes; focused UI and
+  lifecycle smoke checks are the appropriate coverage.

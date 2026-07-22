@@ -23,10 +23,16 @@ export const CONFIG = {
   DEBUG_TEST_ENDING_BUTTON: true, // true → show a title-menu shortcut for the full final cutscene
 };
 
-// Replace this reserved example URL with the deployed City-Wide Portal endpoint.
-// Artifact collection remains local when this placeholder cannot be reached.
-export const ARTIFACT_API = {
-  COLLECTION_URL: 'https://api.example.com/artifacts/collect',
+// Supply the platform-assigned values before deployment. Placeholder values keep
+// the account UI disabled and prevent accidental requests to an unknown service.
+export const PLATFORM_API = {
+  BASE_URL: 'https://gameonportal.ph/api',
+  GAME_ID: 'YOUR_GAME_ID',
+  POLL_INTERVAL_MS: 3000,
+  STORAGE_KEYS: {
+    sessionToken: 'strings.platformSessionToken',
+    pendingUnlock: 'strings.platformPendingUnlock',
+  },
 };
 
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).
@@ -80,21 +86,31 @@ export const ENDING = {
   MUSEUM_DURATION: 13.5,
   RESTORED_DURATION: 31,
   SUBTITLES: [
-    { start: 0.4, end: 5.0,
+    {
+      start: 0.4, end: 5.0,
       en: 'When memory is carried home, the waters loosen their hold.',
-      fil: 'Kapag naiuwi ang alaala, bumibitaw ang pagkakahawak ng tubig.' },
-    { start: 5.0, end: 11.0,
+      fil: 'Kapag naiuwi ang alaala, bumibitaw ang pagkakahawak ng tubig.'
+    },
+    {
+      start: 5.0, end: 11.0,
       en: 'The food of Pangasinan returns to tables, streets, and living hands.',
-      fil: 'Nagbabalik sa hapag, lansangan, at buhay na kamay ang pagkaing Pangasinense.' },
-    { start: 11.0, end: 17.5,
+      fil: 'Nagbabalik sa hapag, lansangan, at buhay na kamay ang pagkaing Pangasinense.'
+    },
+    {
+      start: 11.0, end: 17.5,
       en: 'Drums answer the morning. Festivals gather every scattered voice.',
-      fil: 'Sumasagot ang mga tambol sa umaga. Muling nagtitipon ang bawat tinig.' },
-    { start: 17.5, end: 24.0,
+      fil: 'Sumasagot ang mga tambol sa umaga. Muling nagtitipon ang bawat tinig.'
+    },
+    {
+      start: 17.5, end: 24.0,
       en: 'Landmarks stand beneath a clear sky, holding faith and homecoming.',
-      fil: 'Nakatindig sa maaliwalas na langit ang mga pook ng pananampalataya at pag-uwi.' },
-    { start: 24.0, end: 29.0,
+      fil: 'Nakatindig sa maaliwalas na langit ang mga pook ng pananampalataya at pag-uwi.'
+    },
+    {
+      start: 24.0, end: 29.0,
       en: 'The Strings fade, but what they joined will not be forgotten.',
-      fil: 'Naglalaho ang mga Hibla, ngunit hindi malilimutan ang kanilang pinag-ugnay.' },
+      fil: 'Naglalaho ang mga Hibla, ngunit hindi malilimutan ang kanilang pinag-ugnay.'
+    },
   ],
   // The gameplay bloom (0.8 / 0.6 / 0.2) is tuned for the dark underwater
   // world; the bright ending scenes push everything over that low threshold
