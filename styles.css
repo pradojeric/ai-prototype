@@ -507,7 +507,10 @@
       pointer-events: none;
       transition: opacity .8s ease;
       z-index: 21;
-      padding: 5vw;
+      padding: clamp(28px, 5vw, 64px);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     #discovery.active {
@@ -516,13 +519,15 @@
     }
 
     #discovery .card {
-      max-width: 620px;
+      width: min(100%, 680px);
+      margin: auto;
+      padding-block: 8px;
     }
 
     #discovery .icon {
-      width: 160px;
-      height: 160px;
-      margin: 0 auto 30px;
+      width: clamp(112px, 18vw, 160px);
+      height: clamp(112px, 18vw, 160px);
+      margin: 0 auto clamp(22px, 4vh, 30px);
       border-radius: 12px;
       background: linear-gradient(135deg, #2a4f52, #6fd8d0);
       object-fit: contain;
@@ -543,8 +548,10 @@
     }
 
     #discovery .fil {
-      font-size: 38px;
+      font-size: clamp(28px, 5vw, 38px);
+      line-height: 1.12;
       letter-spacing: 1px;
+      text-wrap: balance;
     }
 
     #discovery .eng {
@@ -561,17 +568,38 @@
       margin: 22px auto;
     }
 
-    #discovery .fact {
-      font-size: 17px;
-      line-height: 1.75;
+    #discovery .story {
+      display: grid;
+      gap: 16px;
+      text-align: left;
     }
 
-    #discovery .note {
-      font-size: 15px;
-      line-height: 1.7;
-      margin-top: 18px;
-      opacity: .8;
-      font-style: italic;
+    #discovery .story-section {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    #discovery .story-label {
+      padding-top: 5px;
+      color: #8a6a3a;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    #discovery .story-copy {
+      font-size: clamp(15px, 2vw, 17px);
+      line-height: 1.72;
+    }
+
+    #discovery .story-divider {
+      margin-left: 94px;
+      color: #c9a16b;
+      font-size: 10px;
+      line-height: 1;
     }
 
     #discovery .zone {
@@ -601,6 +629,37 @@
       font-size: 13px;
       opacity: .45;
       letter-spacing: 2px;
+    }
+
+    @media (max-width: 560px) {
+      #discovery {
+        justify-content: flex-start;
+        padding: 24px 20px 32px;
+      }
+
+      #discovery .card {
+        padding-block: 4px;
+      }
+
+      #discovery .story-section {
+        grid-template-columns: 1fr;
+        gap: 7px;
+      }
+
+      #discovery .story-label {
+        padding-top: 0;
+      }
+
+      #discovery .story-divider {
+        margin-left: 0;
+        text-align: center;
+      }
+
+      #discovery .zone,
+      #discovery .saved,
+      #discovery .cont {
+        letter-spacing: 1.5px;
+      }
     }
 
     /* ---- Zone complete ---- */

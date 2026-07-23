@@ -1,3 +1,30 @@
+# Task — Artifact Origins & Lore Discovery Cards (2026-07-23)
+
+## Objective
+
+Rewrite all 27 artifact records as historically grounded Origin and Lore
+descriptions, then update the discovery overlay to present both sections as one
+cohesive, readable museum story.
+
+## Checklist
+
+- [x] Inspect `src/data.js`, `src/ui/DiscoveryScreen.js`, discovery markup/styles,
+      and the collection/museum replay call path
+- [x] Lock content direction with user: all zones, historically grounded, English
+      with Filipino/Pangasinan terms, medium length, correct names where needed
+- [x] Start MCP research with Philippine government and institutional sources
+- [x] Write scoped implementation plan
+- [x] User review and approval of `implementation_plan.md`
+- [x] Complete and record source-backed research for all 27 entries
+- [x] Replace `fact`/`note` with `origin`/`lore` in every artifact record
+- [x] Update discovery markup, renderer, and responsive styling
+- [x] Audit stale `fact`/`note` consumers and preserve API/museum behavior
+- [x] Run syntax, reference, line-count, and whitespace checks
+- [ ] Manually verify desktop/mobile discovery text fit and museum replay in browser
+      (local server sandbox denied; escalated server permission declined)
+
+---
+
 # Task — Zone 1 (PONSIA) Prototype
 
 ## Objective

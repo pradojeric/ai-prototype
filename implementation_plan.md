@@ -1,3 +1,103 @@
+# Implementation Plan — Artifact Origins & Lore (Awaiting Approval)
+
+## Approved content direction
+
+- Rewrite all 27 artifacts across PONSIA, LIKET, and PANANISIA.
+- Replace the current `fact` and `note` model with explicit `origin` and `lore`
+  fields.
+- Keep the writing historically grounded: no invented flood mythology or fictional
+  provenance presented as history.
+- Use natural English while retaining Filipino and Pangasinan names and culturally
+  important terms.
+- Target one short paragraph per section (medium length).
+- Correct or standardize artifact names when reliable sources support the change.
+- Present Origin and Lore together as one continuous museum-style reading experience.
+
+## Research and editorial method
+
+1. Build a 27-entry research ledger grouped by zone.
+2. Prefer primary and authoritative Philippine sources: NHCP registries, provincial
+   and municipal government pages, DOT/TPB, DOST, church or site custodians, and
+   established Philippine cultural institutions.
+3. Cross-check specific dates, claimed places of origin, festival names, titles,
+   and superlatives. Treat tourism copy as evidence of current identity, not
+   automatically as proof of historical origin.
+4. Grade each entry:
+   - **Confirmed:** direct authoritative support exists.
+   - **Supported:** multiple credible sources agree, but no primary history is found.
+   - **Tradition:** preparation or community association is documented, while the
+     precise inventor/date is unknown.
+   - **Needs correction:** the current name or claim is unsupported or conflicts
+     with reliable evidence.
+5. For undocumented beginnings, say that the tradition developed in or became
+   associated with a community; do not invent a founder, date, or origin legend.
+6. Keep citations in an internal research ledger rather than placing URLs inside
+   player-facing prose.
+
+The initial MCP search already confirms useful official coverage for Pista'y Dayat,
+Bagoong Festival, Bangus Festival, Manaoag, and broader Pangasinan history. Several
+current LIKET festival labels did not return authoritative matches in the first pass;
+they will receive targeted verification before copy is finalized.
+
+## Data changes
+
+1. In `src/data.js`, retain every gameplay-critical field unchanged:
+   `id`, `fil`, `eng`, `spawnTag`, `image`, and `zone`.
+2. Replace:
+   - `fact` with `origin`
+   - `note` with `lore`
+3. Write `origin` as the documented beginning, locality, cultural development, or
+   historical association of the subject.
+4. Write `lore` as the subject's documented community meaning, practice, remembered
+   tradition, symbolism, or role in Pangasinan life. “Lore” will remain historical
+   and cultural, not fictional.
+5. Audit every code consumer and outbound artifact payload so the rename does not
+   silently produce missing content.
+
+## Discovery overlay changes
+
+1. Update `index.html` to replace the separate fact/note nodes with an
+   `Origin & Lore` story region containing:
+   - a small `ORIGIN` heading and origin paragraph;
+   - a visual continuation marker;
+   - a small `LORE` heading and lore paragraph.
+2. Update `src/ui/DiscoveryScreen.js` to bind `d.origin` and `d.lore`. Cache the
+   required DOM nodes in the constructor rather than repeatedly querying them during
+   every discovery.
+3. Preserve the existing public `show(artifactData, zoneName, onSaved)` contract,
+   collection callback timing, museum replay behavior, fade timing, zone label, and
+   dismissal interaction.
+4. Give the image a descriptive `alt` value derived from the artifact name.
+5. Update `styles.css` so the longer story remains readable:
+   - stable centered card width;
+   - restrained section labels and readable paragraph measure;
+   - vertical scrolling for short viewports;
+   - responsive image/title/type sizing using `clamp`;
+   - no clipped Saved/Continue messaging.
+6. Keep the current parchment/museum visual language; no generated image assets or
+   unrelated HUD redesign are in scope.
+
+## Verification
+
+- Run `node --check` on touched JavaScript modules.
+- Search for stale `.fact`, `.note`, `d-fact`, and `d-note` references.
+- Confirm all 27 entries contain non-empty `origin` and `lore` fields and retain
+  unique ids, valid zone numbers, and existing asset paths.
+- Check every touched source file remains under 1000 lines.
+- Run `git diff --check`.
+- Browser checks, if the local environment permits:
+  - newly collected artifact card;
+  - museum replay card (no collection callback);
+  - longest entry at desktop and narrow/mobile viewport sizes;
+  - scrolling, dismissal, image fallback, and clean console.
+
+## Scope boundary
+
+No gameplay, artifact spawning, collection progression, API session behavior,
+museum population, audio, guardian, arena, or asset changes are included.
+
+---
+
 # Implementation Plan — Strings v2.0 (Memory Arenas, Active Riddle Combat, Guardian Souls)
 
 ## Context
