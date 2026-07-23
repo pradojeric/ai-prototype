@@ -8,7 +8,7 @@ const MODEL_FOOT_Y = 0.1;
 const CHARGE_HIT_RADIUS = 1.35;
 
 export const TOWER_KEEPER_TUNING = {
-  HP: 60,
+  HP: 20,
   HIT_RADIUS: 2.3,
   PHASE_THRESHOLDS: [0.66, 0.33],
   ENRAGE_INVULN: 1,

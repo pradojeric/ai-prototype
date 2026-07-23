@@ -9,7 +9,7 @@ import { ArenaBoss } from './ArenaBoss.js';
 import { RevelerProjectilePool } from './RevelerProjectilePool.js';
 
 const REVELER_TUNING = {
-  HP: 100,
+  HP: 20,
   ANCHORS: [-5.5, 0, 5.5],
   MOVE_WARNING: 0.45,
   MOVE_DURATION: 0.6,

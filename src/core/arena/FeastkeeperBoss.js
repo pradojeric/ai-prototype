@@ -18,7 +18,7 @@ import { ArenaBoss } from './ArenaBoss.js';
 // These live here, beside the mechanics that read them, rather than in config.js
 // where three unrelated boss fights would pile into one block.
 export const FEASTKEEPER_TUNING = {
-  HP: 100,
+  HP: 10,
   SHOT_INTERVAL: [2.6, 1.9, 1.3],
   TELEGRAPH: 0.45,                  // warning pulse before each shot leaves
   SPIT_SPEED: 11,
@@ -26,7 +26,7 @@ export const FEASTKEEPER_TUNING = {
   SUMMON_INTERVAL: [[7, 10], [5, 8], [3.5, 6]],   // randomized [min, max] per phase
   SUMMON_SIZES: [1, 3, 5],          // group size drawn per summon, weighted by phase
   SUMMON_RANGED_SHARE: 3,           // one spitter per this many summoned echoes
-  MAX_ADDS: 8,                      // live-add ceiling; summons skip past this
+  MAX_ADDS: 5,                      // live-add ceiling; a summon is skipped while this many echoes are alive
 };
 
 export class FeastkeeperBoss extends ArenaBoss {
@@ -91,10 +91,14 @@ export class FeastkeeperBoss extends ArenaBoss {
   }
 
   // Summon a mixed group (roughly a third ranged) through the manager's normal
-  // spawn path, so each echo still arrives behind its woven-thread tear.
+  // spawn path, so each echo still arrives behind its woven-thread tear. The
+  // group is trimmed to the room left under MAX_ADDS so the live count never
+  // overshoots the cap, even when a big draw lands on an already-busy field.
   _summon(count) {
-    if (this.combat.aliveCount() >= this.tuning.MAX_ADDS) return;
-    const spitters = Math.floor(count / this.tuning.SUMMON_RANGED_SHARE);
-    this.combat.spawnExtra(count - spitters, spitters);
+    const room = this.tuning.MAX_ADDS - this.combat.aliveCount();
+    if (room <= 0) return;
+    const n = Math.min(count, room);
+    const spitters = Math.floor(n / this.tuning.SUMMON_RANGED_SHARE);
+    this.combat.spawnExtra(n - spitters, spitters);
   }
 }

@@ -1,3 +1,20 @@
+# Task — Bring Enemy Direction Arrows Inward (2026-07-23)
+
+## Objective
+
+Move off-screen enemy direction arrows closer to the crosshair so they remain
+readable during combat, without changing tracking or enemy visibility behavior.
+
+## Checklist
+
+- [x] Trace the threat-marker projection and edge-clamp path
+- [x] Confirm the marker is controlled by the shared HUD configuration
+- [x] Reduce the threat-marker clamp radius from `0.86` to `0.62`
+- [x] Run syntax, focused behavior, line-count, and whitespace checks
+- [ ] Manually verify arrow readability during browser combat
+
+---
+
 # Task — Artifact Origins & Lore Discovery Cards (2026-07-23)
 
 ## Objective

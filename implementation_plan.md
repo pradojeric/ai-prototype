@@ -1,3 +1,24 @@
+# Implementation Plan — Enemy Direction Arrow Readability
+
+## Scope and intent
+
+The shared off-screen threat marker currently clamps to `0.86` of the viewport
+half-extents, placing it close to the screen edge. Reduce
+`HUD.THREAT_MARGIN` to `0.62` so enemy arrows sit substantially nearer the
+crosshair while remaining outside the central aiming area.
+
+## Implementation
+
+1. Change only the shared `THREAT_MARGIN` tuning value in `src/config.js`.
+2. Preserve `CombatHud.trackThreats()` projection, behind-camera correction,
+   arrow rotation, pooling, update interval, and enemy-type styling.
+3. Run JavaScript syntax checks, a focused static assertion for the new value,
+   file-length checks, and `git diff --check`.
+4. Leave final visual/readability confirmation to an in-browser combat smoke
+   test because static checks cannot prove canvas/HUD composition.
+
+---
+
 # Implementation Plan — Artifact Origins & Lore (Awaiting Approval)
 
 ## Approved content direction

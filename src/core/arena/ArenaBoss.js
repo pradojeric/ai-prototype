@@ -32,10 +32,10 @@ export const BOSS_DEFAULTS = {
 
 export class ArenaBoss {
   /**
-   * @param {object} guardian   the arena's live Guardian (supplies the body)
-   * @param {object} combat     the arena's CombatManager
-   * @param {object} audio      AudioManager
-   * @param {object} player     PlayerController (read for the pointer-lock guard)
+   * @param {any} guardian   the arena's live Guardian (supplies the body)
+   * @param {any} combat     the arena's CombatManager
+   * @param {any} audio      AudioManager
+   * @param {any} player     PlayerController (read for the pointer-lock guard)
    * @param {object} [tuning]   subclass numbers, spread over BOSS_DEFAULTS
    */
   constructor(guardian, combat, audio, player, tuning = {}) {

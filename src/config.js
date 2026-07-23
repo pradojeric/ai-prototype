@@ -289,7 +289,7 @@ export const HUD = {
   DMG_ARC_LIFE: 0.9,          // seconds an arc takes to fade out
   THREAT_MARKERS: 8,          // off-screen echo markers
   THREAT_INTERVAL: 0.05,      // seconds between marker refreshes (~20 Hz)
-  THREAT_MARGIN: 0.86,        // screen-edge inset markers clamp to (0..1 of half-extent)
+  THREAT_MARGIN: 0.62,        // pull off-screen arrows inward, nearer the crosshair
   HEALTH_LAG: 1.1,            // ghost-fill drain rate, fraction of the bar per second
 };
 

@@ -516,9 +516,16 @@ export const arena3 = {
   id: 'arena3',
   name: 'Memory Tower — Pananisia',
   label: 'Memory Tower',
-  seed: 20260723,
   controller: 'tower',
   spawnGuardian: false,
+  // Seed for the tower's seeded randomness (riddle draw, combat spawns, Keeper timing).
+  // Drawn fresh on every read instead of a fixed constant so each attempt fetches a
+  // different set of bugtong — TowerGateManager re-reads world.zone.seed each time it
+  // rebuilds the gates (on entry and on every retry). arena3 geometry uses no rng, so
+  // the tower itself is unaffected.
+  get seed() {
+    return (Math.random() * 0x1_0000_0000) >>> 0;
+  },
   playerStart: {
     x: ROUTE_POINTS[0].x,
     y: CONFIG.EYE_HEIGHT,
