@@ -15,8 +15,6 @@ export class TowerGateManager {
     this.hooks = hooks;
     this.riddles = drawRiddles(3, mulberry32(world.zone.seed));
     this.slowRemaining = 0;
-    this._slowUntil = 0;
-    this._slowTimer = null;
     this.elBanner = document.getElementById('arena-riddle');
     this.elHint = document.getElementById('ar-hint');
     this.elFil = document.getElementById('ar-fil');
@@ -53,7 +51,7 @@ export class TowerGateManager {
   }
 
   update(dt, t, playerPos) {
-    this._updateSlow();
+    this._updateSlow(dt);
     for (const gate of this.gates) {
       this._updateVeil(gate, dt, t);
       for (let i = gate.nodes.length - 1; i >= 0; i--) {
@@ -71,9 +69,10 @@ export class TowerGateManager {
     }
   }
 
-  _updateSlow() {
-    if (this._slowUntil <= 0) return;
-    this.slowRemaining = Math.max(0, (this._slowUntil - performance.now()) / 1000);
+  _updateSlow(dt) {
+    if (this.slowRemaining <= 0) return;
+    this.slowRemaining = Math.max(0, this.slowRemaining - dt);
+    if (this.slowRemaining <= 0) this.player.setMovementSlow(1);
     this.hooks.onSlow?.(this.slowRemaining);
   }
 
@@ -126,14 +125,6 @@ export class TowerGateManager {
     node.break();
     this.player.setMovementSlow(TOWER_ARENA.WRONG_SLOW);
     this.slowRemaining = TOWER_ARENA.WRONG_SLOW_TIME;
-    this._slowUntil = performance.now() + TOWER_ARENA.WRONG_SLOW_TIME * 1000;
-    clearTimeout(this._slowTimer);
-    this._slowTimer = setTimeout(() => {
-      this.player.setMovementSlow(1);
-      this.slowRemaining = 0;
-      this._slowUntil = 0;
-      this.hooks.onSlow?.(0);
-    }, TOWER_ARENA.WRONG_SLOW_TIME * 1000);
     this.hooks.onSlow?.(this.slowRemaining);
     this.hooks.onEvent?.('Incorrect seal · movement burdened', 'warning');
     this.combat.vfx.gatePulse(gate.center, false);
@@ -159,6 +150,22 @@ export class TowerGateManager {
 
   allOpen() { return this.gates.every((gate) => gate.open); }
 
+  openAll() {
+    for (const gate of this.gates) {
+      gate.open = true;
+      gate.active = false;
+      gate.veilFade = 0;
+      gate.veil.visible = false;
+      gate.nodes.forEach((node) => node.dispose());
+      gate.nodes.length = 0;
+    }
+    this.slowRemaining = 0;
+    this.player.setMovementSlow(1);
+    this.elBanner?.classList.remove('active');
+    this.hooks.onSlow?.(0);
+    this.hooks.onSeal?.(this.gates.length, this.gates.length);
+  }
+
   reset() {
     for (const gate of this.gates) {
       gate.open = false;
@@ -169,9 +176,6 @@ export class TowerGateManager {
       gate.nodes.length = 0;
     }
     this.slowRemaining = 0;
-    this._slowUntil = 0;
-    clearTimeout(this._slowTimer);
-    this._slowTimer = null;
     this.player.setMovementSlow(1);
     this.elBanner?.classList.remove('active');
     this.hooks.onSlow?.(0);

@@ -1,0 +1,263 @@
+/* Arena 3: compact ascent pressure, seal progress, and transient tower events. */
+#tower-ascent {
+  position: fixed;
+  top: 22px;
+  left: 26px;
+  width: 264px;
+  box-sizing: border-box;
+  padding: 13px 15px 14px;
+  border: 1px solid rgba(127, 232, 255, .2);
+  border-left: 3px solid rgba(127, 232, 255, .72);
+  background: linear-gradient(110deg, rgba(3, 15, 20, .82), rgba(3, 15, 20, .3));
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .28), inset 0 0 28px rgba(42, 170, 194, .04);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity .35s, transform .35s;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .82);
+  z-index: 6;
+}
+
+#tower-ascent.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#tower-ascent .heading-row,
+#tower-ascent .seals {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#tower-ascent .heading {
+  color: #7fe8ff;
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition: color .25s;
+}
+
+#tower-ascent .risk {
+  color: rgba(234, 246, 244, .52);
+  font-size: 8px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+#tower-ascent .readouts {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+#tower-ascent .readouts > div { min-width: 0; }
+
+#tower-ascent .label {
+  display: block;
+  margin-bottom: 2px;
+  color: rgba(234, 246, 244, .58);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+#tower-ascent .readouts strong {
+  display: block;
+  color: #eaf6f4;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+#tower-ascent .primary strong { font-size: 24px; }
+#tower-ascent .secondary { text-align: right; }
+
+#tower-ascent .secondary strong {
+  color: rgba(234, 246, 244, .76);
+  font-size: 15px;
+}
+
+#tower-ascent .track {
+  height: 5px;
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 232, 255, .3);
+  background: rgba(234, 246, 244, .1);
+}
+
+#tower-ascent .fill {
+  width: 0;
+  height: 100%;
+  background: #7fe8ff;
+  box-shadow: 0 0 9px rgba(127, 232, 255, .75);
+  transition: width .12s linear, background .25s, box-shadow .25s;
+}
+
+#tower-ascent .status {
+  margin-top: 7px;
+  color: rgba(234, 246, 244, .66);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: color .25s;
+}
+
+#tower-ascent .seals {
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(127, 232, 255, .14);
+}
+
+#tower-ascent .seals .label { margin: 0 auto 0 0; }
+
+#tower-ascent .seal-pips {
+  display: flex;
+  gap: 5px;
+}
+
+#tower-ascent .seal-pips i {
+  width: 13px;
+  height: 5px;
+  border: 1px solid rgba(127, 232, 255, .36);
+  background: rgba(127, 232, 255, .06);
+  transform: skewX(-18deg);
+  transition: background .3s, box-shadow .3s;
+}
+
+#tower-ascent .seal-pips i.open {
+  background: #7fe8ff;
+  box-shadow: 0 0 8px rgba(127, 232, 255, .75);
+}
+
+#tower-ascent .seal-count {
+  min-width: 31px;
+  color: rgba(234, 246, 244, .72);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+#tower-ascent .slow {
+  display: none;
+  margin-top: 10px;
+  padding: 6px 8px;
+  border-left: 2px solid #f0bd69;
+  color: #f0bd69;
+  background: rgba(240, 189, 105, .09);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+#tower-ascent .slow.active { display: block; }
+
+#tower-event {
+  position: fixed;
+  top: 100px;
+  left: 50%;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 8px 13px;
+  border: 1px solid rgba(127, 232, 255, .22);
+  border-top: 2px solid #7fe8ff;
+  background: rgba(3, 15, 20, .76);
+  color: #dffbff;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  transition: top .25s, opacity .22s, transform .22s;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .82);
+  z-index: 7;
+}
+
+#tower-ascent.active + #tower-event { top: 22px; }
+#tower-event.active { opacity: 1; transform: translate(-50%, 0); }
+#tower-event.warning { border-top-color: #f0bd69; color: #ffe1a8; }
+#tower-event.success { border-top-color: #7fe8ff; color: #dffbff; }
+
+#tower-ascent.warning .heading,
+#tower-ascent.warning .status { color: #f0bd69; }
+
+#tower-ascent.warning { border-left-color: rgba(240, 189, 105, .85); }
+
+#tower-ascent.warning .fill {
+  background: #f0bd69;
+  box-shadow: 0 0 10px rgba(240, 189, 105, .8);
+}
+
+#tower-ascent.critical .heading,
+#tower-ascent.critical .status { color: #ff7669; }
+
+#tower-ascent.critical { border-left-color: rgba(255, 118, 105, .92); }
+
+#tower-ascent.critical .fill {
+  background: #ff7669;
+  box-shadow: 0 0 14px rgba(255, 118, 105, .95);
+  animation: tower-critical .55s ease-in-out infinite alternate;
+}
+
+#tower-fail {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 23;
+  transition: opacity .25s;
+  text-align: center;
+  text-shadow: 0 2px 18px #000;
+}
+
+#tower-fail.active { opacity: 1; }
+
+#tower-fail .title {
+  color: #ff8b7e;
+  font-size: clamp(30px, 5vw, 52px);
+  letter-spacing: 9px;
+  text-transform: uppercase;
+}
+
+#tower-fail .sub {
+  max-width: min(80vw, 520px);
+  margin-top: 12px;
+  color: rgba(234, 246, 244, .75);
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+@keyframes tower-critical {
+  to { opacity: .55; }
+}
+
+@media (max-width: 640px) {
+  #tower-ascent {
+    top: 14px;
+    left: 16px;
+    width: min(264px, calc(100vw - 32px));
+  }
+
+  #tower-event {
+    top: 88px;
+    max-width: calc(100vw - 32px);
+  }
+
+  #tower-ascent.active + #tower-event { top: 190px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tower-ascent.critical .fill { animation: none; }
+
+  #tower-ascent,
+  #tower-event,
+  #tower-ascent .seal-pips i { transition: none; }
+}

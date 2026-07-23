@@ -25,6 +25,7 @@ export const arena2 = {
     z: RAIL_ARENA.CENTER.z,
   },
   guardianStart: { x: 0, z: -31 },
+  guardianEffects: { beacon: false, halo: false },
   guardianName: { fil: 'The Reveler', eng: 'The Reveler' },
   guardianRebuke: 'The festival remembers every missed light.',
   background: 0x07171d,

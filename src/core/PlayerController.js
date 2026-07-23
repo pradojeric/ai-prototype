@@ -59,6 +59,16 @@ export class PlayerController {
   }
 
   setMovementSlow(scale = 1) { this.externalSpeedScale = Math.max(0.1, Math.min(1, scale)); }
+
+  // Focus loss can swallow keyup events. Clear every transient intent at both
+  // pause and resume so a held movement/sprint key cannot remain stuck.
+  resetInput() {
+    this.keys = {};
+    this.velocity.set(0, 0, 0);
+    this.moving = false;
+    this.sprinting = false;
+  }
+
   applyKnockback(dx, dz, strength) {
     if (![dx, dz, strength].every(Number.isFinite)) return;
     const length = Math.hypot(dx, dz);

@@ -1,21 +1,29 @@
 // ============================================================
 // ARENA CONTROLLER (Strings v2.0) — orchestrates a Memory Arena encounter above
-// the reused combat core. It keeps continuous enemy waves running (via
-// CombatManager in endless mode) and, on a cadence, issues a "riddle round":
-// the Feastkeeper's bugtong shows on a non-blocking HUD banner while three
-// shootable AnswerNodes fan out in front of the player. Shooting the CORRECT
-// node strips one of the guardian's armor layers; a WRONG node spawns a penalty
-// wave. When the last armor layer breaks the guardian falls and `won` flips true
-// — Game then collapses the arena and returns to the main zone.
+// the reused combat core. The encounter is a fixed ARENA.TOTAL_WAVES run; each
+// of the ARENA.RIDDLE_WAVES milestones opens a "riddle round" on clear, which
+// HOLDS the wave clock while the Feastkeeper's bugtong shows on a non-blocking
+// banner and three shootable AnswerNodes fan out in front of the player.
+//
+// Shooting the CORRECT node strips one armor layer and resumes the waves. A
+// WRONG node locks the round out: the remaining nodes go inert and a penalty
+// squad spawns, and only when that squad is dead do the nodes relight for
+// another attempt at the same riddle. Breaking the last armor layer opens the
+// boss phase (FeastkeeperBoss) — killing the boss flips `won` and Game collapses
+// the arena back to the main zone.
 //
 // Game owns the scene swap, the player, and the light-bolt firing; this class
-// owns armor, riddle pacing, the answer nodes, and the bolt-vs-node hit test.
+// owns the phase state machine, armor, the answer nodes, and the boss handoff.
 // ============================================================
 import * as THREE from 'three';
 import { ARENA, COMBAT, LUMINA, mulberry32 } from '../../config.js';
 import { drawRiddles } from '../../data.js';
 import { AnswerNode } from './AnswerNode.js';
+import { FeastkeeperBoss } from './FeastkeeperBoss.js';
 import { LuminaManager } from './LuminaManager.js';
+
+const LOCKOUT_HINT = 'The feast answers first — clear the echoes before you choose again.';
+const RIDDLE_HINT = "Shoot the correct answer to break the Feastkeeper's armor.";
 
 export class ArenaController {
   constructor(scene, audio, player, seed = LUMINA.SEED) {
@@ -41,13 +49,18 @@ export class ArenaController {
     this.guardian = null;
     this.armor = ARENA.ROUNDS;
     this.won = false;
+    this.boss = null;
 
     this._riddles = [];        // pre-drawn, one per round
-    this._roundActive = false;
+    // 'waves'  — surviving the wave run, no riddle open
+    // 'riddle' — a bugtong is up and its nodes are answerable
+    // 'locked' — a wrong answer is being paid off; nodes inert until adds die
+    // 'boss'   — armor gone, FeastkeeperBoss owns the fight
+    // 'won'    — boss down, Game is collapsing the arena
+    this._phase = 'waves';
     this._nodes = [];
     this._pendingChoices = null;  // choices waiting out the reveal delay
     this._nodeDelay = 0;          // countdown before the choices spawn
-    this._timer = 0;           // counts up toward the next round
     this._v = new THREE.Vector3();
   }
 
@@ -60,30 +73,84 @@ export class ArenaController {
     this.guardian = guardian;
     this.armor = ARENA.ROUNDS;
     this.won = false;
-    this._roundActive = false;
-    this._timer = 0;
-    if (this.elHint) this.elHint.textContent = "Shoot the correct answer to break the Feastkeeper's armor.";
+    this._phase = 'waves';
+    if (this.elHint) this.elHint.textContent = RIDDLE_HINT;
 
     // Draw one distinct riddle per armor layer (extra +2 as spares in case a
     // round needs re-issuing; only ROUNDS are used in the happy path).
     const rng = mulberry32((Date.now() & 0xffff) ^ 0x21e5);
     this._riddles = drawRiddles(ARENA.ROUNDS + 2, rng);
 
+    this._beginAttempt();
+
+    // A fixed-length wave run, no leash (the player is walled in). Riddle rounds
+    // hang off the wave-cleared callback rather than a wall clock.
+    this._v.set(ARENA.CENTER.x, 0, ARENA.CENTER.z);
+    this.combat.startFight(this._v, {
+      totalWaves: ARENA.TOTAL_WAVES,
+      onWaveCleared: (wave) => this._onWaveCleared(wave),
+    });
+    this.combat.hud.setBossWaves(false);
+    this._showBoss();
+  }
+
+  // Skip the wave run and drop straight into the boss phase. Used when the
+  // player faints mid-boss: they already earned the armor breaks, so replaying
+  // ten waves to reach the same fight would be pure repetition.
+  restartAfterFaint(combat, guardian) {
+    if (this._phase !== 'boss' && this._phase !== 'won') {
+      this.begin(combat, guardian);
+      return;
+    }
+    this._clearRound();
+    if (this.combat && this.combat !== combat) this.combat.setEnemyDefeatedHandler(null);
+    this.combat = combat;
+    this.guardian = guardian;
+    this.armor = 0;
+    this.won = false;
+    this._beginAttempt();
+
+    // `held` so no wave spawns just to be poofed a frame later by the handoff.
+    this._v.set(ARENA.CENTER.x, 0, ARENA.CENTER.z);
+    this.combat.startFight(this._v, { totalWaves: ARENA.TOTAL_WAVES, held: true });
+    this._beginBossPhase();
+  }
+
+  // Per-attempt reward stream, kill routing, and a fresh boss, shared by both
+  // entry points. The boss exists from the first wave so the guardian can flare
+  // its armor at early shots; it only starts acting when `begin()` is called.
+  _beginAttempt() {
+    this._disposeBoss();
+    this.boss = new FeastkeeperBoss(this.guardian, this.combat, this.audio, this.player);
     this._attempt++;
     const luminaSeed = (this.seed ^ LUMINA.SEED ^ Math.imul(this._attempt, 0x9e3779b1)) >>> 0;
     this.lumina.beginAttempt(this.combat, luminaSeed);
     this.combat.setEnemyDefeatedHandler(this._handleEnemyDefeated);
-
-    // Endless waves centered on the arena, no leash (the player is walled in).
-    this._v.set(ARENA.CENTER.x, 0, ARENA.CENTER.z);
-    this.combat.startFight(this._v, { endless: true });
-    this._showArmor();
   }
 
-  // Surface the win condition: one pip per armor layer still standing.
-  _showArmor() {
+  // Surface the win condition on the top-of-screen boss frame: one pip per armor
+  // layer still standing, plus the boss health track once it can be damaged.
+  _showBoss() {
     const name = this.combat?.world?.zone?.guardianName?.eng || 'The Guardian';
-    this.combat?.hud.setWards(name, this.armor, ARENA.ROUNDS);
+    // The health track only appears once the boss can actually be damaged; while
+    // armor holds, the pips alone are the honest readout of progress.
+    const engaged = this._phase === 'boss' && this.boss;
+    this.combat?.hud.setBoss({
+      name,
+      hp: engaged ? this.boss.hp : null,
+      maxHp: engaged ? this.boss.maxHp : null,
+      armor: this.armor,
+      armorTotal: ARENA.ROUNDS,
+    });
+  }
+
+  // Clearing a milestone wave opens that wave's bugtong and stops the wave clock
+  // — the player answers under the pressure already on the field, not a new one.
+  _onWaveCleared(wave) {
+    if (this._phase !== 'waves') return;
+    if (!ARENA.RIDDLE_WAVES.includes(wave)) return;
+    this.combat.holdWaves(true);
+    this._startRound(wave);
   }
 
   update(dt, t, playerPos) {
@@ -97,14 +164,10 @@ export class ArenaController {
     }
 
     if (!this.won) {
-      if (this._roundActive) {
-        this._updateRound(dt, t);
-      } else {
-        // Pace the next riddle: a longer lead-in before the first, shorter after.
-        this._timer += dt;
-        const due = this.armor === ARENA.ROUNDS ? ARENA.RIDDLE_FIRST : ARENA.RIDDLE_CADENCE;
-        if (this._timer >= due) this._startRound();
-      }
+      if (this._phase === 'riddle') this._updateRound(dt);
+      else if (this._phase === 'locked') this._updateLockout();
+      else if (this._phase === 'boss') this._updateBoss(dt, playerPos);
+      else if (this.boss) this.boss.testArmoredHits();   // waves: armor just flares
     }
 
     // Hit priority is enemy -> answer node -> Lumina. Critical riddle progress
@@ -112,15 +175,16 @@ export class ArenaController {
     this.lumina.update(dt, t, playerPos, !this.player.controls.isLocked);
   }
 
-  _startRound() {
+  _startRound(wave) {
     const idx = ARENA.ROUNDS - this.armor;      // 0-based round number
     const riddle = this._riddles[idx] || this._riddles[this._riddles.length - 1];
     this._current = riddle;
-    this._roundActive = true;
-    this._timer = 0;
+    this._phase = 'riddle';
+    if (this.elHint) this.elHint.textContent = RIDDLE_HINT;
 
     // Banner: bugtong text (fil prompt + english gloss) + which armor this breaks.
-    this.elStep.textContent = `Bugtong ${idx + 1} / ${ARENA.ROUNDS} — sirain ang baluti`;
+    this.elStep.textContent =
+      `Bugtong ${idx + 1} / ${ARENA.ROUNDS} — Alon ${wave} — sirain ang baluti`;
     this.elFil.textContent = riddle.prompt;
     this.elEng.textContent = riddle.promptEng || '';
     this.elBanner.classList.add('active');
@@ -153,7 +217,7 @@ export class ArenaController {
     });
   }
 
-  _updateRound(dt, t) {
+  _updateRound(dt) {
     // Reveal delay: spawn the choices only after the player has had a beat to
     // read the riddle.
     if (this._pendingChoices) {
@@ -162,12 +226,12 @@ export class ArenaController {
       return;                       // nothing to shoot yet
     }
 
-    // Test the player's live light-bolts against the un-broken nodes.
+    // Test the player's live light-bolts against the answerable nodes. Nodes
+    // locked out by a wrong answer refuse the hit themselves (AnswerNode.inert).
     if (this.combat && this.combat.bolts) {
       for (const s of this.combat.bolts.slots) {
         if (!s.active) continue;
         for (const n of this._nodes) {
-          if (n.broken) continue;
           if (!n.hitTest(s.mesh.position, COMBAT.BOLT.RADIUS)) continue;
           this.combat.bolts.deactivate(s);
           this._answer(n);
@@ -177,32 +241,76 @@ export class ArenaController {
     }
   }
 
-  // Resolve a shot node: correct strips armor (and may win); wrong penalizes.
+  // Lockout: the surviving choices stay inert until the penalty squad is dead,
+  // so a wrong answer costs a fight instead of being a free second guess.
+  _updateLockout() {
+    if (!this.combat || this.combat.aliveCount() > 0) return;
+    for (const n of this._nodes) n.setInert(false);
+    if (this.elHint) this.elHint.textContent = RIDDLE_HINT;
+    this._phase = 'riddle';
+  }
+
+  // Resolve a shot node: correct strips armor (and may open the boss); wrong
+  // locks the round behind a penalty squad.
   _answer(node) {
     if (node.correct) {
       node.break();
       for (const n of this._nodes) if (!n.broken) n.break();   // shatter the whole round
       this._pendingChoices = null;   // (belt & suspenders — all nodes are already spawned here)
       this._nodeDelay = 0;
-      this._roundActive = false;
-      this._timer = 0;
       this.elBanner.classList.remove('active');
       this.armor = Math.max(0, this.armor - 1);
-      this._showArmor();
+      this._showBoss();
       this.audio.playWaveClear();
-      if (this.armor <= 0) this._win();
+      if (this.armor <= 0) {
+        this._beginBossPhase();
+      } else {
+        this._phase = 'waves';
+        this.combat?.holdWaves(false);   // the wave run resumes where it paused
+      }
     } else {
       node.break();
       this.audio.playPlayerHurt();
-      if (this.combat) {
-        this.combat.spawnExtra(ARENA.PENALTY_CHASERS, 0, {
-          dropMultiplier: LUMINA.PENALTY_DROP_MULT,
-        });
-      }
+      for (const n of this._nodes) if (!n.broken) n.setInert(true);
+      this._phase = 'locked';
+      if (this.elHint) this.elHint.textContent = LOCKOUT_HINT;
+      this.combat?.spawnExtra(ARENA.PENALTY_CHASERS, ARENA.PENALTY_SPITTERS, {
+        dropMultiplier: LUMINA.PENALTY_DROP_MULT,
+      });
     }
   }
 
+  // Armor gone: the wave run is over and the Feastkeeper itself becomes the
+  // fight. Leftover adds are poofed (not killed) so the handoff reads cleanly —
+  // from here every echo on the field is one the boss summoned.
+  _beginBossPhase() {
+    this._phase = 'boss';
+    this.elBanner.classList.remove('active');
+    if (this.combat) {
+      this.combat.holdWaves(true);
+      this.combat.clearEnemies();
+      this.combat.hud.setBossWaves(true);
+    }
+    this.boss?.begin();
+    this._showBoss();
+  }
+
+  _updateBoss(dt, playerPos) {
+    if (!this.boss) return;
+    const before = this.boss.hp;
+    this.boss.update(dt, playerPos);
+    if (this.boss.hp !== before) this._showBoss();
+    if (this.boss.defeated) this._win();
+  }
+
+  _disposeBoss() {
+    if (!this.boss) return;
+    this.boss.dispose();
+    this.boss = null;
+  }
+
   _win() {
+    this._phase = 'won';
     this.won = true;
     this.elBanner.classList.remove('active');
     for (const n of this._nodes) n.break();
@@ -223,7 +331,6 @@ export class ArenaController {
   _clearRound() {
     for (const n of this._nodes) n.dispose();
     this._nodes.length = 0;
-    this._roundActive = false;
     this._pendingChoices = null;
     this._nodeDelay = 0;
     this.elBanner.classList.remove('active');
@@ -231,6 +338,7 @@ export class ArenaController {
 
   dispose() {
     this._clearRound();
+    this._disposeBoss();
     if (this.combat) this.combat.setEnemyDefeatedHandler(null);
     this.lumina.dispose();
     this.combat = null;

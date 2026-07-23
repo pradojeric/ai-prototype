@@ -7,6 +7,8 @@
   <title>STRINGS (Prototype)</title>
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./_partials/arena-hud.css" />
+  <link rel="stylesheet" href="./_partials/rail-arena-hud.css" />
+  <link rel="stylesheet" href="./_partials/tower-arena-hud.css" />
 </head>
 
 <body>
@@ -46,9 +48,19 @@
     <div class="sub"><span id="wave-left">0</span> remain</div>
   </div>
 
-  <!-- Guardian armor/wards: one pip per layer still standing. -->
-  <div id="guardian-wards">
-    <div class="label" id="ward-name">The Reveler</div>
+  <!-- Boss frame: guardian name + health across the top, armor pips beneath it.
+       The bar stays dim while armor holds and lights up once the boss is
+       vulnerable; pre-boss armor states show pips only. -->
+  <div id="boss-bar">
+    <div class="name" id="boss-name">The Reveler</div>
+    <div id="rail-riddle-clock" role="progressbar" aria-hidden="true">
+      <div class="clock-label" id="rail-riddle-label">Riddle 1 in 0:20</div>
+      <div class="clock-segments" id="rail-riddle-segments" aria-hidden="true"></div>
+    </div>
+    <div class="track">
+      <div class="lag" id="boss-hp-lag"></div>
+      <div class="fill" id="boss-hp-fill"></div>
+    </div>
     <div class="pips" id="ward-pips"></div>
   </div>
 
@@ -73,10 +85,6 @@
         <i></i><i></i><i></i>
       </div>
       <span class="seal-count" id="tower-seal-count">0 / 3</span>
-    </div>
-    <div class="keeper" id="tower-keeper">
-      <div class="keeper-row"><span>Keeper resolve</span><strong id="tower-keeper-count">12 / 12</strong></div>
-      <div class="keeper-track"><div id="tower-keeper-fill"></div></div>
     </div>
     <div class="slow" id="tower-slow">Burdened · <span id="tower-slow-time">0.0</span>s</div>
   </div>
@@ -122,6 +130,7 @@
       <button class="menu-btn primary" id="btn-awaken">Awaken</button>
       <button class="menu-btn" id="skipmuseum">Skip to Museum</button>
       <button class="menu-btn" id="test-ending">Test Final Cutscene</button>
+      <button class="menu-btn" id="guardian-debug-zone">Guardian Debug Zone</button>
       <button class="menu-btn" id="btn-settings">Settings</button>
     </div>
     <div class="ver">A drowned-city prototype — Dagupan, Pangasinan</div>
@@ -207,7 +216,7 @@
     <div class="enter" id="zc-enter">Return to your Museum</div>
   </div>
 
-  <div id="resume" style="display:none">
+  <div id="resume" role="dialog" aria-modal="true" aria-label="Game paused" aria-hidden="true" style="display:none">
     <button class="gear" data-settings aria-label="Settings">⚙</button>
     <div class="sub" id="resume-sub">"The gallery waits in the quiet."</div>
     <div class="enter" id="resume-enter">Click to keep looking</div>

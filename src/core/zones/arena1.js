@@ -111,6 +111,7 @@ export const arena1 = {
   seed: 20260720,
   // The Feastkeeper waits ahead of the player's center spawn, facing them.
   guardianStart: { x: 0, z: -10 },
+  guardianEffects: { beacon: false, halo: false },
   guardianName: { fil: 'Bantay ng Piging', eng: 'The Feastkeeper' },
   guardianRebuke: 'You cannot break what you cannot answer. The feast remembers.',
   background: 0x02080a,            // near-black void beyond the ring

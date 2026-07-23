@@ -15,7 +15,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
-import { fadeMat, stackedLimb, buildPot, angDelta } from './primitives.js';
+import { fadeMat, pulseEmissive, stackedLimb, buildPot, angDelta } from './primitives.js';
 
 export function buildZone1Golem(figure) {
   // Reference palette: mossy sea-green armor, tan-olive bamboo, terracotta
@@ -28,7 +28,7 @@ export function buildZone1Golem(figure) {
   const matPot   = fadeMat(0x6b4a35, gold, 0.06, 0.95, 0.8, 0.02);  // terracotta
   const matHorn  = fadeMat(0x3d4a3a, jade, 0.2, 0.95, 0.5, 0.1);    // dark olive stone
   const matFrond = fadeMat(0x3e6b45, jade, 0.15, 0.85, 0.7, 0.05);  // seaweed
-  const matGlow  = fadeMat(jade, jade, 0, 0.96, 0.3, 0.1);          // runes / eyes / belt
+  const matGlow  = fadeMat(jade, gold, 0, 0.96, 0.3, 0.1);          // gold-lit runes / eyes / belt
   const matWarm  = fadeMat(0xd9a24a, gold, 0, 0.95, 0.5, 0.1);      // lantern-lit food accents
   const fadeMats = [
     [matBody, 0.9], [matLimb, 0.92], [matRope, 0.92], [matPot, 0.95],
@@ -273,6 +273,9 @@ export function buildZone1Golem(figure) {
       figure.position.y = CONFIG.WATER_LEVEL + Math.sin(t * 1.2) * 0.12;
       const yaw = Math.atan2(playerPos.x - groupPos.x, playerPos.z - groupPos.z);
       figure.rotation.y += angDelta(figure.rotation.y, yaw) * Math.min(1, dt * 2.5);
+
+      pulseEmissive(matWarm, t, 0.32, 0.14, 1.35, 0, f);
+      pulseEmissive(matGlow, t, 0.24, 0.12, 1.15, 0.7, f);
 
       const sway = Math.sin(t * 1.1) * 0.08;
       for (const a of arms) {

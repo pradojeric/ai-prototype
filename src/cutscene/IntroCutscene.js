@@ -11,8 +11,9 @@ import { CUTSCENE, MUSEUM, clamp01 } from '../config.js';
 const smooth = (f) => f * f * (3 - 2 * f);   // smoothstep ease
 
 export class IntroCutscene {
-  constructor(museum) {
+  constructor(museum, nextFrame = (callback) => requestAnimationFrame(callback)) {
     this.museum = museum;
+    this._nextFrame = nextFrame;
     this.camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 100);
 
     this.wake = document.getElementById('wake');     // black "eyes closed" overlay
@@ -73,7 +74,7 @@ export class IntroCutscene {
     void this.wake.offsetHeight;              // commit the opaque state
     this.wake.style.transition = '';          // ...then let CSS ease it away
     this._sample(0);
-    requestAnimationFrame(() => { this.wake.style.opacity = '0'; });
+    this._nextFrame(() => { this.wake.style.opacity = '0'; });
     return new Promise((res) => { this._resolve = res; });
   }
 

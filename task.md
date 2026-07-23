@@ -583,3 +583,191 @@ cohesive tower HUD, without changing gameplay, audio, progression, or render pip
 - [x] Verify faint/retry/victory cleanup leaves no VFX or stale HUD state
 - [x] Run syntax, whitespace, file-limit, and scoped-diff checks
 - [ ] User manual verify VFX/readability/fit; stop before any excluded Phase 5E work
+
+## Guardian Debug Zone (2026-07-22)
+
+Goal: provide a debug-only title shortcut to a compact flooded showroom where all
+three Guardian variants can be inspected together without combat or progression.
+
+- [x] Inspect the existing debug zone, Guardian lifecycle, title UI, and game phases
+- [x] Lock the room layout, idle behavior, collision, visibility, and entry contract
+- [x] Rebuild `zoneDebug` as the compact flooded showroom
+- [x] Add the three-Guardian display controller with fixed display-facing animation
+- [x] Add the gated title button and direct `debug` phase entry/resume lifecycle
+- [x] Verify syntax, imports, file limits, diff whitespace, and static debug contracts
+- [ ] User browser verify visuals, collision, no-action behavior, ESC/resume, and console
+
+### Screenshot lineup correction
+
+- [x] Lock left-to-right order as Guardian 2, Guardian 1, Guardian 3
+- [x] Choose a straight, visibly separated lineup with a shared forward direction
+- [x] Replace the triangle layout and inward-facing target with parallel display targets
+- [x] Re-run syntax, import, file-limit, whitespace, and layout-contract checks
+- [ ] User verify screenshot framing and visible gaps in the browser
+
+### Final triangle staging
+
+- [x] Interpret Guardian 1 as the centered front/apex Guardian
+- [x] Move Guardians 2 and 3 behind-left and behind-right with visible gaps
+- [x] Preserve the common forward facing, nearby spawn, collision, and idle animation
+- [x] Re-run syntax, import, file-limit, whitespace, and layout-contract checks
+- [ ] User verify final triangle screenshot composition in the browser
+
+### Clean debug capture
+
+- [x] Hide the first-person hand for the Guardian debug phase only
+- [x] Suppress the crosshair on debug entry and after ESC/resume
+- [x] Verify normal gameplay/arena hand and crosshair paths remain unchanged
+- [x] Re-run syntax, import, file-limit, whitespace, and debug-visibility checks
+
+## Arena Guardian Lighting Removal (2026-07-22)
+
+Goal: remove both the tall locator beacon and chest PointLight from the shared
+Guardians spawned in Arenas 1 and 2, without changing their body animation or
+the debug showroom's default Guardian presentation.
+
+- [x] Trace shared Guardian construction across Arenas 1–3 and the debug showroom
+- [x] Add optional Guardian beacon/halo construction with null-safe update/disposal
+- [x] Disable both effects through Arena 1 and Arena 2 definitions
+- [x] Verify Arena 3's custom Tower Keeper and debug defaults remain unchanged
+- [x] Run syntax, import, file-limit, whitespace, and effect-contract checks
+- [ ] User verify Arenas 1 and 2 have no beacon column or chest light
+
+## Guardian Body Glow VFX (2026-07-22)
+
+Goal: give all three Guardian variants restrained, continuously pulsing body-part
+glow based on the supplied boss references, in both their arena and debug-zone uses.
+
+- [x] Confirm reference-driven colors, continuous pulse behavior, intensity, and scope
+- [x] Add a shared allocation-free emissive pulse helper
+- [x] Apply warm gold chest/rune accents to Guardian 1
+- [x] Apply amber core plus cyan eye/tentacle-tip accents to Guardian 2
+- [x] Apply gold heart/crack plus restrained cyan crest accents to Guardian 3
+- [x] Confirm the effect adds no PointLights, beacons, particles, or gameplay changes
+- [x] Run syntax, import, file-limit, whitespace, and focused contract checks
+- [ ] User browser verify arena and debug-zone glow strength/readability
+
+## Per-Enemy Arena Spawn Portals (2026-07-22)
+
+Goal: telegraph every lesser enemy in all three arena zones with its own reusable
+woven-light portal for one second, then materialize the enemy with shared audio.
+
+- [x] Confirm one portal per enemy, one-second delay, hidden/inactive enemy, shared style, and sound
+- [x] Trace normal-wave, penalty, and reinforcement spawn paths across all arena managers
+- [x] Record the shared portal, timing, audio, cleanup, and verification design
+- [x] User approved `implementation_plan.md`
+- [x] Centralize the one-second pending-spawn contract in the shared combat manager
+- [x] Upgrade the shared telegraph into the woven-light portal and arrival burst
+- [x] Route Arena 2 and Arena 3 threat construction through the pending portal path
+- [x] Add a restrained synthesized portal cue with simultaneous-call protection
+- [x] Verify spawn/cap/cleanup contracts, audio scheduling, syntax, whitespace, and file limits
+- [ ] User browser verify all three arenas and a simultaneous wave spawn
+
+## Woven-Thread Spawn Tear (2026-07-22)
+
+Goal: upgrade the per-enemy spawn portal from pooled rings into a woven-thread
+tear — fishing-line strands unzip a rift the enemy then rises through — over a
+longer 1.4s arc, with the summon hue shared by all three arenas.
+
+- [x] Confirm look (thread tear), rise-out arrival, single hue, and 1.4s pacing with the user
+- [x] Add `COMBAT.EMERGE`, `VFX.TEAR`, and the 1.4s `SPAWN_TELEGRAPH` to config
+- [x] Build `ThreadTear`: whole pool in one `LineSegments2` + one instanced seam (2 draw calls)
+- [x] Open the tear from `spawnTelegraph`, close the matching tear from `spawnArrive`
+- [x] Add the `rig` link + `beginEmerge` to `ThreatBody`; hang Enemy/Rail/Tower bodies off it
+- [x] Offset the hit-test centers by `emergeOffset` so a rising body is shot where it's drawn
+- [x] Restretch `playEnemyPortal` to the new arc and add the strain shimmer
+- [x] Refresh the tear's fat-line resolution on window resize
+- [x] Verify syntax, three r160 line-geometry API, pool/serial reuse, and reset/dispose paths
+- [ ] User browser verify all three arenas, a full wave, a penalty spawn, and a mid-fight resize
+
+## Arena 1 — Wave Cap, Wrong-Answer Lockout, Feastkeeper Boss (2026-07-22)
+
+Goal: give the Zone 1 Memory Arena a shape (10 waves, riddles at 3/6/10), a real
+cost for guessing wrong, and a climactic boss phase behind a Dark-Souls-style
+boss frame at the top of the screen.
+
+- [x] Confirm boss-bar owner, wrong-answer cost, wave pacing, boss behavior, and faint scope with the user
+- [x] Replace timer-driven riddle pacing with `ARENA.TOTAL_WAVES` + `ARENA.RIDDLE_WAVES`; add the `ARENA.BOSS` block
+- [x] Teach `CombatManager` bounded runs: `totalWaves`, `onWaveCleared`, `held`, `holdWaves`, `clearEnemies`, `aliveCount`
+- [x] Add `AnswerNode.setInert()` — dimmed, unshootable choices during a lockout
+- [x] Rebuild the ward row into a top-center boss frame (`#boss-bar`) with `CombatHud.setBoss`/`hideBoss`; keep `setWards` as a shim
+- [x] Share the health ghost-fill drain between the player bar and the boss bar
+- [x] Write `arena/FeastkeeperBoss.js`: telegraphed shots, irregular 1/3/5 summons, two enrage phases, armored pings
+- [x] Rework `ArenaController` into a `waves/riddle/locked/boss/won` state machine
+- [x] Resume at the boss phase after a faint via `restartAfterFaint` (with a `begin` fallback for rail/tower)
+- [x] Verify syntax, dead-reference removal, and the 1000-line limit on every touched file
+- [ ] User browser verify: 10-wave counter, riddle gating at 3/6/10, lockout retry, boss phases, boss-phase respawn, zones 2 and 3 unaffected
+- [x] Extract `arena/ArenaBoss.js` as the shared boss contract; move all boss tuning out of `config.js` into the subclass files
+
+## Arena 2 — High-Pressure Riddles and Reveler Boss (2026-07-22)
+
+Goal: remove dead time from the stationary-boat encounter, keep every enemy portal
+inside the river, expose the three riddle deadlines, and add a full Reveler boss phase.
+
+- [x] Confirm enemy intensity, riddle cadence, answer reveal, riddle enemy behavior, boss movement/attacks, projectile formations, and retry scope
+- [x] Record the decision-complete implementation design in `implementation_plan.md`
+- [x] Replace fixed waves with seeded 3–5s random groups, an eight-threat cap, empty-river acceleration, and water-only spawn sampling
+- [x] Cancel pending portals at riddle entry and pause encounter clocks while pointer lock is released
+- [x] Add the three-segment 0:20 / 0:55 / 1:30 riddle meter and rail-specific responsive CSS partial
+- [x] Spawn all three answer lanterns together, stage them at the river midpoint, hold them inert for 3s, then launch them simultaneously
+- [x] Add `RevelerBoss` with 100 HP, lateral hops, phase-scaled random summons, and boss-only retry
+- [x] Add the pooled 2s-charge projectile formations with immediate reflection, random launch staggering, boat damage, and homing reflected damage
+- [x] Preserve Lumina, Boat Integrity, Zone 2 Soul/artifact return, and Arena 1/3 behavior
+- [x] Run syntax, whitespace, import, and file-length checks
+- [ ] Browser verify full Arena 2 flow, retry scopes, responsive HUD, console, and Arena 1/3 regressions
+
+### Arena 2 projectile-readability follow-up (2026-07-22)
+
+- [x] Confirm a 2s boss-orb charge, 1s lantern travel, 3s reading hold, and ±4.5m lineup with the user
+- [x] Reduce the Reveler formation charge from 3s to 2s
+- [x] Move the lanterns for 1s to a level midpoint lineup at x = -4.5 / 0 / +4.5 before the reading hold
+- [x] Preserve simultaneous launch, six-second attack flight, retry behavior, and pointer-lock pause
+- [x] Run focused syntax, reference, whitespace, and file-limit checks
+
+## Global Focus Pause Hardening (2026-07-22)
+
+Goal: make Escape, window blur, and hidden-tab transitions enter one reliable
+pause state that freezes every game timer and cannot strand the player unlocked.
+
+- [x] Trace focus, pointer-lock, phase, timer, input, and audio ownership
+- [x] Confirm all gameplay, museum, arena, debug, and cinematic phases are pausable
+- [x] Confirm all game timers freeze and music continues quietly while SFX are muted
+- [x] Record the centralized pause/resume design in `implementation_plan.md`
+- [x] User approve `implementation_plan.md`
+- [x] Add the idempotent global pause controller and phase policy
+- [x] Freeze active game time, async gameplay waits, and remaining wall-clock effects
+- [x] Clear held inputs and add quiet/restored audio-bus behavior
+- [x] Require confirmed pointer-lock acquisition before leaving Pause
+- [x] Run focused pause tests, syntax/import checks, whitespace, and file-limit audits
+- [x] Reproduce the Resume → second Escape regression with native unlock event ordering
+- [x] Prevent native Escape from arming a stale programmatic-unlock guard
+- [x] Re-run the repeated Escape regression and pause verification checks
+- [ ] User browser verify Escape, blur/tab hide, settings, and every game phase
+
+## Arena 3 — Tower Combat and Summit Boss Upgrade (2026-07-22)
+
+Goal: make the tower ascent threats authored and readable, replace the open summit
+ring with a real boss deck, and give the Keeper a three-phase action fight using the
+shared combat HUD and existing Zone 3 Guardian body.
+
+- [x] Read `Arena1.md` and trace Arena 3 geometry, combat, Keeper, retry, and HUD ownership
+- [x] Confirm fixed Gargoyle sentries, upgraded Gale flyers, octagonal summit, boss phases, retry, tide, and hybrid HUD
+- [x] Record the approved implementation contract in `implementation_plan.md`
+- [x] Replace the summit ring/shaft with the supported octagonal deck and authored add anchors
+- [x] Pre-place four fixed Gargoyles with telegraphed wing slams and vertical HUD filtering
+- [x] Move seeded Gale spawns into the tower center circle and restrict movement to vertical tracking
+- [x] Add Tower combat modes, per-source projectile damage, caps, and complete cleanup
+- [x] Rebuild the Keeper as a 60-HP three-phase shot/charge/summon encounter
+- [x] Add the charge lane telegraph, bounded rush, single-hit damage, and recovery window
+- [x] Freeze the boss tide, clear ascent pressure, and preserve boss-only retry at the summit
+- [x] Transition from ascent HUD to the shared boss bar and summoned-threat counter
+- [x] Extract tower CSS into `_partials/tower-arena-hud.css` with responsive/reduced-motion states
+- [x] Re-read every edited file and correct integration errors
+- [x] Run syntax, unit, import, whitespace, duplicate-ID, file-limit, and focused contract checks
+- [ ] Browser verify ascent, summit, all boss phases, both retries, HUD fit, pause, and Arena 1/2 regressions
+
+## Arena 3 — Encounter Guide (2026-07-23)
+
+- [x] Confirm `Arena1.md` structure and current Arena 3 implementation details
+- [x] Create `Arena3.md` covering ascent, seals, summit boss, retry, HUD, and code ownership
+- [x] Verify documented values against source and run Markdown whitespace/file-limit checks

@@ -51,6 +51,7 @@ export class AnswerNode {
     this.correct = !!choice.correct;
     this.pos = pos.clone();
     this.broken = false;
+    this.inert = false;   // locked out after a wrong answer — dimmed, unshootable
     this.dead = false;
     this._fade = 1;
     this._t0 = Math.random() * Math.PI * 2;   // bob phase offset
@@ -116,8 +117,12 @@ export class AnswerNode {
 
   // Is a bolt at `boltPos` (radius `boltR`) overlapping this node? Squared
   // distance only — same idiom as CombatManager's enemy hit test.
+  // Lock the node out of the round (wrong-answer penalty). The dimming in
+  // update() is the only tell the player needs: a dark node is not answerable.
+  setInert(flag) { this.inert = !!flag; }
+
   hitTest(boltPos, boltR) {
-    if (this.broken) return false;
+    if (this.broken || this.inert) return false;
     const rr = (ARENA.NODE_RADIUS + boltR) ** 2;
     this.center(this._v);
     return boltPos.distanceToSquared(this._v) <= rr;
@@ -165,10 +170,25 @@ export class AnswerNode {
       return;
     }
 
+    // Locked out: the bob and pulse stop dead and the coral goes cold, so a
+    // node the player cannot answer with never looks like one they can.
+    if (this.inert) {
+      this.group.position.copy(this.pos);
+      this.coreMat.emissiveIntensity = 0.12;
+      this.coreMat.opacity = 0.45;
+      this.shardMat.opacity = 0.45;
+      this.labelMat.opacity = 0.35;
+      this.halo.intensity = 0.15;
+      return;
+    }
+
     // Idle: gentle bob + spin so the target reads as alive, plus a soft glow pulse.
     const y = this.pos.y + Math.sin(t * 1.8 + this._t0) * 0.14;
     this.group.position.set(this.pos.x, y, this.pos.z);
     this.group.rotation.y = t * 0.7;
+    this.coreMat.opacity = 1;
+    this.shardMat.opacity = 1;
+    this.labelMat.opacity = 1;
     this.coreMat.emissiveIntensity = 1.2 + Math.sin(t * 3 + this._t0) * 0.4;
     this.halo.intensity = 1.4 + Math.sin(t * 3 + this._t0) * 0.4;
   }

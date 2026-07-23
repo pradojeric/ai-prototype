@@ -2,10 +2,10 @@
 // RAIL COMBAT MANAGER — manual Arena 2 pressure built on CombatManager's player
 // bolts, health/HUD, Lumina hooks, fire cadence, and feedback. It owns River
 // Sniper projectiles, reflected-shot attribution, Frenzied Boarder attacks, and
-// explicit wave spawning; the RailArenaController owns encounter pacing.
+// randomized open-water spawning; the RailArenaController owns encounter pacing.
 // ============================================================
 import * as THREE from 'three';
-import { COMBAT, RAIL_ARENA, mulberry32 } from '../../config.js';
+import { CONFIG, COMBAT, RAIL_ARENA, mulberry32 } from '../../config.js';
 import { CombatManager } from '../combat/CombatManager.js';
 import { RailThreat } from './RailThreat.js';
 
@@ -15,7 +15,6 @@ export class RailCombatManager extends CombatManager {
     this._rng = mulberry32((world.zone.seed ^ 0x5241494c) >>> 0);
     this._riddleScale = 1;
     this._zephyrScale = 1;
-    this._railWave = 0;
     this._vTarget = new THREE.Vector3();
     this.setHudProfile({ healthLabel: 'Boat Integrity', waveLabel: 'River Threats' });
   }
@@ -26,11 +25,11 @@ export class RailCombatManager extends CombatManager {
     this._origin = origin.clone();
     this.hp = COMBAT.PLAYER_HP;
     this._playerDied = false;
-    this._railWave = 0;
     this._riddleScale = 1;
     this._zephyrScale = 1;
     this.hud.show();
     this.hud.setWave(0, '∞');
+    this.hud.setBossWaves(true);
     this._updateHealthUi();
     this._updateWaveLeft();
   }
@@ -43,28 +42,76 @@ export class RailCombatManager extends CombatManager {
     this._zephyrScale = active ? RAIL_ARENA.ZEPHYR_THREAT_SCALE : 1;
   }
 
-  spawnWave(snipers, boarders) {
+  spawnRandomGroup(minSize = 1, maxSize = 3) {
+    const low = Math.max(1, Math.floor(minSize));
+    const high = Math.max(low, Math.floor(maxSize));
+    const size = low + Math.floor(this._rng() * (high - low + 1));
+    if (size === 1) {
+      const sniper = this._rng() < 0.5;
+      return this.spawnWave(sniper ? 1 : 0, sniper ? 0 : 1, 1);
+    }
+    if (size === 2) return this.spawnWave(1, 1, 2);
+    return this._rng() < 0.5
+      ? this.spawnWave(2, 1, size)
+      : this.spawnWave(1, 2, size);
+  }
+
+  // Spawn an explicit composition while respecting the shared live+pending cap.
+  // `requestedSize` keeps larger random groups from silently growing past three.
+  spawnWave(snipers, boarders, requestedSize = snipers + boarders) {
     if (!this.active) return 0;
     let room = Math.max(0, RAIL_ARENA.MAX_THREATS - this._aliveCount());
+    room = Math.min(room, requestedSize);
     let spawned = 0;
-    const sniperXs = [-11, 11, -7, 7];
-    const boarderXs = [-6, 6, -3.5, 3.5];
     for (let i = 0; i < snipers && room > 0; i++, room--) {
-      const x = sniperXs[(this._railWave + i) % sniperXs.length];
-      const z = -19 - ((this._railWave + i) % 2) * 4;
-      this.enemies.push(new RailThreat(this.scene, 'sniper', x, z, this._rng));
+      const spawn = this._pickRiverSpawn('sniper');
+      if (!spawn) break;
+      const { x, z } = spawn;
+      this._vSpawn.set(x, CONFIG.WATER_LEVEL + 0.06, z);
+      this._queueEnemySpawn('sniper', this._vSpawn,
+        () => new RailThreat(this.scene, 'sniper', x, z, this._rng));
       spawned++;
     }
     for (let i = 0; i < boarders && room > 0; i++, room--) {
-      const x = boarderXs[(this._railWave + i) % boarderXs.length];
-      this.enemies.push(new RailThreat(this.scene, 'boarder', x, -29 - i * 1.5, this._rng));
+      const spawn = this._pickRiverSpawn('boarder');
+      if (!spawn) break;
+      const { x, z } = spawn;
+      this._vSpawn.set(x, CONFIG.WATER_LEVEL + 0.06, z);
+      this._queueEnemySpawn('boarder', this._vSpawn,
+        () => new RailThreat(this.scene, 'boarder', x, z, this._rng));
       spawned++;
     }
-    this._railWave++;
-    this.hud.setWave(this._railWave, '∞');
     this._updateWaveLeft();
-    this._punchWaveHud();
+    if (spawned > 0) this._punchWaveHud();
     return spawned;
+  }
+
+  _pickRiverSpawn(type) {
+    const [zMin, zMax] = type === 'sniper'
+      ? RAIL_ARENA.SNIPER_Z_RANGE : RAIL_ARENA.BOARDER_Z_RANGE;
+    const separationSq = RAIL_ARENA.SPAWN_MIN_SEPARATION ** 2;
+
+    for (let tries = 0; tries < 24; tries++) {
+      const x = (this._rng() * 2 - 1) * RAIL_ARENA.RIVER_X_LIMIT;
+      const z = zMin + this._rng() * (zMax - zMin);
+      let clear = true;
+      for (const pending of this._pending) {
+        const dx = x - pending.x;
+        const dz = z - pending.z;
+        if (dx * dx + dz * dz < separationSq) { clear = false; break; }
+      }
+      if (!clear) continue;
+      for (const threat of this.enemies) {
+        if (!threat.alive) continue;
+        const dx = x - threat.group.position.x;
+        const dz = z - threat.group.position.z;
+        if (dx * dx + dz * dz < separationSq) { clear = false; break; }
+      }
+      if (clear) return { x, z };
+    }
+    // Never break the open-water separation promise just to fill a group. The
+    // controller retries quickly when a crowded river has no valid slot.
+    return null;
   }
 
   _playDamageSound() { this.audio.playHullImpact(); }
@@ -108,6 +155,7 @@ export class RailCombatManager extends CombatManager {
       return;
     }
     if (!this.player.controls.isLocked) { this._fireRequested = false; return; }
+    this._updatePending(dt);
 
     this._updatePlayerFire(dt);
     const threatScale = Math.min(this._riddleScale, this._zephyrScale);

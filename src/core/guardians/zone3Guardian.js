@@ -14,7 +14,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
-import { fadeMat, buildPot, spiralCore, angDelta } from './primitives.js';
+import { fadeMat, pulseEmissive, buildPot, spiralCore, angDelta } from './primitives.js';
 
 // A stacked "building" segment: a stone box with a glowing seam and an optional
 // cone roof/spire — the raw unit of the keeper's architecture-as-limb body.
@@ -39,7 +39,7 @@ export function buildZone3Guardian(figure) {
   const glow = 0xffcf87;                    // warm gold halo/beacon mood tint
   const matStone = fadeMat(0x7a8272, 0x5a4a2a, 0.3, 0.92, 0.85, 0.05);      // mossy stone
   const matStoneDark = fadeMat(0x565e50, 0x4a3c20, 0.25, 0.92, 0.9, 0.05);
-  const matGlow = fadeMat(0xffcf87, 0xffcf87, 0, 0.96, 0.3, 0.1);           // gold seams (unlit)
+  const matGlow = fadeMat(0xffcf87, 0xffcf87, 0, 0.96, 0.3, 0.1);           // gold heart / body seams
   matGlow.side = THREE.DoubleSide;                                          // seam planes visible both faces
   const matCape = fadeMat(0xffe0b0, 0xffcf87, 1.2, 0.3, 0.4, 0.05);         // translucent light cape
   matCape.side = THREE.DoubleSide;
@@ -300,6 +300,9 @@ export function buildZone3Guardian(figure) {
       figure.position.y = CONFIG.WATER_LEVEL + Math.sin(t * 0.8) * 0.12;
       const yaw = Math.atan2(playerPos.x - groupPos.x, playerPos.z - groupPos.z);
       figure.rotation.y += angDelta(figure.rotation.y, yaw) * Math.min(1, dt * 1.8);
+
+      pulseEmissive(matGlow, t, 0.36, 0.14, 1.1, 0.5, f);
+      pulseEmissive(matCrystal, t, 0.14, 0.08, 1.3, 1.4, f);
 
       core.swirl.rotation.z += dt * 0.6;
       cape.rotation.z = Math.sin(t * 0.9) * 0.08;

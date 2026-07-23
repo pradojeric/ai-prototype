@@ -32,7 +32,7 @@ export class CombatManager {
     });
 
     // Pooled spawn/impact/death effects, shared by every arena subclass.
-    this.vfx = new CombatVfx(scene);
+    this.vfx = new CombatVfx(scene, camera);
 
     // Pathfinding: walkability grid baked once per zone; the BFS flow field
     // toward the player is rebuilt on a timer only while a fight is active.
@@ -40,10 +40,14 @@ export class CombatManager {
     this._flowTimer = 0;
 
     this._origin = null;           // XZ center the waves spawn around (arena center)
-    this._pending = [];            // echoes telegraphing, not yet materialised
+    this._pending = [];            // arena enemies queued behind a spawn portal
     this._endless = false;         // arena mode: waves keep coming until stop()ed
+    this._totalWaves = 0;          // fixed-length arena run (0 = use COMBAT.WAVES length)
+    this._onWaveCleared = null;    // fired once per cleared wave, with its 1-based number
+    this._clearedWave = 0;         // highest wave already reported (kills per-frame re-fire)
+    this._wavesHeld = false;       // true → no new wave spawns (riddle round / boss phase)
     this._leash = null;            // optional Vector3; wandering past LEASH_RADIUS resets
-    this._wave = 0;                // index into COMBAT.WAVES (wraps in endless mode)
+    this._wave = 0;                // index into COMBAT.WAVES (wraps past its length)
     this._waveGap = 0;             // countdown between waves
     this._fireCooldown = 0;
     this._fireRequested = false;
@@ -94,14 +98,24 @@ export class CombatManager {
   }
 
   // Begin a fight: waves spawn around `origin` (a THREE.Vector3). Options:
-  //   endless — waves keep cycling (with per-cycle escalation) until stop();
-  //             the caller (ArenaController) decides when the fight actually ends.
-  //   leash   — optional Vector3; wandering past LEASH_RADIUS aborts the fight.
+  //   endless       — waves keep cycling (with per-cycle escalation) until stop();
+  //                   the caller (ArenaController) decides when the fight ends.
+  //   totalWaves    — fixed-length run; the last cleared wave holds instead of
+  //                   self-winning, leaving the ending to the caller.
+  //   onWaveCleared — callback(waveNumber, 1-based) fired once per cleared wave,
+  //                   which is how an arena gates riddle rounds on wave progress.
+  //   held          — start with the wave clock already frozen and no opening
+  //                   wave, for a fight that begins past the wave run entirely.
+  //   leash         — optional Vector3; wandering past LEASH_RADIUS aborts.
   startFight(origin, opts = {}) {
     if (this.active) return;
     this.active = true;
     this._origin = origin.clone();
     this._endless = opts.endless ?? false;
+    this._totalWaves = opts.totalWaves ?? 0;
+    this._onWaveCleared = opts.onWaveCleared ?? null;
+    this._clearedWave = 0;
+    this._wavesHeld = opts.held ?? false;
     this._leash = opts.leash ?? null;
     this._wave = 0;
     this._waveGap = 0;
@@ -110,7 +124,8 @@ export class CombatManager {
     const p = this.player.controls.getObject().position;
     if (this.nav) this.nav.computeFlow(p.x, p.z);
     this._flowTimer = 0;
-    this._spawnWave();
+    if (this._wavesHeld) this.hud.setWave(0, this._waveTotal());
+    else this._spawnWave();
     this.hud.show();
     this._updateHealthUi();
   }
@@ -125,8 +140,38 @@ export class CombatManager {
     this._updateWaveLeft();
   }
 
+  // Freeze/resume the wave clock without ending the fight. An arena holds waves
+  // while a riddle round is open (so the player answers under the pressure that
+  // is already on the field) and for the whole boss phase (the boss summons
+  // instead). Live enemies keep fighting either way.
+  holdWaves(flag) { this._wavesHeld = !!flag; }
+
+  // Live threats, telegraphing spawns included. Arena controllers poll this to
+  // know when a penalty squad is fully dead.
+  aliveCount() { return this._aliveCount(); }
+
+  // Poof every live enemy without crediting a kill (no Lumina drops, no hitstop).
+  // Used at a phase boundary where leftover adds would muddy the transition.
+  clearEnemies() {
+    for (const e of this.enemies) e.vanish();
+    this.cancelPendingSpawns();
+    this._updateWaveLeft();
+  }
+
+  // Withdraw telegraphed enemies that have not materialised yet. Riddle and
+  // boss handoffs use this so a portal cannot complete after spawning is held.
+  cancelPendingSpawns() {
+    for (const pending of this._pending) this.vfx.cancelSpawn(pending.tearId);
+    this._pending.length = 0;
+    this._updateWaveLeft();
+  }
+
   // Left-click while a fight is on; executed in the next update() tick.
   requestFire() { this._fireRequested = true; }
+
+  // Drop a queued click when focus/pointer lock is lost so resuming never emits
+  // a shot that was requested before the pause menu appeared.
+  cancelInput() { this._fireRequested = false; }
 
   // Game polls this once per frame; true exactly once per player death.
   consumePlayerDeath() {
@@ -140,7 +185,7 @@ export class CombatManager {
   abortFight() {
     if (!this.active) return;
     for (const e of this.enemies) e.vanish();
-    this._pending.length = 0;   // telegraphed echoes never arrive
+    this.cancelPendingSpawns();   // telegraphed echoes never arrive
     this.bolts.clear();
     this.spits.clear();
     this.active = false;
@@ -155,18 +200,25 @@ export class CombatManager {
 
   _zoneKey() { return this.world.zone?.id || 'zone1'; }
 
+  // Total the HUD reports. A fixed-length arena run shows its real end (10);
+  // only a genuinely endless fight falls back to the infinity glyph.
+  _waveTotal() {
+    if (this._totalWaves > 0) return this._totalWaves;
+    return this._endless ? '∞' : COMBAT.WAVES.length;
+  }
+
   _spawnWave() {
-    // Endless mode wraps the table and adds one chaser per completed cycle so
-    // the pressure keeps climbing while the player works through the riddle.
+    // Runs longer than the table wrap it and add one chaser per completed cycle,
+    // so a 10-wave arena keeps climbing instead of replaying waves 1-4 flat.
     const idx = this._wave % COMBAT.WAVES.length;
     const cycle = Math.floor(this._wave / COMBAT.WAVES.length);
     const def = COMBAT.WAVES[idx];
     const zone = this._zoneKey();
-    const chasers = def.chasers + (COMBAT.ZONE_BONUS[zone] || 0) + (this._endless ? cycle : 0);
+    const chasers = def.chasers + (COMBAT.ZONE_BONUS[zone] || 0) + cycle;
     const hpBonus = COMBAT.ZONE_HP_BONUS[zone] || 0;
     for (let i = 0; i < chasers; i++) this._spawnEnemy('chaser', hpBonus, 1);
     for (let i = 0; i < def.spitters; i++) this._spawnEnemy('spitter', hpBonus, 1);
-    this.hud.setWave(this._wave + 1, this._endless ? '∞' : COMBAT.WAVES.length);
+    this.hud.setWave(this._wave + 1, this._waveTotal());
     this._updateWaveLeft();
     this._punchWaveHud();
   }
@@ -193,24 +245,45 @@ export class CombatManager {
       x = cx; z = cz;
       break;
     }
-    this._pending.push({ type, x, z, hpBonus, dropMultiplier, delay: COMBAT.SPAWN_TELEGRAPH });
     this._vSpawn.set(x, CONFIG.WATER_LEVEL + 0.06, z);
-    this.vfx.spawnTelegraph(this._vSpawn, type);
+    this._queueEnemySpawn(type, this._vSpawn, () => new Enemy(
+      this.scene, this.world, type, x, z, hpBonus, dropMultiplier,
+    ));
   }
 
-  // Land the telegraphed echoes whose warning has run out. Driven on real dt so
-  // hitstop never stalls a spawn mid-warning.
+  // Shared by every arena manager: the construction callback is deliberately
+  // held until the portal finishes, so the enemy has no mesh, collider, AI, or
+  // attack intents during its warning window.
+  _queueEnemySpawn(type, position, createEnemy) {
+    // The tear id travels with the pending entry so the exact rift this enemy
+    // was promised behind is the one that snaps shut when it lands.
+    const tearId = this.vfx.spawnTelegraph(position, type);
+    this._pending.push({
+      type,
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      delay: COMBAT.SPAWN_TELEGRAPH,
+      tearId,
+      createEnemy,
+    });
+    this.audio?.playEnemyPortal?.();
+  }
+
+  // Land queued enemies whose portal has run out. Driven on real dt so hitstop
+  // and pointer-lock pause cannot desynchronise the portal from its audio cue.
   _updatePending(dt) {
-    for (let i = this._pending.length - 1; i >= 0; i--) {
+    for (let i = 0; i < this._pending.length;) {
       const p = this._pending[i];
       p.delay -= dt;
-      if (p.delay > 0) continue;
+      if (p.delay > 0) { i++; continue; }
       this._pending.splice(i, 1);
-      this.enemies.push(new Enemy(
-        this.scene, this.world, p.type, p.x, p.z, p.hpBonus, p.dropMultiplier,
-      ));
-      this._vSpawn.set(p.x, CONFIG.WATER_LEVEL + 0.5, p.z);
-      this.vfx.spawnArrive(this._vSpawn, p.type);
+      const enemy = p.createEnemy();
+      // Comes up through the rift rather than appearing beside it.
+      enemy.beginEmerge(COMBAT.EMERGE.DEPTH, COMBAT.EMERGE.TIME);
+      this.enemies.push(enemy);
+      this._vSpawn.set(p.x, p.y + 0.44, p.z);
+      this.vfx.spawnArrive(this._vSpawn, p.type, p.tearId);
     }
   }
 
@@ -300,7 +373,11 @@ export class CombatManager {
       return;
     }
 
-    // ESC safety: freeze the whole sim while the pointer is unlocked so a
+    // Portals keep their real-time audio/VFX contract while paused, but a newly
+    // materialised enemy cannot simulate until pointer lock resumes.
+    this._updatePending(dt);
+
+    // ESC safety: freeze the combat sim while the pointer is unlocked so a
     // pause menu can't get the player killed.
     if (!this.player.controls.isLocked) { this._fireRequested = false; return; }
 
@@ -332,8 +409,7 @@ export class CombatManager {
     // Fire a light-bolt from the lure along the camera's aim.
     this._updatePlayerFire(dt);
 
-    // Telegraphed echoes land on real dt; markers point at the ones behind you.
-    this._updatePending(dt);
+    // Materialised threats behind the player receive HUD markers.
     this.hud.trackThreats(this.enemies, this.camera, dt);
 
     // Advance projectiles, then resolve hits inline (squared distances only).
@@ -403,10 +479,26 @@ export class CombatManager {
       }
     }
 
-    // Wave flow: cleared → breather → next wave. Endless (arena) never self-wins
-    // — the ArenaController ends the fight via stop() when the guardian falls.
+    // Wave flow: cleared → breather → next wave. Arena runs (endless or fixed
+    // length) never self-win — the ArenaController ends the fight via stop()
+    // when the guardian falls.
     if (this._aliveCount() === 0) {
-      if (!this._endless && this._wave >= COMBAT.WAVES.length - 1) {
+      // Report the clear exactly once, before any hold decision: an arena gates
+      // its riddle round on this, and the gate must land even mid-breather.
+      const cleared = this._wave + 1;
+      if (this._onWaveCleared && cleared > this._clearedWave) {
+        this._clearedWave = cleared;
+        this._onWaveCleared(cleared);
+      }
+      if (this._wavesHeld) { this._waveGap = 0; return; }
+
+      const last = this._totalWaves > 0
+        ? this._wave >= this._totalWaves - 1
+        : this._wave >= COMBAT.WAVES.length - 1;
+      if (last) {
+        // A fixed-length arena hands its ending to the controller; a standalone
+        // contested-artifact fight is won right here.
+        if (this._totalWaves > 0 || this._endless) return;
         this._winFight();
       } else {
         this._waveGap += dt;

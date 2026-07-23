@@ -30,7 +30,7 @@ export class RailThreat extends ThreatBody {
     this.group.position.set(x, 0, z);
     this.figure = new THREE.Group();
     this.figure.position.y = CONFIG.WATER_LEVEL + (type === 'sniper' ? 2.3 : 1.1);
-    this.group.add(this.figure);
+    this.rig.add(this.figure);          // rig carries the rise out of the spawn tear
 
     const isSniper = type === 'sniper';
     this.bodyMat = this.registerFade(fadeMat(isSniper ? 0x213b42 : 0x543238,
@@ -88,7 +88,7 @@ export class RailThreat extends ThreatBody {
   center(out) {
     return out.set(
       this.group.position.x,
-      this.figure.position.y,
+      this.figure.position.y + this.emergeOffset,
       this.group.position.z,
     );
   }

@@ -218,58 +218,91 @@ Soul triggers the full Final Memory sequence exactly as the current ending does.
 
 ## Phase 4 — LIKET Stationary-Boat Rail Shooter
 
-### Encounter contract
+### Updated encounter contract (approved 2026-07-22)
 
-- Zone 2 enters a dedicated Arena 2 controller through the same lifecycle used by
-  Arena 1: `begin`, `update`, `won`, `resetLumina`, `guardianCenter`, and `dispose`.
-- The bangkâ and player stay at a fixed combat anchor. Walking is disabled while
-  mouse-look and light-bolt casting remain active. Six recyclable LIKET river chunks,
-  moving water, and near/mid/far depth multipliers simulate forward travel.
-- Moderate deterministic boat bob, roll, sway, and a restrained camera offset sell
-  motion without moving the aim origin far enough to hide threats or lantern labels.
-- **The Reveler** is the canonical Zone 2 guardian name in both language modes.
-  Existing coral-titan geometry remains its visual design; all former labels and
-  comments are normalized repository-wide.
+- Keep the stationary bangkâ, aim-only controls, parallax river, Boat Integrity,
+  Lumina rewards, shared arena lifecycle, and existing Zone 2 return/reward flow.
+- Replace the fixed wave clock with continuous seeded pressure and add a boss phase
+  after the third correct bugtong. Timers advance only while pointer lock is active.
+- Core loop: aim and shoot to repel river threats and reflect attacks while the
+  three-stage HUD clock creates visible riddle milestones; correct answers remove
+  wards, then direct and reflected hits defeat The Reveler.
 
-### Survival pressure
+### Random river pressure
 
-- Reuse the combat projectile and target lifecycles through Arena 2-specific manual
-  wave APIs rather than Arena 1's endless-wave scheduler. Waves arrive every 10s
-  outside riddle rounds, cycling 1 sniper/1 boarder, 2/1, 1/2, and 2/2 with a hard
-  cap of six active threats.
-- River Snipers fire at the boat about every 1.8s for 10 Boat Integrity damage.
-  Player bolts reflect hostile shots; a reflected shot returns to and defeats its
-  originating sniper.
-- Frenzied Boarders approach, telegraph for 0.8s, then deal 14 Boat Integrity damage
-  every 1.25s until destroyed. Encounter death restarts the complete Arena 2 run.
+- Draw a spawn group every 3–5s with an eight-threat cap that includes pending
+  portals. Size 1 is a random sniper or boarder; size 2 is one of each; size 3 is a
+  randomized 2/1 mix. If no threat remains, queue the next portal within 0.5s.
+- Sample all spawn points from the open-water channel (`x` about -6.5…6.5), using
+  separate forward sniper and upstream boarder depth bands plus minimum separation
+  from live and pending threats. Never place a portal on the scrolling banks/trees.
+- Riddle entry stops the scheduler and cancels pending portals. Materialized enemies
+  continue at the existing 65% riddle-speed scale; spawning resumes one second after
+  a correct answer unless that answer starts the boss.
 
-### Lantern volley
+### Three-stage riddle clock and answer volley
 
-- First volley begins near 25s; later volleys are paced about 55s apart. The riddle
-  prompt is revealed for 3s before The Reveler throws three answer lanterns 0.75s
-  apart. Each lantern has its own 6s impact deadline.
-- A correct shot deflects the lantern, dismisses outstanding decoys, and breaks one
-  of The Reveler's three wards. A wrong shot deals 18 Boat Integrity damage but
-  leaves the correct answer available. An unshot wrong decoy is harmless.
-- Missing the correct lantern deals 25 damage, clears the volley, then retries the
-  same riddle after 3s with reshuffled answers. New waves pause during riddles and
-  existing threats run at 65% speed. Three correct volleys win the encounter.
+- Add a read-only, three-segment meter to the top boss frame. Riddles become due at
+  cumulative encounter times 0:20, 0:55, and 1:30. Completed segments remain full,
+  the current segment fills with a fixed-width `Riddle n in 0:ss` label, and later
+  segments remain empty. During a riddle/retry it reads `Riddle n active` and freezes.
+- Preserve the 3s prompt-only reveal, then create all three shuffled answer lanterns
+  simultaneously at the boss. Move them over 1s to the exact river midpoint between
+  boss and boat, where they stop on one horizontal line at x = -4.5 / 0 / +4.5.
+  Hold that wide formation visible but inert for a separate 3s reading beat, then
+  launch all three together for the existing 6s attack flight. Keep 18 wrong-shot
+  damage, 25 missed-correct damage, 3s retry, and reshuffle.
+- Hide the segmented clock at the boss handoff and show The Reveler's health track.
+  Put rail-only timer CSS in `_partials/rail-arena-hud.css` so the existing 919-line
+  arena HUD stylesheet remains safely below the repository's 1000-line limit.
 
-### Lumina, HUD, and feedback
+### Reveler boss and movement
 
-- Arena 2 Lumina flies automatically to the boat over 0.45s. Vitality restores 25
-  Boat Integrity; Overcharge stays unchanged; Zephyr lasts 8s and slows hostile
-  threats to 55% without changing player bolts or parallax speed.
-- Relabel the health presentation to Boat Integrity, hide stamina, show The Reveler's
-  three wards, and reuse the non-blocking riddle banner for instructions and answers.
-- Add procedural audio hooks for lantern throws, correct deflections, reflected
-  sniper shots, and hull impacts, synchronized with restrained hit feedback.
-- Victory reuses the established Arena return: Zone 2 Soul drop, all remaining Zone
-  2 artifacts scattered, museum pedestal synchronization, and final-memory gating.
+- Add `RevelerBoss` on the shared `ArenaBoss` contract: 100 HP, the existing 2.3m
+  chest hit sphere, and phase thresholds at 66% and 33%. The final answer deflection
+  finishes before pre-boss threats are cleared and an opening boss group is queued.
+- Move among safe left/center/right river anchors without immediately repeating one.
+  Telegraph for 0.45s and ease the lateral hop over 0.6s. Pause movement while a boss
+  projectile formation is charging so its targets remain readable.
+- Continue enemy summons under the shared cap: Phase I groups 1–2 every 3.5–5s;
+  Phase II groups 1–3 every 3–4.5s; Phase III groups 2–3 every 2.5–4s. Each enrage
+  opens with an immediate three-enemy group.
 
-**Verify:** stationary aim-only boat framing, seamless parallax recycling, manual
-enemy waves, bolt reflection, repeated boarding attacks, all lantern outcomes,
-riddle/Zephyr slow profiles, full-encounter restart, and Zone 2 Soul/scatter return.
+### Boss projectile formations
+
+- Add a fixed-size pooled projectile formation owned by the boss. Spawn 1–2 orbs in
+  Phase I, 2–3 in Phase II, and 3–5 in Phase III around the guardian's chest. The
+  orbs orbit/follow the chest and charge visibly for exactly 2s.
+- Orbs are reflectable from their first charging frame. A player bolt sends one into
+  a homing return that follows the boss's current chest and deals 5 boss damage.
+- After the shared charge, every unreflected orb receives an independently randomized
+  0–0.9s launch offset, then fires at the boat. Fired orbs remain reflectable and deal
+  15 Boat Integrity damage on impact.
+- Only one formation may be active. Once it resolves, draw the next formation cooldown
+  from 5–7s in Phase I, 4–6s in Phase II, or 3–5s in Phase III.
+
+### Retry, interfaces, and verification
+
+- Death before the boss redraws riddles and restarts the complete run. Death during
+  the boss keeps all wards broken and restarts only the boss at full health.
+- Extend the rail combat manager with random-group spawning and pending cancellation;
+  extend `CombatHud` with riddle-clock show/update/hide calls; keep Arena 1 and Arena 3
+  contracts unchanged. Preserve existing procedural art, audio, VFX, and rewards.
+- Verify JavaScript syntax, whitespace, imports, and the 1000-line cap, then browser-
+  smoke spawn cadence/bounds/caps, riddle pausing and every lantern outcome, all timer
+  states, boss hops/formations/reflections/summons/phases, both retry scopes, responsive
+  HUD fit, Arena 1/3 regressions, and the Zone 2 Soul/artifact return.
+
+### Implementation outcome
+
+- Random river pressure, the cumulative segmented clock, simultaneous protected
+  lantern volleys, boss-only retry, Reveler movement/summons, and the pooled reflected
+  projectile formations are implemented in focused Arena 2 modules.
+- Repository-wide JavaScript syntax checks, dead-reference searches, `git diff --check`,
+  relative-interface inspection, and the 1000-line audit pass.
+- Live browser, responsive-layout, and complete playthrough verification remains
+  pending because permission to launch the local headless browser was declined. No
+  runtime, visual, audio, or gameplay-balance pass is claimed.
 
 ---
 
@@ -298,36 +331,6 @@ manual browser check before the next begins.
 transitions, overlapping floors, rails/walls, deliberate falls, sprint/stamina, and
 pointer-lock release/resume; confirm the scene contains no combat or active hazards.
 Stop after reporting static checks and the manual-test instructions.
-
-#### Phase 5A manual-test correction — landing rail clearance
-
-- Shorten each flight's paired rail meshes and collision spans at both endpoints so
-  the corner landing remains open for the required ninety-degree turn.
-- Apply the same endpoint clearance to summit-ring rails so its corners remain
-  traversable while the middle of every exposed edge stays protected.
-- Keep ramp supports, widths, heights, and all excluded later-phase systems unchanged.
-- Re-run syntax, whitespace, line-count, and scoped-diff checks, then return the same
-  build to the user for another manual traversal attempt.
-
-#### Phase 5A manual-test correction — summit overlap
-
-- Remove the summit slabs that duplicate the upper ramp circuit and form a narrowing
-  ceiling over the final ascent.
-- Rebuild the 18 m summit as a smaller ring around the open central shaft, connected
-  to flight 12's enlarged landing by a dedicated level bridge.
-- Give the new ring and bridge authored support surfaces plus vertically bounded
-  edge-rail colliders, without changing the twelve-flight route or later-phase scope.
-- Re-run the Phase 5A static checks and return the blockout for summit retesting.
-
-#### Phase 5A manual-test correction — final bridge pinch
-
-- The bridge centerline intersects the player-radius envelope around flight 12's
-  inner rail endpoint even though the visible rail stops before the landing.
-- Give flights adjoining enlarged future-gate landings the landing's full 3 m rail
-  clearance, scaling and offsetting their instanced rails and matching colliders.
-- Keep ordinary corner clearances at 2.15 m and preserve the ramp/support geometry.
-- Numerically assert the flight-12-to-bridge centerline is clear, then repeat syntax,
-  whitespace, line-count, and scope checks before another manual handoff.
 
 ### Phase 5B — rising tide + drowning retry (accepted)
 
@@ -363,43 +366,6 @@ above the summit only as a numeric safety bound; Phase 5B intentionally has no w
 lock, warning thresholds, drowning at the base and after a fall, automatic reset of
 water/player/stamina/HUD, and a clean second attempt. Traverse to the summit without a
 completion event, then stop for user approval before Phase 5C.
-
-#### Phase 5B manual-test correction — final decorative gate collision
-
-- Keep the visible final gate frame as a future-riddle landmark, but do not register
-  collision for its pillars while gates are intentionally inactive in Phase 5B.
-- Preserve the bridge rails, summit supports, twelve-flight route, tide, HUD, and
-  retry behavior; the correction is limited to collision ownership at the top frame.
-- Re-run syntax, whitespace, line-count, and scoped-diff checks, then return the same
-  build for a focused final-gate traversal test.
-
-#### Phase 5B manual-test correction — summit connector clearance
-
-- The first correction proved the inactive gate pillars are not the blocker. Widen
-  the diagonal landing-to-summit bridge while keeping the accepted ring and shaft.
-- Match every summit-bridge rail collider to the rail mesh's true half-width instead
-  of registering a collision proxy twice as thick as the visible rail.
-- Preserve the final frame landmark, bridge rails, tide/HUD/retry systems, and all
-  later-phase exclusions; verify the full connector centerline remains traversable.
-
-#### Phase 5B manual-test correction — tower-shell proxy root cause
-
-- Replace the tower shell's rotated-mesh AABB approximations with matching oriented
-  box colliders. The AABB corners pinch all route corners and are most visible at the
-  sharp final turn into the summit connector.
-- Use the wall mesh's true half-width and half-depth for each proxy, preserving the
-  visible shell and its intended solid boundary without inward invisible corners.
-- Numerically compare old/new clearance at the final landing, then repeat syntax,
-  whitespace, line-count, and scope checks before the next focused user retest.
-
-#### Phase 5B manual-test correction — final-ramp/bridge rail intersection
-
-- Validate the complete approach polyline, not only the diagonal bridge centerline.
-  The outer diagonal bridge rail crosses the incoming final ramp before the landing.
-- Start both bridge rails after the enlarged landing and offset their shortened spans
-  toward the summit, preserving visible fall protection without crossing the route.
-- Assert the final-ramp, bridge, and summit-ring centerlines as one continuous path
-  against shell and rail colliders before returning the build for manual verification.
 
 ### Phase 5C — altitude-aware tower combat (authorized; implement first)
 
@@ -561,43 +527,44 @@ additional visible triangles at peak. Prefer existing bloom and scene fog; respe
   drowning cleanup, pointer-lock pause, 1366×768 and narrow viewport fit, reduced
   motion, and a clean console. Stop for user approval after the handoff.
 
-#### Phase 5C correction — support-bound threats and accurate HUD
+### Phase 5F — tower combat and summit boss upgrade (approved 2026-07-22)
 
-- Treat each Arena 3 threat anchor as an authored movement support, including its
-  rotation, half-width, half-length, and support height. Gargoyles clamp movement to
-  that footprint and keep their visual center above the assigned surface; Gales use
-  a bounded orbit around the same anchor instead of unconstrained world movement.
-- Reject candidate Gargoyle movement that collides at the threat's vertical tier.
-  This prevents lower and upper ramp geometry from interfering with one another.
-- Hide the wave panel in Arena 3 because threats are pre-authored altitude encounters,
-  not waves. Arena 1 and Arena 2 retain their existing wave/encounter labels.
-- Dispose every tower threat mesh during faint/retry cleanup and reset the altitude
-  milestone index so a second attempt neither leaves frozen enemies nor skips spawns.
-- Verify every changed module with `node --check`, `git diff --check`, the 1000-line
-  limit, and a focused manual climb through all four threat bands.
+**Player contract:** four fixed Gargoyle sentries shape the climb while seeded Gale
+flyers pressure the player's current height. The open summit ring becomes a supported
+octagonal deck and the existing Keeper body drives a three-phase action boss. Ascent
+deaths reset the tower; boss deaths restart on the summit with opened seals preserved.
 
-#### Phase 5C correction — visible Gargoyles and stable knockback
+- Author four fixed Sentinel anchors near 2.8/7.2/11.8/16.2 m. Construct them at
+  ascent start without portals; use a 0.6 s wing-slam tell, 18 damage, 5.2 knockback,
+  and 1.4 s cooldown. Suppress markers outside the nearby vertical tier.
+- Spawn Gales through woven tears after seeded 7–10 s and then 6–10 s delays. Place
+  them at seeded points inside a central-shaft circle, hold their X/Z position, follow
+  the player vertically only, telegraph for 0.45 s, and cap the encounter at two
+  Gales/six lesser threats.
+- Replace the summit shaft/ring with an 18 m octagonal deck, continuous support,
+  perimeter rails, 3.2 m bridge entrance, four add anchors, and a 6.8 m boss bound.
+- Give the Keeper 60 HP with thresholds at 66%/33%. Shot intervals are
+  2.8/2.2/1.7 s; charge ranges are 8–10/6.5–8.5/5–7 s; summon ranges are
+  11–13/9–11/7–9 s. Phase groups are `1 Gargoyle`, `1 Gargoyle + 1 Gale`, and
+  `2 Gargoyles + 1 Gale` under the shared caps.
+- Charge locks direction after a 0.9 s gold lane tell, moves at 9.5 m/s, deals
+  24 damage plus 6.5 knockback once, and recovers for 1.1 s. Pause shot/summon
+  clocks during charge. Phase changes flare invulnerable for 1 s and summon once.
+- At boss entry clear ascent threats, portals, and projectiles; freeze tide at no
+  more than 15 m. At boss retry spawn at `(0, 19.62, 5.5)` with boss systems reset.
+- Keep the ascent HUD through the climb. At boss entry switch to the shared boss
+  health bar and `Summoned Echoes` count. Extract tower CSS to its own partial.
+- Use custom primitive overlap/collision and seeded attempt RNG; add no dependency,
+  asset, audio, post-processing, touch-control, or progression changes.
 
-- Keep input velocity in camera-local movement space. Apply the tower's external
-  knockback once per frame as a world-space displacement through the same X/Z slide
-  tests, then decay the impulse; a hit must never accumulate impulse into WASD speed.
-- Use the flight being approached at each altitude milestone rather than the nearest
-  midpoint chosen without route direction. Spawn the Gargoyle toward the upcoming end
-  of that flight so it is visible in the player's path while remaining support-bound.
-- Strengthen the Gargoyle silhouette with shared procedural wings/eyes while keeping
-  the existing support footprint, hit radius, and four-hit tuning unchanged.
-- Retest the first Sentinel encounter and a Gale projectile impact, including movement
-  immediately after the hit and another attempt after death/drowning.
+**Verification:** repository syntax, pause tests, imports, whitespace, duplicate IDs,
+and 1000-line audit; then browser-play ascent threats, summit bounds, three boss
+phases, both retries, pause, HUD fit, victory return, and Arena 1/2 regressions.
 
-#### Phase 5C runtime correction — finite knockback contract
-
-- Add the planned 3.6 m/s Gale knockback value that was missing from `TOWER_ARENA`.
-  The absent value currently multiplies projectile direction by `undefined`, producing
-  `NaN` player/camera coordinates; AudioListener is only the first strict consumer.
-- Validate direction and strength at `PlayerController.applyKnockback`. Ignore invalid
-  impulses rather than allowing any combat effect to corrupt the shared camera rig.
-- Verify all tower impulse call sites resolve finite configuration and re-run the
-  Gale-hit browser check; do not mask the symptom inside `AudioManager`.
+**Encounter guide:** document the shipped Arena 3 loop in `Arena3.md`, mirroring the
+player-facing structure of `Arena1.md`. Keep source-owned tuning values, retry rules,
+HUD transitions, and code ownership explicit, including the corrected center-circle,
+vertical-only Gale movement. This documentation step does not change gameplay.
 
 ---
 
@@ -654,3 +621,301 @@ request currently exists.
    `git diff --check`, and inspect the final diff. Browser Network-panel validation
    remains the manual end-to-end check because the endpoint is intentionally a
    placeholder.
+
+---
+
+## Guardian Debug Zone (2026-07-22)
+
+### Player-facing contract
+
+- A config-gated **Guardian Debug Zone** title button skips the intro and descend
+  overlay and enters a dedicated free-roam `debug` phase.
+- The flooded room presents Guardian 1 at the front of a triangle, with Guardians
+  2 and 3 behind-left and behind-right. They keep their existing body animation,
+  face one fixed forward direction, never roam, and render without locator beacons
+  or labels.
+- The player starts south of the triangle, may walk and sprint around it, collides
+  with simple Guardian footprints and the compact boundary, and can only pause/resume.
+  Rifts, artifacts, riddles, combat, Souls, and progression do not run in this phase.
+
+### Implementation boundaries
+
+1. Repurpose `src/core/zones/zoneDebug.js` as the small flooded enclosure and export
+   authored Guardian placements, fixed facing direction, and player spawn as zone data.
+2. Add a focused gallery controller that owns three shared `Guardian` instances,
+   placement, hidden beacons, allocation-free fixed-target updates, and disposal.
+3. Add a `DebugZoneFlow` partial for scene swapping, subsystem cleanup, collision /
+   ground callback injection, pointer-lock entry, and debug state initialization.
+4. Extend `Game.animate()` and UI lock/unlock handling for the `debug` phase; add the
+   gated title button and `CONFIG.DEBUG_GUARDIAN_ZONE_BUTTON` (default `false`). Keep
+   legacy `CONFIG.DEBUG_ZONE` behavior independent and preserve normal game state.
+
+### Verification
+
+- Run `node --check` on every touched JavaScript module, `git diff --check`, and the
+  repository-wide 1000-line audit.
+- Serve over HTTP and verify flag-off/flag-on menu behavior, direct entry, all three
+  variants and idle facing, hidden beacons, collision from multiple angles, no action
+  triggers, ESC/resume, resize, hard refresh, nonblank canvas, and a clean console.
+- A screenshot baseline harness and bot playtest are intentionally skipped: this is a
+  narrow developer-only showroom with no objective, difficulty, or release claim.
+
+### Screenshot lineup correction (2026-07-22)
+
+- Replace the triangle with one row at `z = 0`: Zone 2 at `x = -9`, Zone 1 at
+  `x = 0`, and Zone 3 at `x = 9`. Nine-unit center spacing preserves visible gaps
+  around the models' animated orbiting details while remaining inside the enclosure.
+- Replace the shared inward focus point with a shared +Z facing direction. Cache one
+  target per Guardian at construction so every body faces the screenshot/player side
+  without tracking movement or allocating vectors per frame.
+- Keep the nearby south spawn, free-roam controls, collision footprints, hidden
+  beacons, flooded atmosphere, and continuous idle animation unchanged.
+
+### Final triangle staging (2026-07-22)
+
+- Keep Guardian 1 centered but advance it to `(0, 2)` as the triangle's front
+  apex. Move Guardian 2 to `(-8, -4)` and Guardian 3 to `(8, -4)` as the rear
+  corners. The diagonal center distances remain ten units, preserving clear gaps.
+- Keep the shared +Z screenshot-facing direction rather than restoring inward
+  tracking. Keep the player at the nearby south spawn, looking toward the group.
+
+### Clean debug capture (2026-07-22)
+
+- On direct debug entry, hide `ViewModel.group` and remove the crosshair before
+  pointer lock. In the debug-specific pointer-lock resume branch, keep the crosshair
+  removed instead of restoring it.
+- Leave the normal playing and arena UI branches untouched so their hand/crosshair
+  behavior remains unchanged. No new toggle or screenshot UI is added.
+
+---
+
+## Arena Guardian Beacon and Halo Removal (2026-07-22)
+
+- Extend `Guardian` with an optional effects object that defaults beacon and halo
+  construction on. When disabled, do not allocate or attach the beacon mesh,
+  beacon material, or chest `PointLight`; make animation and disposal null-safe.
+- Add `{ beacon: false, halo: false }` to Arena 1 and Arena 2 zone definitions and
+  pass those options through `ArenaFlow` when constructing their shared Guardian.
+- Arena 3 remains unchanged because it uses `TowerKeeper`, not the shared Guardian
+  shell. The debug showroom continues using default effects, then hides only its
+  beacon as already designed.
+- Verify construction, fade/update, defeat, reset, and disposal paths statically;
+  manually confirm no column or chest light appears during Arenas 1 and 2.
+
+---
+
+## Guardian Body Glow VFX (2026-07-22)
+
+### Visual contract
+
+- Keep all three existing authored silhouettes and idle animations unchanged.
+- Guardian 1 continuously pulses warm-gold chest and rune details, with its existing
+  jade elements remaining secondary.
+- Guardian 2 continuously pulses its amber tide-pool core and cooler cyan eyes,
+  rings, and tentacle tips.
+- Guardian 3 continuously pulses its gold Heart of Memory and body cracks, with a
+  weaker cyan crystal-crest response.
+- Apply the same material behavior wherever each builder is used, including Arenas
+  1–3 and all three Guardian debug-zone copies.
+
+### Technical approach
+
+1. Add one shared arithmetic-only emissive pulse helper to guardian primitives. It
+   updates existing `MeshStandardMaterial.emissiveIntensity` values and performs no
+   allocation in the frame loop.
+2. Drive only existing semantic accent materials from each body builder's `animate`
+   callback. Use distinct phase/speed values to avoid synchronized flashing while
+   keeping a slow, slight pulse.
+3. Do not add PointLights, locator columns, particle systems, textures, shaders, new
+   geometry, or post-processing passes. Existing bloom may pick up the emissive
+   surfaces, so intensity remains deliberately restrained.
+4. Preserve fade/defeat behavior by multiplying each emissive pulse by the builder's
+   existing visibility factor.
+
+### Verification
+
+- Syntax-check every changed JavaScript module; audit relative imports, file lengths,
+  and whitespace; inspect the focused diff for unrelated gameplay changes.
+- Manually compare all three arena Guardians and debug copies against the references,
+  checking that body accents pulse gently without washing out silhouettes or bringing
+  back beacon/halo lighting in Arenas 1 and 2.
+- A visual regression harness is not added for this narrow material-only pass; final
+  appearance and live renderer diagnostics remain browser-verification items.
+
+---
+
+## Per-Enemy Arena Spawn Portals (2026-07-22)
+
+### Player-facing contract
+
+- Every lesser enemy receives an individual woven-light portal at its exact spawn
+  position in Arenas 1, 2, and 3, including wrong-answer penalties and reinforcements.
+- The portal telegraphs for exactly one second. Its enemy does not exist visually,
+  collide, move, aim, attack, or count as an available target during that second.
+- At the one-second mark, the portal flashes outward, the enemy begins its existing
+  materialization lifecycle, and its current AI/combat behavior continues unchanged.
+- All arenas reuse the same teal/cyan portal treatment and synthesized summon cue.
+  Guardians and the Tower Keeper are excluded because they are persistent encounter
+  actors rather than wave-spawned lesser enemies.
+
+### Technical approach
+
+1. Change `COMBAT.SPAWN_TELEGRAPH` to `1` and make `CombatManager` own one generic
+   pending-spawn queue. A queued record stores the enemy type, exact portal position,
+   and a construction callback; pending records count toward wave/capacity checks.
+2. Reuse the existing pooled `CombatVfx` rings and shards to form the portal: two
+   inward-winding ground rings plus rising thread-like fragments, followed by a short
+   outward arrival pulse. Keep the fixed pools and avoid dynamic lights or per-frame
+   allocations.
+3. Route Arena 1 `Enemy`, Arena 2 `RailThreat`, and Arena 3 `TowerThreat` creation
+   through the shared queue. Preserve authored rail positions, tower anchors, seeded
+   rail behavior, HP/drop metadata, maximum-enemy caps, HUD counts, and event banners.
+4. Add one procedural `AudioManager.playEnemyPortal()` cue using the established Web
+   Audio SFX bus. A short retrigger guard collapses simultaneous per-enemy calls into
+   one audible batch cue, preventing stacked waves from clipping while every portal
+   still uses the same timing and visual contract. No external audio asset is needed.
+5. Clear pending records and pooled portal visuals on abort, faint, victory, stop,
+   disposal, and arena transition so delayed enemies cannot appear after teardown.
+
+### Verification
+
+- Statically verify all `new Enemy`, `new RailThreat`, and `new TowerThreat` arena
+  paths are queued, including `spawnExtra()` and `spawnPenaltyGargoyle()`.
+- Verify pending enemies affect wave/cap counts but cannot be shot, tracked, collide,
+  or emit attack/projectile intents before materialization.
+- Run `node --check` on touched modules, `git diff --check`, relative-import checks,
+  and the repository-wide 1000-line audit.
+- Browser-smoke Arena 1 waves/penalties, Arena 2 simultaneous river waves, and Arena 3
+  stage/penalty spawns; confirm one-second timing, portal/audio sync, clean abort/retry,
+  clean console, and no delayed post-victory spawn.
+- Skip a persistent screenshot-baseline harness and bot playtest: this is a narrow,
+  dynamic VFX timing change with no release-ready or difficulty claim. Manual browser
+  timing and interaction checks are the meaningful final evidence.
+
+### Skill and sourcing ledger
+
+- Loaded: `threejs-game-director`, `threejs-gameplay-systems`,
+  `threejs-audio-generator`, and `threejs-qa-release` guidance.
+- References loaded: gameplay workflows, game feel, audio workflows, QA/release,
+  visual verification, playtest QA, and release checklists.
+- External generation: skipped because this project deliberately synthesizes SFX in
+  Web Audio and the portal is a repeated support surface served by existing pools.
+- Out of scope: AAA graphics, UI redesign, physics, generated 3D/image assets, and
+  release packaging.
+
+### Verification outcome
+
+- Repository-wide JavaScript syntax checks passed.
+- `git diff --check` passed and no JavaScript or Markdown file exceeds 1000 lines.
+- Static spawn-path inspection confirms every Arena 1, 2, and 3 lesser-enemy
+  constructor is behind `_queueEnemySpawn()`, including both penalty entry points.
+- Pending spawns participate in wave/cap counts and are cleared by abort, stop, and
+  disposal paths; only materialized enemies reach collision, targeting, or AI loops.
+- Browser/canvas verification remains pending because permission to start the local
+  HTTP server was declined. No visual, console, or live audio pass is claimed.
+
+---
+
+# Arena 1 — Wave Cap, Wrong-Answer Lockout, and Feastkeeper Boss (2026-07-22)
+
+## Context
+
+Arena 1 ran endless waves with riddles on a wall clock, a wrong answer cost almost
+nothing (shoot the next node immediately), and the Feastkeeper was a prop that
+`defeat()`d once its armor pips were gone. The encounter had no shape, no cost for
+guessing, and no climax.
+
+## Design
+
+- **Bounded run.** `ARENA.TOTAL_WAVES = 10`; clearing one of `ARENA.RIDDLE_WAVES`
+  (3, 6, 10) opens that round's bugtong and **holds** the wave clock until it is
+  answered, so the player answers under the pressure already on the field.
+- **Wrong answer = lockout, not damage.** The wrong node shatters, the remaining
+  choices go inert (`AnswerNode.setInert`), and a chaser+spitter penalty squad
+  spawns. Only when that squad is dead do the nodes relight for another attempt at
+  the same riddle. No HP is deducted — the fight is the punishment.
+- **Boss phase.** Breaking the last armor layer stops the waves, poofs the leftover
+  adds, and hands the fight to `arena/FeastkeeperBoss.js`: telegraphed spits on a
+  per-phase interval, summons of 1/3/5 echoes on an independent randomized clock, and
+  two enrage thresholds (66% / 33%) that shorten both and open with a brief
+  invulnerable summon flare.
+- **Boss frame.** `#boss-bar` replaces `#guardian-wards`: guardian name, a health
+  track that only appears once the boss is damageable, and the armor pips beneath it.
+  The ghost-fill drain is now shared by the player and boss bars in `CombatHud`.
+- **Faint scope.** Dying during the boss resumes at the boss (`restartAfterFaint`);
+  dying earlier restarts the encounter as before.
+
+## Reuse
+
+`FeastkeeperBoss` drives the existing `Guardian` instance rather than building a body,
+follows `arena/TowerKeeper.js`'s shape, and routes every projectile, summon, and VFX
+call through `CombatManager` — so player damage, thread-tear spawn telegraphs, and
+pooling all work unchanged. Rail and Tower managers override `startFight`/`update`
+wholesale and are untouched; `CombatHud.setWards` remains as a shim over `setBoss`.
+
+## Verification
+
+Syntax-checked every touched module, confirmed no `RIDDLE_FIRST`/`RIDDLE_CADENCE`/
+`_roundActive`/`elWards` references survive, and confirmed all files stay under the
+1000-line limit. Browser verification is pending with the user.
+
+## Follow-up: boss tuning moved out of config into an ArenaBoss hierarchy
+
+`ARENA.BOSS` was removed from [src/config.js](src/config.js). A shared block there
+would have become a dumping ground for three unrelated fights, and the numbers only
+mean anything next to the code that reads them.
+
+- **`arena/ArenaBoss.js`** — the contract every zone's boss shares: hp/maxHp, armor
+  flares before the boss phase (`testArmoredHits`/`pingArmored`), the chest-sphere
+  bolt test, `damage()`, phase escalation against `PHASE_THRESHOLDS` with an invuln
+  flare, defeat, the pointer-lock pause guard, and scratch-backed `center()`/`aimAt()`.
+  `BOSS_DEFAULTS` holds only contract-level numbers (HP, hit radius, thresholds,
+  enrage window); a subclass spreads its own over them via `super(..., TUNING)`.
+- **Subclass hooks** — `_act(dt, playerPos)` is the fight, `_onPhaseChanged(phase)`
+  is the enrage, `_onDefeated()` is the death beat. A boss that implements none of
+  them simply stands and takes hits.
+- **`arena/FeastkeeperBoss.js`** — now ~100 lines: `FEASTKEEPER_TUNING` plus its
+  two-clock attrition mechanic (telegraphed spits on one timer, randomized 1/3/5
+  summons on another). Zone 2 and Zone 3 bosses subclass the same shell with
+  entirely different `_act` bodies and their own tuning constants.
+
+---
+
+# Global Focus Pause Hardening (2026-07-22)
+
+## Confirmed behavior
+
+- Escape, window blur, and `document.visibilitychange` share one pause path.
+- Pause covers zones, museum, arenas, debug, discovery/faint, intro, and endings;
+  static title/descend/completion/credits screens need no second overlay.
+- Every game clock, encounter, projectile, telegraph, buff, transition, and wait
+  freezes. Music continues quietly; SFX is muted.
+- Returning focus does not resume. A Resume click requests pointer lock when needed,
+  and Pause remains active until controls emit a successful `lock` event.
+
+## Design
+
+1. Add `core/_partials/GamePause.js` as the sole pause-state owner. Bind blur,
+   visibility, and pointer-lock signals; coalesce duplicates; distinguish intentional
+   unlocks; own Resume UI; and expose pause, resume, and active-time waits.
+2. Replace phase-specific unlock UI branches in `GameUI` with the controller.
+   Preserve the settings gear and contextual copy, but use Resume—not Descend—in
+   normal play and every arena. A failed/denied lock request leaves Pause visible.
+3. In `Game.animate`, keep the single RAF/render owner alive but skip every scene,
+   simulation, cutscene, and UI update while paused. Accumulate a game-time value
+   only on active frames so shader/encounter time cannot jump after a hidden tab.
+4. Move gameplay wall-clock delays, the tower slow penalty, and combat HUD cleanup
+   to pausable active time. Network latency and quiet Web Audio music remain real time.
+5. Clear player keys, velocity intents, `holdKey`, `_ePressed`, queued fire, and
+   transient pointer input on pause. Add `AudioManager.setPaused` to ramp music to
+   a quiet fraction, mute SFX/ending buses, and restore the user's saved volumes.
+
+## Verification
+
+- Syntax-check every JavaScript module, run `git diff --check`, validate relative
+  imports, and enforce the repository-wide 1000-line limit.
+- Browser-test Escape, Alt-Tab, tab switching, minimizing, repeated blur/visibility/
+  unlock events, failed lock acquisition, Resume, settings, and rapid pause/resume.
+- Exercise zones, museum, Arenas 1–3 (riddles, bosses, portals, buffs, tide/slow),
+  debug, discovery, faint, intro, and ending; confirm frozen state and clean console.
+- Debug references loaded: `debug-profile-checklists.md` and `scene-debugging.md`.

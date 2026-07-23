@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import {
   CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
-  ENDING, ARTIFACT_API, wait,
+  ENDING, ARTIFACT_API,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { createWorld, ZONES } from './zones/index.js';
@@ -15,7 +15,9 @@ import { MemoryRift } from './MemoryRift.js';
 import { ViewModel } from './ViewModel.js';
 import { createGameRenderer, createPostProcessing } from './_partials/GameRendering.js';
 import { bindGameUi, wireGameEvents } from './_partials/GameUI.js';
+import { GamePauseController } from './_partials/GamePause.js';
 import { arenaFlowMethods } from './_partials/ArenaFlow.js';
+import { debugZoneFlowMethods } from './_partials/DebugZoneFlow.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
 import { Museum } from '../museum/Museum.js';
@@ -58,11 +60,12 @@ export class Game {
     this.combat = null;     // arena-only
     this.arena = null;      // arena-only
     this.soul = null;       // Guardian Soul dropped in the main zone after a win
-    this.discovery = new DiscoveryScreen();
+    this.debugGallery = null; // debug phase only: three inert Guardian displays
+    this.discovery = null;
     this.museum = new Museum();                    // reusable digital-museum scene (hub)
     // (DEBUG_UNLOCK_ALL_ZONES is applied on hub entry — see _enterMuseum — so
     // the intro cutscene still shows zones 2/3 barricaded.)
-    this.cutscene = new IntroCutscene(this.museum); // scripted intro over the museum
+    this.cutscene = null;
     this.faintCutscene = new FaintCutscene();         // scripted black-out on an arena defeat
 
     const postProcessing = createPostProcessing(this.renderer, this.world.scene, this.camera);
@@ -72,7 +75,8 @@ export class Game {
     this.endingDistortion = postProcessing.endingDistortion;
 
     this.clock = new THREE.Clock();
-    this.phase = 'title';     // title -> cutscene -> descend -> playing -> arena
+    this._gameTime = 0;
+    this.phase = 'title';     // title -> cutscene/descend/playing/arena, or direct debug
     this.busy = false;        // true during discovery / riddle / scatter
     this.bossDefeated = false; // true once the arena is cleared & artifacts are loose
     this.collectedSouls = new Set();   // main-zone ids whose Guardian Soul is recovered
@@ -85,6 +89,12 @@ export class Game {
     this.holdKey = false;     // E currently held
     this.holdProgress = 0;    // 0..1 hold-to-collect progress
     bindGameUi(this);
+    this.pause = new GamePauseController(this);
+    this.discovery = new DiscoveryScreen((milliseconds) => this.pause.wait(milliseconds));
+    this.cutscene = new IntroCutscene(
+      this.museum,
+      (callback) => this.pause.nextFrame(callback),
+    );
     this.portalCutscene = new PortalPullCutscene();
     this.museumEndingCutscene = new MuseumEndingCutscene(this.museum);
     this.restoredProvince = new RestoredProvince(
@@ -120,7 +130,7 @@ export class Game {
     if (this.busy) return;
     this.busy = true;
     this.holdProgress = 0;
-    this.player.controls.unlock();
+    this.pause.releasePointerLock();
     await this.discovery.show(nearest.data, this.world.zone.name, () => {
       this.artifacts.collect(nearest);
       void this.api.recordArtifactCollection(nearest.data, this.world.zone.name);
@@ -143,7 +153,7 @@ export class Game {
     if (this.busy) return;
     this.busy = true;
     this.elPrompt.classList.remove('active');
-    this.player.controls.unlock();
+    this.pause.releasePointerLock();
     // In the museum this.world is the hub, so derive provenance from the
     // artifact's own zone number via the zone registry.
     const zoneName = ZONES['zone' + data.zone]?.name;
@@ -218,7 +228,7 @@ export class Game {
     this.elFaint.classList.add('active');             // CSS fades to black
 
     await this.faintCutscene.play(camPos, lookAt);
-    await wait(FAINT.BLACK_HOLD * 1000);              // unconscious in the dark
+    await this.pause.wait(FAINT.BLACK_HOLD * 1000);   // unconscious in the dark
 
     // Wake at the respawn point (under the black), then fade back in.
     respawn();
@@ -319,9 +329,9 @@ export class Game {
       if (token !== this._introToken) return;        // superseded by a newer entry
       this.elZintro.textContent = line;
       this.elZintro.classList.add('active');
-      await wait(ZONE_INTRO.LINE * 1000);
+      await this.pause.wait(ZONE_INTRO.LINE * 1000);
       this.elZintro.classList.remove('active');
-      await wait(ZONE_INTRO.GAP * 1000);             // fade out before the next line
+      await this.pause.wait(ZONE_INTRO.GAP * 1000);  // fade out before the next line
     }
   }
 
@@ -344,7 +354,7 @@ export class Game {
     this.elRingWrap.classList.remove('active');
     this.player.elStaminaWrap.classList.remove('active');
     this.viewmodel.group.visible = false;
-    if (this.player.controls.isLocked) this.player.controls.unlock();
+    if (this.player.controls.isLocked) this.pause.releasePointerLock();
 
     // Swap to the gentler ending bloom for every beat of the finale; the
     // gameplay values return with the epilogue museum.
@@ -370,9 +380,9 @@ export class Game {
     this.elFlash.style.opacity = '1';
     void this.elFlash.offsetHeight;
     this.elFlash.style.transition = '';
-    await wait(420);
+    await this.pause.wait(420);
     this.elEndingBlack.classList.add('active');
-    await wait(1450);
+    await this.pause.wait(1450);
     this.elFlash.style.opacity = '0';
     this.endingDistortion.enabled = false;
     this.endingDistortion.uniforms.uAmount.value = 0;
@@ -397,10 +407,10 @@ export class Game {
     this.renderPass.scene = this.museum.scene;
     this.renderPass.camera = this.museumEndingCutscene.camera;
     const museumPlay = this.museumEndingCutscene.play();
-    requestAnimationFrame(() => this.elEndingBlack.classList.remove('active'));
+    this.pause.nextFrame(() => this.elEndingBlack.classList.remove('active'));
     await museumPlay;
     this.elEndingBlack.classList.add('active');
-    await wait(1450);
+    await this.pause.wait(1450);
 
     this.phase = 'endingRestored';
     this.renderPass.scene = this.restoredProvince.scene;
@@ -408,11 +418,11 @@ export class Game {
     this.audio.startDryAmbience();
     this.audio.playEndingVoiceover();
     const restoredPlay = this.restoredProvince.play();
-    requestAnimationFrame(() => this.elEndingBlack.classList.remove('active'));
+    this.pause.nextFrame(() => this.elEndingBlack.classList.remove('active'));
     await restoredPlay;
 
     this.elEndingBlack.classList.add('active');
-    await wait(1450);
+    await this.pause.wait(1450);
     this.phase = 'endingCredits';
     this.elEndingCredits.classList.add('active');
   }
@@ -451,12 +461,12 @@ export class Game {
     this._ePressed = false;
     this.phase = 'museum';
     this.player.controls.lock();
-    requestAnimationFrame(() => this.elEndingBlack.classList.remove('active'));
+    this.pause.nextFrame(() => this.elEndingBlack.classList.remove('active'));
   }
 
   _zoneComplete() {
     this.phase = 'complete';      // the card is up; controls already unlocked by discovery
-    if (this.player.controls.isLocked) this.player.controls.unlock();
+    if (this.player.controls.isLocked) this.pause.releasePointerLock();
     // Record this zone as done and open the next portal in the hub (sequential unlock).
     this.completed.add(this.currentZone);
     const next = this.zoneOrder[this.zoneOrder.indexOf(this.currentZone) + 1];
@@ -552,7 +562,7 @@ export class Game {
 
     this.elZoneDone.classList.remove('active');
     this.player.controls.lock();
-    requestAnimationFrame(() => { this.elFlash.style.opacity = '0'; });
+    this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
   }
 
   // From the hub: flash white to hide the swap, then build + enter the chosen zone.
@@ -564,7 +574,7 @@ export class Game {
     void this.elFlash.offsetHeight;
     this.elFlash.style.transition = '';
     this._loadZone(zoneId);
-    requestAnimationFrame(() => { this.elFlash.style.opacity = '0'; });
+    this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
   }
 
   // Tear down the current zone and build a fresh main zone in its place: re-parent
@@ -618,13 +628,18 @@ export class Game {
     // replays alike). Coming from the hub the player is pointer-locked, so unlock
     // to surface the overlay; the descend click re-locks and starts gameplay.
     this._showDescend();
-    if (this.player.controls.isLocked) this.player.controls.unlock();
+    if (this.player.controls.isLocked) this.pause.releasePointerLock();
   }
 
   animate() {
     requestAnimationFrame(() => this.animate());
     const dt = Math.min(this.clock.getDelta(), 0.05);
-    const t = this.clock.elapsedTime;
+    if (this.pause.isPaused) {
+      this.composer.render();
+      return;
+    }
+    this._gameTime += dt;
+    const t = this._gameTime;
 
     // Intro cutscene owns the camera; skip all gameplay/input until it ends.
     if (this.phase === 'cutscene') {
@@ -724,6 +739,20 @@ export class Game {
       return;
     }
 
+    // Developer-only Guardian showroom: free-roam inspection with no objective,
+    // combat, interaction, teleport, or progression systems active.
+    if (this.phase === 'debug') {
+      const playerPos = this.player.controls.getObject().position;
+      this.world.update(dt, t, playerPos);
+      this.player.update(dt);
+      this.viewmodel.update(dt, this.player.moving);
+      this.debugGallery.update(dt, t);
+      this.audio.updateListener(this.camera);
+      this._ePressed = false;
+      this.composer.render();
+      return;
+    }
+
     // Memory Arena: the reused combat core runs the fight, the ArenaController
     // runs the riddle rounds + armor, and winning flips arena.won → collapse +
     // return to the main zone. Firing is via the mousedown → combat.requestFire.
@@ -815,3 +844,4 @@ export class Game {
 }
 
 Object.assign(Game.prototype, arenaFlowMethods);
+Object.assign(Game.prototype, debugZoneFlowMethods);

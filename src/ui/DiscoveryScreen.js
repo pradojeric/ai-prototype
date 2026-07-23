@@ -5,7 +5,8 @@ import { wait } from '../config.js';
 import { fetchArtifactData, ZONE_NAME } from '../data.js';
 
 export class DiscoveryScreen {
-  constructor() {
+  constructor(waitFor = wait) {
+    this._wait = waitFor;
     this.flash = document.getElementById('flash');
     this.panel = document.getElementById('discovery');
     this.active = false;
@@ -18,9 +19,12 @@ export class DiscoveryScreen {
   async show(artifactData, zoneName, onSaved) {
     this.active = true;
     this.flash.style.opacity = '1';            // fade to white
-    await wait(1100);
+    await this._wait(1100);
 
     const d = await fetchArtifactData(artifactData.id); // mock API
+    // Network latency remains real time, but applying its result is a game-state
+    // transition and must wait until a hidden/blurred game is active again.
+    await this._wait(0);
     document.getElementById('d-img').setAttribute('src', d.image || '');
     document.getElementById('d-fil').textContent = d.fil;
     document.getElementById('d-eng').textContent = d.eng;
@@ -36,9 +40,9 @@ export class DiscoveryScreen {
   async _dismiss() {
     if (!this.panel.classList.contains('active')) return;
     this.panel.classList.remove('active');
-    await wait(800);
+    await this._wait(800);
     this.flash.style.opacity = '0';            // fade back to water
-    await wait(1100);
+    await this._wait(1100);
     this.active = false;
     this._resolveDismiss && this._resolveDismiss();
   }

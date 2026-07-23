@@ -4,7 +4,7 @@
 // the repository's 1000-line hard limit.
 // ============================================================
 import * as THREE from 'three';
-import { CONFIG, ARENA, PLAYER_RADIUS, wait } from '../../config.js';
+import { CONFIG, ARENA, PLAYER_RADIUS } from '../../config.js';
 import { createWorld } from '../zones/index.js';
 import { ArtifactManager } from '../ArtifactManager.js';
 import { Guardian } from '../Guardian.js';
@@ -37,7 +37,7 @@ export const arenaFlowMethods = {
     void this.elFlash.offsetHeight;
     this.elFlash.style.transition = '';
     this._loadArena(arenaId);
-    requestAnimationFrame(() => { this.elFlash.style.opacity = '0'; });
+    this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
   },
 
   _loadArena(arenaId) {
@@ -60,7 +60,10 @@ export const arenaFlowMethods = {
     this.guardian = definition.spawnGuardian === false
       ? null
       : new Guardian(
-        this.world.scene, this.world, definition.guardianVariant || 'zone1',
+        this.world.scene,
+        this.world,
+        definition.guardianVariant || 'zone1',
+        definition.guardianEffects,
       );
     this.combat = Combat
       ? new Combat(
@@ -82,8 +85,8 @@ export const arenaFlowMethods = {
     this._startArenaPhase();
   },
 
-  _spawnAtArenaCenter() {
-    const start = this.world.zone.playerStart || {
+  _spawnAtArenaCenter(override = null) {
+    const start = override || this.world.zone.playerStart || {
       x: ARENA.CENTER.x, y: CONFIG.EYE_HEIGHT, z: ARENA.CENTER.z,
     };
     const object = this.player.controls.getObject();
@@ -108,7 +111,7 @@ export const arenaFlowMethods = {
     this.busy = true;
     this.elCross.classList.remove('active');
     const fallenCenter = this.arena.guardianCenter();
-    await wait(ARENA.COLLAPSE * 1000);
+    await this.pause.wait(ARENA.COLLAPSE * 1000);
 
     this.elFlash.style.transition = 'none';
     this.elFlash.style.opacity = '1';
@@ -154,7 +157,7 @@ export const arenaFlowMethods = {
     this._levelCamera();
     this.busy = false;
     this._loadingZone = false;
-    requestAnimationFrame(() => { this.elFlash.style.opacity = '0'; });
+    this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
     if (this.artifacts.total === 0 && this.collectedSouls.has(this.currentZone)) {
       this._zoneComplete();
       return;
@@ -172,10 +175,14 @@ export const arenaFlowMethods = {
   async _arenaFaint() {
     if (this.busy) return;
     this.busy = true;
+    const retryPoint = this.arena.getRetryPoint?.() || null;
     this.arena.resetLumina();
     if (this.combat) this.combat.abortFight();
-    await this._faintOnly(() => this._spawnAtArenaCenter());
-    this.arena.begin(this.combat, this.guardian);
+    await this._faintOnly(() => this._spawnAtArenaCenter(retryPoint));
+    // Controllers that distinguish "died during the boss" from "died mid-waves"
+    // resume at the right place; the others just restart the encounter.
+    if (this.arena.restartAfterFaint) this.arena.restartAfterFaint(this.combat, this.guardian);
+    else this.arena.begin(this.combat, this.guardian);
     this.busy = false;
     this._startArenaPhase();
   },

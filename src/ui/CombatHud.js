@@ -26,14 +26,29 @@ export class CombatHud {
     this.elWaveLeft = document.getElementById('wave-left');
     this.elHurt = document.getElementById('hurt');
     this.elCross = document.getElementById('crosshair');
-    this.elWards = document.getElementById('guardian-wards');
-    this.elWardName = document.getElementById('ward-name');
+    this.elBoss = document.getElementById('boss-bar');
+    this.elBossName = document.getElementById('boss-name');
+    this.elBossFill = document.getElementById('boss-hp-fill');
+    this.elBossLag = document.getElementById('boss-hp-lag');
     this.elWardPips = document.getElementById('ward-pips');
+    this.elRiddleClock = document.getElementById('rail-riddle-clock');
+    this.elRiddleLabel = document.getElementById('rail-riddle-label');
+    this.elRiddleSegments = document.getElementById('rail-riddle-segments');
 
-    this._pct = 1;            // true health fraction
-    this._lagPct = 1;         // ghost fill chasing it down
+    // Health bars are {true fraction, ghost fraction} pairs; the ghost trails
+    // the true fill down so the size of a hit stays readable. update() drains
+    // every registered bar, so adding one is two fields, not a second loop.
+    this._bars = {
+      player: { pct: 1, lag: 1, fill: this.elHealthFill, lagEl: this.elHealthLag },
+      boss: { pct: 1, lag: 1, fill: this.elBossFill, lagEl: this.elBossLag },
+    };
     this._threatTimer = 0;
     this._wardTotal = 0;
+    this._riddleTotal = 0;
+    this._riddleSegmentFills = [];
+    this._healFlashRemaining = 0;
+    this._hitMarkerRemaining = 0;
+    this._pipBreaks = [];
 
     this._arcs = this._buildPool('dmg-arcs', HUD.DMG_ARCS, 'dmg-arc');
     this._arcState = this._arcs.map(() => ({ life: 0, angle: 0 }));
@@ -79,34 +94,44 @@ export class CombatHud {
 
   hide() {
     this.elHealth.classList.remove('active', 'lumina-heal');
-    this.elWave.classList.remove('active');
+    this.elWave.classList.remove('active', 'boss');
     this.elCross.classList.remove('combat');
+    this.elCross.classList.remove('hit');
     this.elHurt.classList.remove('active');
+    this._healFlashRemaining = 0;
+    this._hitMarkerRemaining = 0;
     this.hideWards();
     this._clearOverlays();
   }
 
   // ---- health -----------------------------------------------------------
 
-  setHealth(hp, max) {
-    this._pct = clamp01(hp / max);
-    const pct = this._pct * 100;
-    this.elHealthFill.style.width = pct + '%';
-    // Taking damage snaps the true fill down and leaves the ghost behind to
-    // drain; healing pulls the ghost straight up so it never trails upward.
-    if (this._pct > this._lagPct) {
-      this._lagPct = this._pct;
-      if (this.elHealthLag) this.elHealthLag.style.width = pct + '%';
+  // Write one bar's true fill. Taking damage snaps the fill down and leaves the
+  // ghost behind to drain; healing pulls the ghost straight up so it never
+  // trails upward. Shared by the player bar and the boss bar.
+  _setBar(key, hp, max) {
+    const bar = this._bars[key];
+    if (!bar || !bar.fill) return 1;
+    bar.pct = clamp01(hp / max);
+    const pct = bar.pct * 100;
+    bar.fill.style.width = pct + '%';
+    if (bar.pct > bar.lag) {
+      bar.lag = bar.pct;
+      if (bar.lagEl) bar.lagEl.style.width = pct + '%';
     }
-    this.elHealth.classList.toggle('low', this._pct < 0.3);
+    return bar.pct;
+  }
+
+  setHealth(hp, max) {
+    const pct = this._setBar('player', hp, max);
+    this.elHealth.classList.toggle('low', pct < 0.3);
   }
 
   healFlash() {
     this.elHealth.classList.remove('lumina-heal');
     void this.elHealth.offsetHeight;   // restart the animation
     this.elHealth.classList.add('lumina-heal');
-    clearTimeout(this._healTimeout);
-    this._healTimeout = setTimeout(() => this.elHealth.classList.remove('lumina-heal'), 420);
+    this._healFlashRemaining = 0.42;
   }
 
   // ---- waves / crosshair ------------------------------------------------
@@ -117,6 +142,10 @@ export class CombatHud {
   }
 
   setWaveLeft(count) { this.elWaveLeft.textContent = count; }
+
+  // Boss phase: the wave number is meaningless (the boss summons on its own
+  // clock) but the live-threat count still matters, so only the count line goes.
+  setBossWaves(active) { this.elWave.classList.toggle('boss', !!active); }
 
   punchWave() {
     this.elWave.animate(
@@ -129,19 +158,97 @@ export class CombatHud {
 
   hitMarker() {
     this.elCross.classList.add('hit');
-    clearTimeout(this._hitTimeout);
-    this._hitTimeout = setTimeout(() => this.elCross.classList.remove('hit'), 80);
+    this._hitMarkerRemaining = 0.08;
   }
 
   hurt(active) { this.elHurt.classList.toggle('active', active); }
 
-  // ---- guardian wards ---------------------------------------------------
+  // ---- Arena 2 riddle timeline ------------------------------------------
 
-  // Rebuild the pip row when the ward count changes shape (a new encounter),
-  // then mark spent pips. `remaining` counts wards still standing.
+  showRiddleTimeline(total = 3) {
+    if (!this.elRiddleClock || !this.elRiddleSegments) return;
+    if (total !== this._riddleTotal) {
+      this._riddleTotal = total;
+      this._riddleSegmentFills.length = 0;
+      this.elRiddleSegments.textContent = '';
+      for (let i = 0; i < total; i++) {
+        const segment = document.createElement('i');
+        const fill = document.createElement('span');
+        segment.appendChild(fill);
+        this.elRiddleSegments.appendChild(segment);
+        this._riddleSegmentFills.push(fill);
+      }
+    }
+    this.elRiddleClock.classList.add('active');
+    this.elRiddleClock.setAttribute('aria-hidden', 'false');
+  }
+
+  setRiddleTimeline(step, progress, secondsRemaining, isActive = false) {
+    if (!this.elRiddleClock) return;
+    this.showRiddleTimeline(this._riddleTotal || 3);
+    const current = Math.max(0, Math.min(this._riddleTotal - 1, step));
+    const pct = clamp01(progress);
+    for (let i = 0; i < this._riddleSegmentFills.length; i++) {
+      const fill = i < current ? 1 : i === current ? pct : 0;
+      this._riddleSegmentFills[i].style.width = `${fill * 100}%`;
+    }
+
+    const seconds = Math.max(0, Math.ceil(secondsRemaining));
+    const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    const label = isActive ? `Riddle ${current + 1} active` : `Riddle ${current + 1} in ${clock}`;
+    if (this.elRiddleLabel) this.elRiddleLabel.textContent = label;
+    this.elRiddleClock.setAttribute('aria-label', label);
+    this.elRiddleClock.setAttribute('aria-valuemin', '0');
+    this.elRiddleClock.setAttribute('aria-valuemax', '100');
+    this.elRiddleClock.setAttribute('aria-valuenow', String(Math.round(pct * 100)));
+  }
+
+  hideRiddleTimeline() {
+    if (!this.elRiddleClock) return;
+    this.elRiddleClock.classList.remove('active');
+    this.elRiddleClock.setAttribute('aria-hidden', 'true');
+  }
+
+  // ---- boss frame (name + health + armor pips) ---------------------------
+
+  // The whole top-of-screen boss frame in one call. `hp`/`maxHp` are optional:
+  // an encounter that only gates on armor (rail, tower) omits them and the
+  // health track stays hidden rather than showing a bar nothing can move.
+  setBoss({ name, hp = null, maxHp = null, armor = 0, armorTotal = 0 } = {}) {
+    if (!this.elBoss) return;
+    if (this.elBossName && name) this.elBossName.textContent = name;
+
+    const vulnerable = hp !== null && maxHp > 0;
+    this.elBoss.classList.toggle('vulnerable', vulnerable);
+    if (vulnerable) this._setBar('boss', hp, maxHp);
+
+    this._setArmor(armor, armorTotal);
+    this.elBoss.classList.add('active');
+  }
+
+  hideBoss() {
+    if (!this.elBoss) return;
+    this.elBoss.classList.remove('active', 'vulnerable');
+    this.hideRiddleTimeline();
+    this._wardTotal = 0;
+    this._bars.boss.pct = 1;
+    this._bars.boss.lag = 1;
+    this._pipBreaks.length = 0;
+    if (this.elBossFill) this.elBossFill.style.width = '100%';
+    if (this.elBossLag) this.elBossLag.style.width = '100%';
+    if (this.elWardPips) this.elWardPips.textContent = '';
+  }
+
+  // Armor-gated controllers can keep their compact ward-only call site.
   setWards(name, remaining, total) {
-    if (!this.elWards) return;
-    if (this.elWardName && name) this.elWardName.textContent = name;
+    this.setBoss({ name, armor: remaining, armorTotal: total });
+  }
+
+  hideWards() { this.hideBoss(); }
+
+  // Rebuild the pip row when the armor count changes shape (a new encounter),
+  // then mark spent pips. `remaining` counts layers still standing.
+  _setArmor(remaining, total) {
     if (this.elWardPips && total !== this._wardTotal) {
       this._wardTotal = total;
       this.elWardPips.textContent = '';
@@ -157,19 +264,11 @@ export class CombatHud {
         // Only newly-spent pips flash, so re-showing the row stays quiet.
         if (spent && !pips[i].classList.contains('spent')) {
           pips[i].classList.add('breaking');
-          setTimeout(() => pips[i].classList.remove('breaking'), 520);
+          this._pipBreaks.push({ element: pips[i], remaining: 0.52 });
         }
         pips[i].classList.toggle('spent', spent);
       }
     }
-    this.elWards.classList.add('active');
-  }
-
-  hideWards() {
-    if (!this.elWards) return;
-    this.elWards.classList.remove('active');
-    this._wardTotal = 0;
-    if (this.elWardPips) this.elWardPips.textContent = '';
   }
 
   // ---- directional damage ----------------------------------------------
@@ -215,7 +314,7 @@ export class CombatHud {
     let used = 0;
     for (const enemy of enemies) {
       if (used >= this._markers.length) break;
-      if (!enemy.alive) continue;
+      if (!enemy.alive || enemy.hudVisible === false) continue;
       enemy.center(this._v);
       this._v.project(camera);
       // project() mirrors points that sit behind the camera; flip them back so
@@ -255,21 +354,36 @@ export class CombatHud {
   // Fade the damage arcs and drain the health ghost. Driven on real dt so the
   // HUD keeps settling through hitstop and after a fight ends.
   update(dt) {
+    if (this._healFlashRemaining > 0) {
+      this._healFlashRemaining = Math.max(0, this._healFlashRemaining - dt);
+      if (this._healFlashRemaining <= 0) this.elHealth.classList.remove('lumina-heal');
+    }
+    if (this._hitMarkerRemaining > 0) {
+      this._hitMarkerRemaining = Math.max(0, this._hitMarkerRemaining - dt);
+      if (this._hitMarkerRemaining <= 0) this.elCross.classList.remove('hit');
+    }
+    for (let i = this._pipBreaks.length - 1; i >= 0; i--) {
+      const pip = this._pipBreaks[i];
+      pip.remaining -= dt;
+      if (pip.remaining > 0) continue;
+      pip.element.classList.remove('breaking');
+      this._pipBreaks.splice(i, 1);
+    }
     for (let i = 0; i < this._arcState.length; i++) {
       const state = this._arcState[i];
       if (state.life <= 0) continue;
       state.life = Math.max(0, state.life - dt);
       this._arcs[i].style.opacity = String(state.life / HUD.DMG_ARC_LIFE);
     }
-    if (this._lagPct > this._pct) {
-      this._lagPct = Math.max(this._pct, this._lagPct - HUD.HEALTH_LAG * dt);
-      if (this.elHealthLag) this.elHealthLag.style.width = this._lagPct * 100 + '%';
+    for (const key in this._bars) {
+      const bar = this._bars[key];
+      if (bar.lag <= bar.pct) continue;
+      bar.lag = Math.max(bar.pct, bar.lag - HUD.HEALTH_LAG * dt);
+      if (bar.lagEl) bar.lagEl.style.width = bar.lag * 100 + '%';
     }
   }
 
   dispose() {
-    clearTimeout(this._hitTimeout);
-    clearTimeout(this._healTimeout);
     this.hide();
     for (const el of this._arcs) el.remove();
     for (const el of this._markers) el.remove();

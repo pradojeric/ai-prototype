@@ -1,154 +1,228 @@
 // ============================================================
-// TOWER THREAT — Arena 3's Gargoyle Sentinels and Gale Whispers, pinned to the
-// ledge anchors of the ascent. The tower combat manager owns damage and
-// projectiles; this only walks its support and raises intents. Materialising,
-// the hit flash, the dissolve, and the death puff come from ThreatBody, shared
-// with the other two arenas.
+// TOWER THREAT — fixed Gargoyle sentries and flying Gale shooters for Arena 3.
+// The combat manager owns damage and projectiles; threats publish attack intent
+// only after their authored telegraphs have completed.
 // ============================================================
 import * as THREE from 'three';
 import { TOWER_ARENA } from '../../config.js';
+import { fadeMat, angDelta } from '../guardians/primitives.js';
 import { ThreatBody } from '../combat/ThreatBody.js';
 
-const EDGE_MARGIN = 0.18;
-const GALE_HOVER = 1.45;
+const GARGOYLE_GLOW = 0xffc75a;
+const GALE_GLOW = 0x8fe8ff;
+const VERTICAL_MARKER_BAND = 2.25;
+const GARGOYLE_TIER_TOLERANCE = 0.9;
+
+function localToWorld(anchor, localX, localZ, out) {
+  const sin = Math.sin(anchor.rotation);
+  const cos = Math.cos(anchor.rotation);
+  out.x = anchor.x + cos * localX + sin * localZ;
+  out.z = anchor.z - sin * localX + cos * localZ;
+  const progress = Math.max(0, Math.min(1, (localZ + anchor.halfD) / (anchor.halfD * 2)));
+  out.y = anchor.startHeight + (anchor.endHeight - anchor.startHeight) * progress;
+  return out;
+}
 
 export class TowerThreat extends ThreatBody {
-  constructor(scene, world, type, anchor, player) {
+  constructor(scene, world, type, anchor, player, options = {}) {
     const cfg = type === 'gargoyle' ? TOWER_ARENA.GARGOYLE : TOWER_ARENA.GALE;
     super(scene, type, {
       hp: cfg.HP,
       radius: cfg.RADIUS,
-      // Snappier than the flooded arenas: the tower's threats are stone, and
-      // the climb gives the player less room to wait one out.
-      fadeIn: 0.35,
-      flashGain: 1.2,
-      poofColor: type === 'gargoyle' ? 0x9fd8c8 : 0x91a8ff,
+      fadeIn: options.placed ? 0.01 : 0.4,
+      flashDecay: 0.18,
+      flashGain: 1.8,
+      poofColor: type === 'gargoyle' ? GARGOYLE_GLOW : GALE_GLOW,
     });
     this.world = world;
     this.player = player;
-    this.anchor = anchor;
     this.cfg = cfg;
-    this._timer = 1 + Math.random();
-    this._phase = Math.random() * Math.PI * 2;
-    this._cos = Math.cos(anchor.rotation || 0);
-    this._sin = Math.sin(anchor.rotation || 0);
-    this._localX = 0;
-    this._localZ = 0;
-
-    const material = new THREE.MeshStandardMaterial({
-      color: type === 'gargoyle' ? 0x7892a0 : 0x6d83c7,
-      emissive: type === 'gargoyle' ? 0x285968 : 0x183a52,
-      emissiveIntensity: type === 'gargoyle' ? 1.7 : 1.2,
-    });
-    const geometry = type === 'gargoyle'
-      ? new THREE.DodecahedronGeometry(0.55, 0)
-      : new THREE.IcosahedronGeometry(0.42, 1);
-    this.group.add(new THREE.Mesh(geometry, material));
-    this._mat = this.registerFlash(this.registerFade(material, 1));
-    if (type === 'gargoyle') this._buildGargoyleSilhouette(material);
-    const spawnZ = type === 'gargoyle'
-      ? (anchor.halfD - this.radius - EDGE_MARGIN) * 0.97
+    this.anchor = anchor;
+    this.hudVisible = true;
+    this.projectileDamage = cfg.DAMAGE;
+    this.projectileKnockback = cfg.KNOCKBACK;
+    this._rng = options.rng || Math.random;
+    this._phase = this._rng() * Math.PI * 2;
+    this._state = 'idle';
+    this._timer = type === 'gale'
+      ? cfg.SHOT_INTERVAL * (0.55 + this._rng() * 0.35)
       : 0;
-    this._placeOnSupport(0, spawnZ, 0);
-  }
+    this._scratch = new THREE.Vector3();
 
-  _buildGargoyleSilhouette(material) {
-    const wingGeometry = new THREE.BoxGeometry(0.75, 0.12, 0.5);
-    for (const side of [-1, 1]) {
-      const wing = new THREE.Mesh(wingGeometry, material);
-      wing.position.set(side * 0.62, 0.08, 0.05);
-      wing.rotation.z = side * 0.38;
-      wing.rotation.y = side * 0.22;
-      this.group.add(wing);
+    TowerThreat.portalPosition(anchor, type, this._scratch, options);
+    this.group.position.copy(this._scratch);
+    this._fixedX = this.group.position.x;
+    this._fixedZ = this.group.position.z;
+    if (type === 'gargoyle') {
+      this.hudVisible = Math.abs(player.eyeBase - this.group.position.y) <= VERTICAL_MARKER_BAND;
     }
-    this._eyeMat = this.registerFade(
-      new THREE.MeshBasicMaterial({ color: 0x9ff7ff }), 1,
-    );
-    const eyeGeometry = new THREE.SphereGeometry(0.07, 6, 4);
-    for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(eyeGeometry, this._eyeMat);
-      eye.position.set(side * 0.16, 0.12, -0.5);
-      this.group.add(eye);
+    this._buildBody();
+    if (options.placed) this._fade = 1;
+  }
+
+  static portalPosition(anchor, type, out, options = {}) {
+    if (anchor.spawnX !== undefined) {
+      return out.set(anchor.spawnX, anchor.spawnY, anchor.spawnZ);
     }
+    if (type === 'gargoyle') {
+      localToWorld(anchor, anchor.localX || 0, anchor.localZ || 0, out);
+      out.y += 0.06;
+      return out;
+    }
+    return out.set(anchor.x, anchor.y + 1.4, anchor.z);
   }
 
-  _supportHeight(localZ) {
-    const progress = (localZ + this.anchor.halfD) / (this.anchor.halfD * 2);
-    return this.anchor.startHeight +
-      (this.anchor.endHeight - this.anchor.startHeight) * progress;
+  _buildBody() {
+    const isGargoyle = this.type === 'gargoyle';
+    const glow = isGargoyle ? GARGOYLE_GLOW : GALE_GLOW;
+    this._bodyMat = this.registerFade(fadeMat(
+      isGargoyle ? 0x34333a : 0x183b4a,
+      isGargoyle ? 0x756552 : 0x3a8794,
+      0.6,
+      0.92,
+    ));
+    this._glowMat = this.registerFlash(this.registerFade(
+      fadeMat(0xf8fbff, glow, 2.2, 0.96, 0.35, 0),
+    ));
+    this.figure = new THREE.Group();
+    this.rig.add(this.figure);
+
+    if (isGargoyle) this._buildGargoyle();
+    else this._buildGale();
   }
 
-  _placeOnSupport(localX, localZ, bob) {
-    const maxX = Math.max(0, this.anchor.halfW - this.radius - EDGE_MARGIN);
-    const maxZ = Math.max(0, this.anchor.halfD - this.radius - EDGE_MARGIN);
-    this._localX = Math.max(-maxX, Math.min(maxX, localX));
-    this._localZ = Math.max(-maxZ, Math.min(maxZ, localZ));
-    const dx = this._localX * this._cos + this._localZ * this._sin;
-    const dz = -this._localX * this._sin + this._localZ * this._cos;
-    const hover = this.type === 'gale' ? GALE_HOVER : this.radius + 0.05;
-    this.group.position.set(
-      this.anchor.x + dx,
-      this._supportHeight(this._localZ) + hover + bob,
-      this.anchor.z + dz,
+  _buildGargoyle() {
+    const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.48, 0), this._bodyMat);
+    body.position.y = 0.72;
+    body.scale.set(0.86, 1.35, 0.82);
+    this.figure.add(body);
+    const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3, 0), this._bodyMat);
+    head.position.set(0, 1.34, -0.08);
+    this.figure.add(head);
+    this._wings = new THREE.Group();
+    for (const side of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.25, 4), this._bodyMat);
+      wing.position.set(side * 0.58, 0.84, 0.08);
+      wing.rotation.z = side * 0.92;
+      wing.rotation.x = -0.22;
+      this._wings.add(wing);
+      const eye = new THREE.Mesh(new THREE.IcosahedronGeometry(0.075, 0), this._glowMat);
+      eye.position.set(side * 0.1, 1.38, -0.28);
+      this.figure.add(eye);
+    }
+    this.figure.add(this._wings);
+    this._muzzle = head;
+  }
+
+  _buildGale() {
+    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.44, 1), this._bodyMat);
+    body.scale.set(1.4, 0.75, 0.8);
+    this.figure.add(body);
+    for (const side of [-1, 1]) {
+      const ribbon = new THREE.Mesh(new THREE.ConeGeometry(0.11, 1.1, 5), this._bodyMat);
+      ribbon.position.set(side * 0.46, -0.05, 0.38);
+      ribbon.rotation.z = side * 0.65;
+      ribbon.rotation.x = Math.PI / 2;
+      this.figure.add(ribbon);
+    }
+    this._muzzle = new THREE.Mesh(new THREE.IcosahedronGeometry(0.14, 0), this._glowMat);
+    this._muzzle.position.set(0, 0, -0.48);
+    this.figure.add(this._muzzle);
+  }
+
+  center(out) {
+    return out.set(
+      this.group.position.x,
+      this.group.position.y + (this.type === 'gargoyle' ? 0.85 : 0) + this.emergeOffset,
+      this.group.position.z,
     );
   }
 
-  _tryMove(worldX, worldZ) {
-    const dx = worldX - this.anchor.x;
-    const dz = worldZ - this.anchor.z;
-    const localX = dx * this._cos - dz * this._sin;
-    const localZ = dx * this._sin + dz * this._cos;
-    const maxX = Math.max(0, this.anchor.halfW - this.radius - EDGE_MARGIN);
-    const maxZ = Math.max(0, this.anchor.halfD - this.radius - EDGE_MARGIN);
-    const clampedX = Math.max(-maxX, Math.min(maxX, localX));
-    const clampedZ = Math.max(-maxZ, Math.min(maxZ, localZ));
-    const candidateX = this.anchor.x + clampedX * this._cos + clampedZ * this._sin;
-    const candidateZ = this.anchor.z - clampedX * this._sin + clampedZ * this._cos;
-    const supportY = this._supportHeight(clampedZ);
-    if (this.world.collidesAt(candidateX, candidateZ, this.radius, supportY + 0.4)) return;
-    this._placeOnSupport(clampedX, clampedZ, 0);
+  muzzle(out) { return this._muzzle.getWorldPosition(out); }
+
+  blocksPlayerAt(x, z, radius, y) {
+    if (!this.alive || this.type !== 'gargoyle') return false;
+    if (Math.abs(y - this.group.position.y) > GARGOYLE_TIER_TOLERANCE) return false;
+    return Math.hypot(x - this.group.position.x, z - this.group.position.z) < radius + this.radius;
   }
 
-  center(out) { return out.copy(this.group.position); }
-
-  blocksPlayerAt(x, z, radius, supportY) {
-    return this.alive && this.type === 'gargoyle' &&
-      Math.abs(supportY - (this.pos.y - this.radius)) < 1.15 &&
-      Math.hypot(x - this.pos.x, z - this.pos.z) < radius + this.radius;
+  _facePlayer(dt, playerPos) {
+    const dx = playerPos.x - this.group.position.x;
+    const dz = playerPos.z - this.group.position.z;
+    const yaw = Math.atan2(dx, dz) + Math.PI;
+    this.group.rotation.y += angDelta(this.group.rotation.y, yaw) * Math.min(1, dt * 7);
+    return Math.hypot(dx, dz);
   }
 
-  update(dt, t, playerPos) {
-    if (!this.updateLifecycle(dt)) return;
-    const dx = playerPos.x - this.pos.x;
-    const dz = playerPos.z - this.pos.z;
-    const dist = Math.hypot(dx, dz) || 1;
-
-    if (this.type === 'gargoyle') {
-      if (Math.abs(playerPos.y - this.pos.y) > 3.2) return;
-      if (dist > 1.7) {
-        const step = this.cfg.SPEED * dt / dist;
-        this._tryMove(this.pos.x + dx * step, this.pos.z + dz * step);
-      }
-      this.group.rotation.y = Math.atan2(dx, dz) + Math.PI;
+  _updateGargoyle(dt, playerPos) {
+    const distance = this._facePlayer(dt, playerPos);
+    const tierDelta = Math.abs(this.player.eyeBase - this.group.position.y);
+    const sameTier = tierDelta <= GARGOYLE_TIER_TOLERANCE;
+    this.hudVisible = tierDelta <= VERTICAL_MARKER_BAND;
+    if (this._state === 'windup') {
       this._timer -= dt;
-      if (dist < 1.8 && this._timer <= 0) {
-        this._timer = 1.2;
-        this.attackReady = true;
+      const progress = 1 - Math.max(0, this._timer) / this.cfg.TELEGRAPH;
+      this._wings.rotation.x = -progress * 0.82;
+      if (this._timer <= 0) {
+        if (sameTier && distance <= this.cfg.ATTACK_RANGE) this.attackReady = true;
+        this._state = 'cooldown';
+        this._timer = this.cfg.ATTACK_INTERVAL;
       }
       return;
     }
-
-    const orbitX = Math.sin(t * 0.75 + this._phase) * 0.55;
-    const orbitZ = Math.cos(t * 0.55 + this._phase) * 1.8;
-    this._placeOnSupport(orbitX, orbitZ, Math.sin(t * 2 + this._phase) * 0.22);
-    if (Math.abs(playerPos.y - this.pos.y) > 4.5) return;
-    this._timer -= dt;
-    if (this._timer <= 0 && dist < 14) {
-      this._timer = this.cfg.SHOT_INTERVAL;
-      this.spitRequested = true;
+    this._wings.rotation.x += (0 - this._wings.rotation.x) * Math.min(1, dt * 8);
+    if (this._state === 'cooldown') {
+      this._timer -= dt;
+      if (this._timer <= 0) this._state = 'idle';
+      return;
+    }
+    if (sameTier && distance <= this.cfg.ATTACK_RANGE) {
+      this._state = 'windup';
+      this._timer = this.cfg.TELEGRAPH;
     }
   }
 
-  muzzle(out) { return out.copy(this.pos); }
+  _updateGalePosition(dt, t, playerPos) {
+    const follow = Math.min(1, dt * TOWER_ARENA.GALE.HEIGHT_FOLLOW);
+    this.group.position.x = this._fixedX;
+    this.group.position.z = this._fixedZ;
+    this.group.position.y += (playerPos.y - this.group.position.y) * follow;
+    this.figure.position.y = Math.sin(t * 2.5 + this._phase) * 0.14;
+  }
 
+  _updateGale(dt, t, playerPos) {
+    this._facePlayer(dt, playerPos);
+    if (this._state === 'windup') {
+      this._timer -= dt;
+      const progress = 1 - Math.max(0, this._timer) / this.cfg.SHOT_TELEGRAPH;
+      this._muzzle.scale.setScalar(1 + progress * 1.6);
+      if (this._timer <= 0) {
+        this._state = 'cooldown';
+        this._timer = this.cfg.SHOT_INTERVAL;
+        this._muzzle.scale.setScalar(1);
+        this.spitRequested = true;
+      }
+      return;
+    }
+    this._timer -= dt;
+    if (this._timer <= 0) {
+      this._state = 'windup';
+      this._timer = this.cfg.SHOT_TELEGRAPH;
+    }
+  }
+
+  update(dt, t, playerPos) {
+    const solid = this.updateLifecycle(dt);
+    if (!this.alive) return;
+    if (this.type === 'gale') this._updateGalePosition(dt, t, playerPos);
+    if (!solid) return;
+    if (this.type === 'gargoyle') this._updateGargoyle(dt, playerPos);
+    else this._updateGale(dt, t, playerPos);
+  }
+
+  _extraGlow() {
+    if (this._state !== 'windup') return 0;
+    const duration = this.type === 'gargoyle' ? this.cfg.TELEGRAPH : this.cfg.SHOT_TELEGRAPH;
+    return (1 - Math.max(0, this._timer) / duration) * 3.2;
+  }
 }

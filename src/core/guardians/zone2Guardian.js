@@ -17,7 +17,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
-import { fadeMat, stackedLimb, spiralCore, angDelta } from './primitives.js';
+import { fadeMat, pulseEmissive, stackedLimb, spiralCore, angDelta } from './primitives.js';
 
 // A wavy tentacle: a chain of nested joints (each holds a tapered bead), so
 // rotating the joints propagates a travelling curl. Returns joints for animation.
@@ -345,6 +345,9 @@ export function buildZone2Guardian(figure) {
       figure.position.y = CONFIG.WATER_LEVEL + Math.sin(t * 1.0) * 0.14;
       const yaw = Math.atan2(playerPos.x - groupPos.x, playerPos.z - groupPos.z);
       figure.rotation.y += angDelta(figure.rotation.y, yaw) * Math.min(1, dt * 2.2);
+
+      pulseEmissive(matGlow, t, 0.34, 0.15, 1.25, 0.25, f);
+      pulseEmissive(matCyan, t, 0.22, 0.12, 1.45, 1.1, f);
 
       for (const tt of tentacles) {
         for (let j = 0; j < tt.joints.length; j++) {

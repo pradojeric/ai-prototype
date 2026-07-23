@@ -1,15 +1,20 @@
 // ============================================================
 // ARENA 3 — PANANISIA TOWER ASCENSION.
 // A Bolinao Lighthouse-inspired hollow ruin with twelve smooth walkable ramp
-// flights wrapped around an open central shaft. Phase 5B adds the controller-
-// driven rising tide and retry pressure; the three gate landings remain open,
-// with no Guardian, enemies, riddles, Lumina, rewards, or victory logic.
+// flights wrapped around a hollow shaft and ending at a supported octagonal
+// boss deck. Geometry publishes authored encounter anchors; tower gameplay is
+// owned by the controller and combat modules.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
 
-const ROUTE_RADIUS = 8.5;
-const TOWER_RADIUS = 13.5;
+// The spiral radius must keep the top flight's inner edge (ROUTE_RADIUS - RAMP_WIDTH/2)
+// outside the octagonal summit deck's apothem (SUMMIT_APOTHEM ~= 8.31), or the topmost
+// ramp passes under the deck and its rails clip through it. TOWER_RADIUS must in turn
+// clear the square spiral's CORNERS (at ROUTE_RADIUS * sqrt(2) ~= 14.85) plus the player
+// radius, or the player spawns/climbs inside a wall segment collider and cannot move.
+const ROUTE_RADIUS = 10.5;
+const TOWER_RADIUS = 16;
 const TOWER_HEIGHT = 22;
 const RAMP_WIDTH = 3.2;
 const RAMP_THICKNESS = 0.28;
@@ -24,12 +29,13 @@ const RAIL_WIDTH = 0.14;
 const FLIGHT_LENGTH = ROUTE_RADIUS * 2;
 const RAIL_END_CLEARANCE = LANDING_HALF;
 const RAIL_LENGTH = FLIGHT_LENGTH - RAIL_END_CLEARANCE * 2;
-const SUMMIT_RADIUS = 4.8;
-const SUMMIT_WIDTH = 2.6;
+const SUMMIT_RADIUS = 9;
+const SUMMIT_APOTHEM = SUMMIT_RADIUS * Math.cos(Math.PI / 8);
+const SUMMIT_COMBAT_RADIUS = 6.8;
 const SUMMIT_BRIDGE_WIDTH = RAMP_WIDTH;
-const SUMMIT_CORNER_CLEARANCE = SUMMIT_WIDTH / 2;
+const SUMMIT_ENTRY_WIDTH = 3.2;
 const BRIDGE_START_CLEARANCE = GATE_LANDING_HALF;
-const BRIDGE_END_CLEARANCE = SUMMIT_CORNER_CLEARANCE;
+const BRIDGE_END_CLEARANCE = 0.18;
 
 const ROUTE_POINTS = [
   { x: ROUTE_RADIUS, z: ROUTE_RADIUS },
@@ -38,12 +44,11 @@ const ROUTE_POINTS = [
   { x: -ROUTE_RADIUS, z: ROUTE_RADIUS },
 ];
 
-const SUMMIT_POINTS = [
-  { x: SUMMIT_RADIUS, z: SUMMIT_RADIUS },
-  { x: SUMMIT_RADIUS, z: -SUMMIT_RADIUS },
-  { x: -SUMMIT_RADIUS, z: -SUMMIT_RADIUS },
-  { x: -SUMMIT_RADIUS, z: SUMMIT_RADIUS },
-];
+const SUMMIT_ENTRY_POINT = {
+  x: SUMMIT_APOTHEM / Math.sqrt(2),
+  z: SUMMIT_APOTHEM / Math.sqrt(2),
+};
+const GARGOYLE_FLIGHTS = [1, 4, 7, 10];
 
 function setInstance(mesh, index, position, quaternion, scale, dummy) {
   dummy.position.copy(position);
@@ -197,7 +202,8 @@ function addGateFrame(world, height, target = ROUTE_POINTS[1], options = {}) {
 }
 
 function buildSpiralRoute(world, resources) {
-  world.towerThreatAnchors = [];
+  world.towerFlightAnchors = [];
+  world.towerGargoyleAnchors = [];
   const flightLength = FLIGHT_LENGTH;
   const rails = new THREE.InstancedMesh(
     resources.railGeometry,
@@ -237,7 +243,9 @@ function buildSpiralRoute(world, resources) {
     const cx = (start.x + end.x) / 2;
     const cz = (start.z + end.z) / 2;
     const cy = (startHeight + endHeight) / 2;
-    world.towerThreatAnchors.push({
+    const startsAtGate = flight > 0 && flight % 4 === 0;
+    const gateLanding = (flight + 1) % 4 === 0;
+    const anchor = {
       x: cx,
       z: cz,
       y: cy,
@@ -247,9 +255,16 @@ function buildSpiralRoute(world, resources) {
       halfD: flightLength / 2,
       startHeight,
       endHeight,
-    });
-    const startsAtGate = flight > 0 && flight % 4 === 0;
-    const gateLanding = (flight + 1) % 4 === 0;
+    };
+    world.towerFlightAnchors.push(anchor);
+    const gargoyleIndex = GARGOYLE_FLIGHTS.indexOf(flight);
+    if (gargoyleIndex >= 0) {
+      world.towerGargoyleAnchors.push({
+        ...anchor,
+        localX: (gargoyleIndex % 2 === 0 ? -1 : 1) * 0.65,
+        localZ: anchor.halfD - (gateLanding ? GATE_LANDING_HALF : LANDING_HALF) - 0.85,
+      });
+    }
     const startClearance = startsAtGate ? GATE_LANDING_HALF : LANDING_HALF;
     const endClearance = gateLanding ? GATE_LANDING_HALF : LANDING_HALF;
     const flightRailLength = flightLength - startClearance - endClearance;
@@ -317,10 +332,10 @@ function buildSpiralRoute(world, resources) {
     addLanding(world, end, endHeight, gateLanding);
     if (gateLanding) {
       const gateTarget = flight + 1 === FLIGHT_COUNT
-        ? SUMMIT_POINTS[0]
+        ? SUMMIT_ENTRY_POINT
         : ROUTE_POINTS[1];
-      // The summit frame only marks a future riddle gate in Phase 5B; its
-      // opening must not inherit blocking proxies before that system exists.
+      // Gate collision is owned by TowerGateManager's veil, not these decorative
+      // frame pillars at the summit entrance.
       addGateFrame(world, endHeight, gateTarget, {
         solid: flight + 1 !== FLIGHT_COUNT,
       });
@@ -333,7 +348,7 @@ function buildSpiralRoute(world, resources) {
   world.scene.add(rails, treads, posts);
 }
 
-function addSummitSegment(world, start, end, height, geometry, width = SUMMIT_WIDTH) {
+function addSummitSegment(world, start, end, height, geometry, width) {
   const dx = end.x - start.x, dz = end.z - start.z;
   const length = Math.hypot(dx, dz);
   const rotation = Math.atan2(dx, dz);
@@ -350,50 +365,72 @@ function addSummitSegment(world, start, end, height, geometry, width = SUMMIT_WI
 
 function buildSummit(world, resources) {
   const height = FLIGHT_COUNT * FLIGHT_RISE;
-  const ringLength = SUMMIT_RADIUS * 2;
-  const ringRailLength = ringLength - SUMMIT_CORNER_CLEARANCE * 2;
-  const ringSlabGeometry = new THREE.BoxGeometry(
-    SUMMIT_WIDTH, RAMP_THICKNESS, ringLength,
+  const deck = new THREE.Mesh(
+    new THREE.CylinderGeometry(SUMMIT_RADIUS, SUMMIT_RADIUS, RAMP_THICKNESS, 8),
+    world.mat.buildingAlt,
   );
-  const ringRailGeometry = new THREE.BoxGeometry(
-    RAIL_WIDTH, RAIL_HEIGHT, ringRailLength,
-  );
-  const ringRails = new THREE.InstancedMesh(
-    ringRailGeometry, resources.railMaterial, SUMMIT_POINTS.length * 2,
-  );
-  const dummy = new THREE.Object3D();
-  const position = new THREE.Vector3();
-  const quaternion = new THREE.Quaternion();
-  const scale = new THREE.Vector3(1, 1, 1);
-  const up = new THREE.Vector3(0, 1, 0);
-  let railIndex = 0;
+  deck.position.y = height - RAMP_THICKNESS / 2;
+  deck.rotation.y = Math.PI / 8;
+  world.scene.add(deck);
+  // Sample the deck out to its apothem (not the circumradius): that square still covers
+  // every octagon vertex while staying clear of the top ramp, so a climbing player never
+  // snaps onto the deck plane before crossing the bridge.
+  world.addSupportSurface(0, 0, SUMMIT_APOTHEM, SUMMIT_APOTHEM, 0, height);
 
-  for (let side = 0; side < SUMMIT_POINTS.length; side++) {
-    const start = SUMMIT_POINTS[side];
-    const end = SUMMIT_POINTS[(side + 1) % SUMMIT_POINTS.length];
-    const segment = addSummitSegment(world, start, end, height, ringSlabGeometry);
-    quaternion.setFromAxisAngle(up, segment.rotation);
-    const lateralX = Math.cos(segment.rotation);
-    const lateralZ = -Math.sin(segment.rotation);
-    for (const edge of [-1, 1]) {
-      position.set(
-        segment.cx + lateralX * edge * (SUMMIT_WIDTH / 2 - 0.08),
-        height + RAIL_HEIGHT / 2,
-        segment.cz + lateralZ * edge * (SUMMIT_WIDTH / 2 - 0.08),
-      );
-      setInstance(ringRails, railIndex++, position, quaternion, scale, dummy);
-      world.addCollider(position.x, position.z, RAIL_WIDTH / 2, ringRailLength / 2, {
-        minY: height - 0.55,
-        maxY: height + 1.35,
-        rotation: segment.rotation,
-      });
-    }
+  const vertices = [];
+  for (let i = 0; i < 8; i++) {
+    const angle = Math.PI / 8 + i * Math.PI / 4;
+    vertices.push({
+      x: Math.cos(angle) * SUMMIT_RADIUS,
+      z: Math.sin(angle) * SUMMIT_RADIUS,
+    });
   }
-  ringRails.instanceMatrix.needsUpdate = true;
-  world.scene.add(ringRails);
+  const addRail = (start, end) => {
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 0.05) return;
+    const rotation = Math.atan2(dx, dz);
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(RAIL_WIDTH, RAIL_HEIGHT, length),
+      resources.railMaterial,
+    );
+    rail.position.set(
+      (start.x + end.x) / 2,
+      height + RAIL_HEIGHT / 2,
+      (start.z + end.z) / 2,
+    );
+    rail.rotation.y = rotation;
+    world.scene.add(rail);
+    world.addCollider(rail.position.x, rail.position.z, RAIL_WIDTH / 2, length / 2, {
+      minY: height - 0.55,
+      maxY: height + 1.35,
+      rotation,
+    });
+  };
+
+  for (let side = 0; side < vertices.length; side++) {
+    const start = vertices[side];
+    const end = vertices[(side + 1) % vertices.length];
+    if (side !== 0) {
+      addRail(start, end);
+      continue;
+    }
+    // The north-east face is split around the final bridge instead of placing a
+    // collider across the entrance.
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dz);
+    const ux = dx / length;
+    const uz = dz / length;
+    const mid = { x: (start.x + end.x) / 2, z: (start.z + end.z) / 2 };
+    const halfGap = SUMMIT_ENTRY_WIDTH / 2;
+    addRail(start, { x: mid.x - ux * halfGap, z: mid.z - uz * halfGap });
+    addRail({ x: mid.x + ux * halfGap, z: mid.z + uz * halfGap }, end);
+  }
 
   const bridgeStart = ROUTE_POINTS[0];
-  const bridgeEnd = SUMMIT_POINTS[0];
+  const bridgeEnd = SUMMIT_ENTRY_POINT;
   const bridgeDx = bridgeEnd.x - bridgeStart.x;
   const bridgeDz = bridgeEnd.z - bridgeStart.z;
   const bridgeLength = Math.hypot(bridgeDx, bridgeDz);
@@ -414,6 +451,11 @@ function buildSummit(world, resources) {
   const bridgeRails = new THREE.InstancedMesh(
     bridgeRailGeometry, resources.railMaterial, 2,
   );
+  const dummy = new THREE.Object3D();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3(1, 1, 1);
+  const up = new THREE.Vector3(0, 1, 0);
   quaternion.setFromAxisAngle(up, bridge.rotation);
   const lateralX = Math.cos(bridge.rotation);
   const lateralZ = -Math.sin(bridge.rotation);
@@ -437,6 +479,30 @@ function buildSummit(world, resources) {
   }
   bridgeRails.instanceMatrix.needsUpdate = true;
   world.scene.add(bridgeRails);
+
+  world.towerBossAddAnchors = [
+    { x: 5.2, z: 0 },
+    { x: 0, z: -5.2 },
+    { x: -5.2, z: 0 },
+    { x: 0, z: 5.2 },
+  ].map((point, index) => ({
+    ...point,
+    y: height,
+    flight: FLIGHT_COUNT + index,
+    rotation: index % 2 ? Math.PI / 2 : 0,
+    halfW: 1.6,
+    halfD: 1.6,
+    startHeight: height,
+    endHeight: height,
+    localX: 0,
+    localZ: 0,
+  }));
+  world.towerSummitBounds = {
+    height,
+    radius: SUMMIT_RADIUS,
+    combatRadius: SUMMIT_COMBAT_RADIUS,
+    entry: { ...SUMMIT_ENTRY_POINT },
+  };
 }
 
 function setSpawnNodes(world) {

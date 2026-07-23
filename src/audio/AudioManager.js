@@ -15,16 +15,27 @@ import { BGM_BPM, BGM_LOOP_BEATS, BGM_SCORE } from './BgmScore.js';
 
 // Fixed headroom on the master bus; user music/SFX volumes scale their buses.
 const MASTER_BASE_GAIN = 0.9;
+const PAUSED_MUSIC_SCALE = 0.18;
 
 export class AudioManager {
   constructor() {
     this.ready = false;
     this.musicVolume = 1;      // 0..1 user music volume (bed + melody); settable pre-init
     this.sfxVolume = 1;        // 0..1 user SFX volume (hum, echoes, scatter, teleport)
+    this._paused = false;
+    this._musicMixScale = 1;
+    this._sfxMixScale = 1;
+    this._endingMixScale = 1;
+    this._delayFeedback = 0.35;
+    this._endingVoice = null;
+    this._endingVoiceActive = false;
+    this._endingVoiceOffset = 0;
+    this._endingVoiceStartedAt = 0;
     this.echoes = new Map();   // artifact -> EchoVoice
     // Seeded rng for per-shot SFX pitch variance (project convention: mulberry32,
     // never Math.random in gameplay paths). Identical repeats read as artificial.
     this._sfxRng = mulberry32(0x51f0);
+    this._enemyPortalLastAt = -Infinity;
     // scratch vectors for the per-frame listener update (no per-frame alloc)
     this._lpos = new THREE.Vector3();
     this._lfwd = new THREE.Vector3();
@@ -45,27 +56,29 @@ export class AudioManager {
       this.delay = ctx.createDelay(1.0);
       this.delay.delayTime.value = 0.4;
       this.delayFb = ctx.createGain();
-      this.delayFb.gain.value = 0.35;
+      this.delayFb.gain.value = this._paused ? 0 : this._delayFeedback;
       this.delay.connect(this.delayFb).connect(this.delay);
-      this.delay.connect(this.master);
+      this.delayOut = ctx.createGain();
+      this.delayOut.gain.value = this._paused ? 0 : 1;
+      this.delay.connect(this.delayOut).connect(this.master);
 
       // User-facing volume buses. Every source routes through one of these
       // (heard dry via master + sent into the shared echo tail), so the sliders
       // also scale each group's delay feed — muting SFX mutes its tail too.
       this.musicBus = ctx.createGain();
-      this.musicBus.gain.value = this.musicVolume;
+      this.musicBus.gain.value = this._musicTarget();
       this.musicBus.connect(this.master);
       this.musicBus.connect(this.delay);
 
       this.sfxBus = ctx.createGain();
-      this.sfxBus.gain.value = this.sfxVolume;
+      this.sfxBus.gain.value = this._sfxTarget();
       this.sfxBus.connect(this.master);
       this.sfxBus.connect(this.delay);
 
       // Ending bus stays dry: narration and restored-world ambience must not
       // inherit the underwater feedback delay.
       this.endingBus = ctx.createGain();
-      this.endingBus.gain.value = this.sfxVolume;
+      this.endingBus.gain.value = this._endingTarget();
       this.endingBus.connect(this.master);
 
       // Echo bus: spatialized voices route here, into the SFX group.
@@ -298,6 +311,61 @@ export class AudioManager {
   // with a ±SFX_PITCH_VAR frequency wobble per shot so rapid repeats stay alive.
 
   _pitchVar() { return 1 + (this._sfxRng() - 0.5) * 2 * COMBAT.FEEL.SFX_PITCH_VAR; }
+
+  // Shared arena summon, timed to the thread tear's open → strain → birth arc
+  // (COMBAT.SPAWN_TELEGRAPH): a rising thread tone under a detuned shimmer that
+  // swells while the strands strain, resolving into a glassy arrival ping.
+  // Simultaneous enemy portals collapse into one batch cue so a full wave
+  // cannot stack identical oscillators into clipping.
+  playEnemyPortal() {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    if (t0 - this._enemyPortalLastAt < 0.08) return;
+    this._enemyPortalLastAt = t0;
+    const v = this._pitchVar();
+    const open = COMBAT.SPAWN_TELEGRAPH;
+
+    const thread = ctx.createOscillator();
+    const threadEnv = ctx.createGain();
+    thread.type = 'sine';
+    thread.frequency.setValueAtTime(170 * v, t0);
+    thread.frequency.exponentialRampToValueAtTime(620 * v, t0 + open * 0.86);
+    threadEnv.gain.setValueAtTime(0.0001, t0);
+    threadEnv.gain.exponentialRampToValueAtTime(0.13, t0 + 0.12);
+    threadEnv.gain.exponentialRampToValueAtTime(0.0001, t0 + open * 0.96);
+    thread.connect(threadEnv).connect(this.sfxBus);
+    thread.start(t0);
+    thread.stop(t0 + open * 0.98);
+
+    // Strain shimmer: enters as the seam unzips and tightens under the threads,
+    // so the wait has motion instead of one flat sweep.
+    const strain = ctx.createOscillator();
+    const strainEnv = ctx.createGain();
+    const strainAt = t0 + open * 0.4;
+    strain.type = 'triangle';
+    strain.frequency.setValueAtTime(392 * v, strainAt);
+    strain.frequency.exponentialRampToValueAtTime(784 * v, t0 + open * 0.92);
+    strainEnv.gain.setValueAtTime(0.0001, strainAt);
+    strainEnv.gain.exponentialRampToValueAtTime(0.055, t0 + open * 0.72);
+    strainEnv.gain.exponentialRampToValueAtTime(0.0001, t0 + open * 0.98);
+    strain.connect(strainEnv).connect(this.sfxBus);
+    strain.start(strainAt);
+    strain.stop(t0 + open);
+
+    const arrival = ctx.createOscillator();
+    const arrivalEnv = ctx.createGain();
+    const arrivalAt = t0 + COMBAT.SPAWN_TELEGRAPH - 0.04;
+    arrival.type = 'triangle';
+    arrival.frequency.setValueAtTime(1046.5 * v, arrivalAt);
+    arrival.frequency.exponentialRampToValueAtTime(1568 * v, arrivalAt + 0.12);
+    arrivalEnv.gain.setValueAtTime(0.0001, arrivalAt);
+    arrivalEnv.gain.exponentialRampToValueAtTime(0.18, arrivalAt + 0.015);
+    arrivalEnv.gain.exponentialRampToValueAtTime(0.0001, arrivalAt + 0.3);
+    arrival.connect(arrivalEnv).connect(this.sfxBus);
+    arrival.start(arrivalAt);
+    arrival.stop(arrivalAt + 0.32);
+  }
 
   // Light-bolt cast: a short bright zap sweeping down.
   playShoot() {
@@ -566,22 +634,63 @@ export class AudioManager {
     if (!this.ready) return;
     const now = this.ctx.currentTime;
     this.clearEchoes();
+    this._musicMixScale = 0.04;
+    this._delayFeedback = 0;
     this.musicBus.gain.cancelScheduledValues(now);
     this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now);
-    this.musicBus.gain.linearRampToValueAtTime(0.04 * this.musicVolume, now + seconds);
+    this.musicBus.gain.linearRampToValueAtTime(this._musicTarget(), now + seconds);
     this.hum.gain.setTargetAtTime(0, now, 0.08);
-    this.delayFb.gain.setTargetAtTime(0, now, Math.max(0.05, seconds / 4));
+    this.delayFb.gain.setTargetAtTime(this._paused ? 0 : this._delayFeedback,
+      now, Math.max(0.05, seconds / 4));
   }
 
   playEndingVoiceover() {
     if (!this.ready || !this.endingVoiceBuffer) return false;
-    if (this._endingVoice) { try { this._endingVoice.stop(); } catch (e) { /* ended */ } }
+    this._stopEndingVoice(false);
+    this._endingVoiceActive = true;
+    this._endingVoiceOffset = 0;
+    if (!this._paused) this._startEndingVoice();
+    return true;
+  }
+
+  _startEndingVoice() {
+    if (!this._endingVoiceActive || this._endingVoice || !this.endingVoiceBuffer) return;
+    if (this._endingVoiceOffset >= this.endingVoiceBuffer.duration) {
+      this._endingVoiceActive = false;
+      this._endingVoiceOffset = 0;
+      return;
+    }
     const source = this.ctx.createBufferSource();
     source.buffer = this.endingVoiceBuffer;
     source.connect(this.endingBus);
-    source.start();
     this._endingVoice = source;
-    return true;
+    this._endingVoiceStartedAt = this.ctx.currentTime;
+    source.onended = () => {
+      if (this._endingVoice !== source) return;
+      this._endingVoice = null;
+      this._endingVoiceActive = false;
+      this._endingVoiceOffset = 0;
+    };
+    source.start(0, this._endingVoiceOffset);
+  }
+
+  _stopEndingVoice(preservePosition) {
+    if (!this._endingVoice) {
+      if (!preservePosition) {
+        this._endingVoiceActive = false;
+        this._endingVoiceOffset = 0;
+      }
+      return;
+    }
+    const source = this._endingVoice;
+    if (preservePosition) {
+      this._endingVoiceOffset += this.ctx.currentTime - this._endingVoiceStartedAt;
+    } else {
+      this._endingVoiceActive = false;
+      this._endingVoiceOffset = 0;
+    }
+    this._endingVoice = null;
+    try { source.stop(); } catch (error) { /* source already ended */ }
   }
 
   startDryAmbience() {
@@ -608,26 +717,65 @@ export class AudioManager {
   restoreAfterEnding() {
     if (!this.ready) return;
     if (this._dryWind) { try { this._dryWind.stop(); } catch (e) { /* ended */ } this._dryWind = null; }
-    if (this._endingVoice) { try { this._endingVoice.stop(); } catch (e) { /* ended */ } this._endingVoice = null; }
-    const now = this.ctx.currentTime;
-    this.musicBus.gain.setTargetAtTime(this.musicVolume, now, 0.8);
-    this.sfxBus.gain.setTargetAtTime(this.sfxVolume, now, 0.4);
-    this.delayFb.gain.setTargetAtTime(0.35, now, 0.8);
+    this._stopEndingVoice(false);
+    this._musicMixScale = 1;
+    this._sfxMixScale = 1;
+    this._endingMixScale = 1;
+    this._delayFeedback = 0.35;
+    this._applyMix(0.8);
   }
 
   // ---- user volumes ---------------------------------------------------------
+  setPaused(paused) {
+    const next = !!paused;
+    if (next === this._paused) return;
+    if (next && this.ready) this._stopEndingVoice(true);
+    this._paused = next;
+    if (!this.ready) return;
+    this._applyMix(0.08);
+    if (!next) this._startEndingVoice();
+  }
+
+  resumeContext() {
+    if (!this.ready || this.ctx.state !== 'suspended') return;
+    void this.ctx.resume().catch(() => { /* audio remains optional */ });
+  }
+
   // Safe to call before init(); values are applied when the context is built.
   setMusicVolume(v) {
     this.musicVolume = clamp01(v);
     if (!this.ready) return;
-    this.musicBus.gain.setTargetAtTime(this.musicVolume, this.ctx.currentTime, 0.05);
+    this.musicBus.gain.setTargetAtTime(this._musicTarget(), this.ctx.currentTime, 0.05);
   }
 
   setSfxVolume(v) {
     this.sfxVolume = clamp01(v);
     if (!this.ready) return;
-    this.sfxBus.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
-    this.endingBus.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
+    this.sfxBus.gain.setTargetAtTime(this._sfxTarget(), this.ctx.currentTime, 0.05);
+    this.endingBus.gain.setTargetAtTime(this._endingTarget(), this.ctx.currentTime, 0.05);
+  }
+
+  _musicTarget() {
+    const pauseScale = this._paused ? PAUSED_MUSIC_SCALE : 1;
+    return this.musicVolume * this._musicMixScale * pauseScale;
+  }
+
+  _sfxTarget() { return this._paused ? 0 : this.sfxVolume * this._sfxMixScale; }
+
+  _endingTarget() { return this._paused ? 0 : this.sfxVolume * this._endingMixScale; }
+
+  _applyMix(timeConstant) {
+    const now = this.ctx.currentTime;
+    const apply = (param, target) => {
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(param.value, now);
+      param.setTargetAtTime(target, now, timeConstant);
+    };
+    apply(this.musicBus.gain, this._musicTarget());
+    apply(this.sfxBus.gain, this._sfxTarget());
+    apply(this.endingBus.gain, this._endingTarget());
+    apply(this.delayFb.gain, this._paused ? 0 : this._delayFeedback);
+    apply(this.delayOut.gain, this._paused ? 0 : 1);
   }
 
   // ---- string hum (unchanged behavior) -------------------------------------

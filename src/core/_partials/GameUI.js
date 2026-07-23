@@ -31,6 +31,7 @@ export function bindGameUi(game) {
   game.elZcEnter = document.getElementById('zc-enter');
   game.elSkipMuseum = document.getElementById('skipmuseum');
   game.elTestEnding = document.getElementById('test-ending');
+  game.elGuardianDebugZone = document.getElementById('guardian-debug-zone');
   game.elAwaken = document.getElementById('btn-awaken');
   game.elSettings = document.getElementById('settings');
   game.elRingWrap = document.getElementById('holdring');
@@ -60,10 +61,15 @@ export function wireGameEvents(game) {
     e.stopPropagation();
     if (CONFIG.DEBUG_TEST_ENDING_BUTTON) game._testEnding();
   });
+  game.elGuardianDebugZone.style.display = CONFIG.DEBUG_GUARDIAN_ZONE_BUTTON ? '' : 'none';
+  game.elGuardianDebugZone.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (CONFIG.DEBUG_GUARDIAN_ZONE_BUTTON) game._enterGuardianDebugZone();
+  });
   wireSettings(game);
   // A click during the cutscene skips to the white fade.
   addEventListener('click', () => {
-    if (game.phase === 'cutscene') game.cutscene.skip();
+    if (!game.pause.isPaused && game.phase === 'cutscene') game.cutscene.skip();
   });
 
   game.elStart.addEventListener('click', () => {
@@ -74,20 +80,20 @@ export function wireGameEvents(game) {
   game.elZoneDone.addEventListener('click', () => {
     if (game.phase === 'complete') game._enterMuseum();
   });
-  game.elResume.addEventListener('click', () => {
-    if (game.phase === 'museum' || game.phase === 'arena') game.player.controls.lock();
-  });
   game.elEndingReturn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (game.phase === 'endingCredits') game._enterEpilogueMuseum();
   });
   game.player.controls.addEventListener('lock', () => {
     game.elStart.style.display = 'none';
-    game.elResume.style.display = 'none';
-    // Arena/faint phases own their state transitions; tower resume only needs
-    // to restore its exploration crosshair without entering main-zone gameplay.
+    // Arena/faint phases own their state transitions. Every arena still needs
+    // its aiming reticle restored after the pause controller reacquires lock.
     if (game.phase === 'arena') {
-      if (game.world.zone.controller === 'tower') game.elCross.classList.add('active');
+      game.elCross.classList.add('active');
+      return;
+    }
+    if (game.phase === 'debug') {
+      game.elCross.classList.remove('active');
       return;
     }
     if (game.phase === 'defeat' || game.phase === 'faint') return;
@@ -97,30 +103,8 @@ export function wireGameEvents(game) {
     if (game.phase !== 'museum') game._startGameplayPhase();
     if (wasDescending) game._playZoneIntro();
   });
-  game.player.controls.addEventListener('unlock', () => {
-    if (game.phase === 'museum') {
-      // A view-only artifact re-read unlocks the pointer too; don't surface the
-      // Resume screen behind the discovery card (it re-locks on dismiss).
-      if (game.busy) return;
-      game.elResumeSub.textContent = '"The gallery waits in the quiet."';
-      game.elResumeEnter.textContent = 'Click to keep looking';
-      game.elResume.style.display = 'flex';
-      game.elCross.classList.remove('active');
-    } else if (!game.busy && game.phase === 'arena' &&
-               game.world.zone.controller === 'tower') {
-      game.elResumeSub.textContent = '"The tide waits while you catch your breath."';
-      game.elResumeEnter.textContent = 'Click to resume ascent';
-      game.elResume.style.display = 'flex';
-      game.elCross.classList.remove('active');
-    } else if (!game.busy && game.phase === 'playing') {
-      game.elStart.style.display = 'flex';
-      game.elHud.classList.remove('active');
-      game.elGhint.classList.remove('active');
-      game.elCross.classList.remove('active');
-    }
-  });
   document.addEventListener('keydown', (e) => {
-    if (e.code !== 'KeyE') return;
+    if (game.pause.isPaused || e.code !== 'KeyE') return;
     if (!game.holdKey) game._ePressed = true;
     game.holdKey = true;
   });
@@ -131,7 +115,7 @@ export function wireGameEvents(game) {
   // (and the pointer-lock click itself) never fire a stray shot.
   document.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    if (game.phase === 'arena' && !game.busy &&
+    if (!game.pause.isPaused && game.phase === 'arena' && !game.busy &&
         game.player.controls.isLocked && game.combat && game.combat.active) {
       game.combat.requestFire();
     }
@@ -146,7 +130,9 @@ export function wireGameEvents(game) {
     game.restoredProvince.resize(innerWidth, innerHeight);
     game.renderer.setSize(innerWidth, innerHeight);
     game.composer.setSize(innerWidth, innerHeight);
-    game.artifacts.setResolution(innerWidth, innerHeight);
+    game.artifacts?.setResolution(innerWidth, innerHeight);
+    // Spawn-tear strands are fat lines too — same screen-space width contract.
+    game.combat?.vfx?.setResolution(innerWidth, innerHeight);
   });
 }
 

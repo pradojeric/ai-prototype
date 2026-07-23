@@ -1,26 +1,28 @@
 // ============================================================
-// LANTERN PROJECTILE — one staggered riddle answer thrown by The Reveler.
-// Every lantern owns its six-second flight deadline; correct answers can be
-// deflected back while decoys dissolve harmlessly at the boat.
+// LANTERN PROJECTILE — one riddle answer formed by The Reveler. All three
+// travel to a wide midpoint formation, stop through a protected reading beat,
+// then launch together. Correct answers can be deflected while decoys dissolve.
 // ============================================================
 import * as THREE from 'three';
 import { COMBAT, RAIL_ARENA } from '../../config.js';
 import { makeAnswerLabelTexture } from './AnswerNode.js';
 
 export class LanternProjectile {
-  constructor(scene, choice, start, target, deflectTarget, lane = 0) {
+  constructor(scene, choice, start, hover, target, deflectTarget, lane = 0) {
     this.scene = scene;
     this.choice = choice;
     this.correct = !!choice.correct;
     this.start = start.clone();
+    this.hover = hover.clone();
     this.target = target.clone();
     this.deflectTarget = deflectTarget.clone();
     this.lane = lane;
     this.age = 0;
-    this.state = 'flying';
+    this.state = 'staging';
     this.dead = false;
     this.impactReady = false;
     this._fade = 1;
+    this._stageAge = 0;
     this._deflectAge = 0;
 
     this.group = new THREE.Group();
@@ -68,6 +70,19 @@ export class LanternProjectile {
     return true;
   }
 
+  holdForReading() {
+    if (this.state !== 'staging') return;
+    this.state = 'reading';
+    this.group.position.copy(this.hover);
+  }
+
+  launch() {
+    if (this.state !== 'reading') return;
+    this.state = 'flying';
+    this.age = 0;
+    this.start.copy(this.group.position);
+  }
+
   deflect() {
     if (this.state !== 'flying') return;
     this.state = 'deflected';
@@ -81,6 +96,28 @@ export class LanternProjectile {
   }
 
   update(dt, t) {
+    if (this.state === 'staging') {
+      this._stageAge += dt;
+      const p = Math.min(1, this._stageAge / RAIL_ARENA.LANTERN_STAGE_TRAVEL);
+      const eased = 1 - (1 - p) ** 3;
+      this.group.position.lerpVectors(this.start, this.hover, eased);
+      this.group.position.y += Math.sin(p * Math.PI) * 0.65;
+      this.group.rotation.y = t * 1.25 + this.lane;
+      this.group.rotation.z = Math.sin(t * 2.2 + this.lane) * 0.08;
+      this.bodyMat.emissiveIntensity = 1.35 + Math.sin(t * 4 + this.lane) * 0.25;
+      return;
+    }
+
+    if (this.state === 'reading') {
+      // Position is deliberately exact and still: equal Y/Z plus the authored
+      // X spacing makes the three labels easy to scan before they attack.
+      this.group.position.copy(this.hover);
+      this.group.rotation.y = t * 0.75 + this.lane;
+      this.group.rotation.z = 0;
+      this.bodyMat.emissiveIntensity = 1.45 + Math.sin(t * 3 + this.lane) * 0.18;
+      return;
+    }
+
     if (this.state === 'flying') {
       this.age += dt;
       const p = Math.min(1, this.age / RAIL_ARENA.LANTERN_FLIGHT);

@@ -1,13 +1,13 @@
 // ============================================================
 // GUARDIAN — roaming "bantay" that gates a zone's artifacts behind a riddle
-// challenge. It teleports between spots (marked by a tall glowing beacon);
-// walking within GUARDIAN.ENCOUNTER_RANGE auto-starts the riddle.
+// challenge. It can teleport between spots and optionally carry a tall locator
+// beacon; walking within GUARDIAN.ENCOUNTER_RANGE auto-starts the riddle.
 //
-// This is the SHARED shell: teleport, beacon, fade, defeat→scatter origin, and
-// the encounter-distance read are identical for every zone. The BODY differs
-// per zone — each zone has a visually distinct Guardian — so the figure build
-// + idle animation are delegated to a per-zone builder (see ./guardians/).
-// Pass `variant` (e.g. 'zone1') to pick one.
+// This is the SHARED shell: teleport, optional beacon/halo, fade,
+// defeat→scatter origin, and encounter-distance read are identical for every
+// zone. The BODY differs per zone — each zone has a visually distinct Guardian
+// — so figure build + idle animation are delegated to a per-zone builder.
+// Pass `variant` (e.g. 'zone1') and optional `{ beacon, halo }` effects.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, GUARDIAN, PLAYER_RADIUS } from '../config.js';
@@ -16,7 +16,7 @@ import { GUARDIAN_BUILDERS } from './guardians/index.js';
 const SPAWN_CLEARANCE = PLAYER_RADIUS + 0.4;   // keep the guardian out of walls
 
 export class Guardian {
-  constructor(scene, world, variant = 'zone1') {
+  constructor(scene, world, variant = 'zone1', effects = {}) {
     this.scene = scene;
     this.world = world;            // provides spawnNodes + collidesAt
     this.variant = variant;
@@ -26,6 +26,10 @@ export class Guardian {
     this._teleTimer = 0;
     this._fade = 1;                // 0..1 visibility (eased toward _fadeTarget)
     this._fadeTarget = 1;
+    this.effects = {
+      beacon: effects.beacon !== false,
+      halo: effects.halo !== false,
+    };
 
     this.group = new THREE.Group();       // world placement (teleports here)
     this.figure = new THREE.Group();      // the humanoid (built by the variant)
@@ -40,12 +44,19 @@ export class Guardian {
     this._chestY = this._body.chestY ?? 3.1;
     this._centerY = CONFIG.WATER_LEVEL + this._chestY;   // burst + halo + poof anchor
 
-    this._buildBeacon();
+    this.beacon = null;
+    this.beaconMat = null;
+    if (this.effects.beacon) this._buildBeacon();
 
     // Halo light at the chest so the figure lifts off the dark water.
-    this.halo = new THREE.PointLight(this._body.glowColor ?? GUARDIAN.CORE_COLOR, 2.0, 12, 1.5);
-    this.halo.position.y = this._chestY;
-    this.figure.add(this.halo);
+    this.halo = null;
+    if (this.effects.halo) {
+      this.halo = new THREE.PointLight(
+        this._body.glowColor ?? GUARDIAN.CORE_COLOR, 2.0, 12, 1.5,
+      );
+      this.halo.position.y = this._chestY;
+      this.figure.add(this.halo);
+    }
 
     this.scene.add(this.group);
 
@@ -193,8 +204,10 @@ export class Guardian {
     const f = this._fade;
     this.group.visible = f > 0.01;
     for (const [m, base] of this._fadeMats) m.opacity = base * f;
-    this.beaconMat.opacity = (0.26 + Math.sin(t * 1.7) * 0.08) * f;
-    this.halo.intensity = 2.0 * f;
+    if (this.beaconMat) {
+      this.beaconMat.opacity = (0.26 + Math.sin(t * 1.7) * 0.08) * f;
+    }
+    if (this.halo) this.halo.intensity = 2.0 * f;
 
     if (!this.alive) return Infinity;
 
@@ -220,7 +233,7 @@ export class Guardian {
     this.scene.remove(this.poof);
     this.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
     for (const [m] of this._fadeMats) m.dispose();
-    this.beaconMat.dispose();
+    if (this.beaconMat) this.beaconMat.dispose();
     this.poof.geometry.dispose();
     this.poofMat.dispose();
   }

@@ -6,7 +6,8 @@ import { wait } from '../config.js';
 import { GUARDIAN_TEXT } from '../data.js';
 
 export class RiddleScreen {
-  constructor() {
+  constructor(waitFor = wait) {
+    this._wait = waitFor;
     this.panel = document.getElementById('riddle');
     this.elFil = document.getElementById('r-fil');
     this.elEng = document.getElementById('r-eng');
@@ -58,9 +59,9 @@ export class RiddleScreen {
         if (b !== btn) b.classList.add('dim');
       }
     }
-    await wait(900);            // hold the feedback so the choice registers
+    await this._wait(900);      // hold the feedback so the choice registers
     this.panel.classList.remove('active');
-    await wait(450);            // fade the card out
+    await this._wait(450);      // fade the card out
     this.active = false;
     this._resolve && this._resolve(correct);
   }

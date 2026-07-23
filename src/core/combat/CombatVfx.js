@@ -11,6 +11,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, COMBAT, GUARDIAN, VFX } from '../../config.js';
+import { ThreadTear } from './ThreadTear.js';
 
 export const VFX_COLORS = {
   memory: 0x7fe8ff,
@@ -39,10 +40,16 @@ function colorFor(type) {
 }
 
 export class CombatVfx {
-  constructor(scene) {
+  // `camera` is only read when a tear opens, to freeze its facing toward the
+  // player; the effects layer never drives the camera.
+  constructor(scene, camera = null) {
     this.scene = scene;
+    this.camera = camera;
     this._dummy = new THREE.Object3D();
     this._scratchColor = new THREE.Color();
+
+    // The spawn portal itself. Pooled and additive like everything else here.
+    this.tears = new ThreadTear(scene, VFX_COLORS.memory);
 
     this._ringGeometry = new THREE.TorusGeometry(0.55, 0.035, 5, 28);
     this._ringMaterial = new THREE.MeshBasicMaterial({
@@ -168,26 +175,39 @@ export class CombatVfx {
 
   // ---- arena beats ------------------------------------------------------
 
-  // The warning that lands before an echo materialises: a wide ground ring
-  // collapsing inward to the spawn point, doubled with a slower outer ring so
-  // it reads from across the arena and from the corner of the eye.
+  // One reusable woven-thread tear for every arena enemy: strands unzip a rift
+  // standing on the spawn point (ThreadTear owns that arc) over a single
+  // contact ring drawn in on the surface below it. A fixed hue keeps the summon
+  // language identical in all arenas. Returns the tear id for spawnArrive().
   spawnTelegraph(position, type) {
-    const color = colorFor(type);
+    const color = VFX_COLORS.memory;
     this.ring(position, color, {
       horizontal: true, duration: COMBAT.SPAWN_TELEGRAPH,
-      startScale: 3.4, endScale: 0.4,
+      startScale: 3.4, endScale: 0.5,
     });
-    this.ring(position, color, {
-      horizontal: true, duration: COMBAT.SPAWN_TELEGRAPH * 1.25,
-      startScale: 4.6, endScale: 1.6,
+    this.burst(position, color, 0.3, {
+      count: Math.ceil(VFX.SHARDS_PER_BURST / 2),
+      gravity: 0,
+      rise: 1.15,
+      life: COMBAT.SPAWN_TELEGRAPH * 0.6,
     });
+    return this.tears.open(position, this.camera, COMBAT.SPAWN_TELEGRAPH);
   }
 
-  // The echo is here: a snap outward and a short upward puff off the water.
-  spawnArrive(position, type) {
-    const color = colorFor(type);
+  // The enemy is through: the tear snaps shut behind it over a cyan ring and a
+  // short upward thread-puff. `tearId` comes from the matching spawnTelegraph.
+  spawnArrive(position, type, tearId = -1) {
+    const color = VFX_COLORS.memory;
+    if (tearId >= 0) this.tears.close(tearId);
     this.ring(position, color, { duration: 0.4, startScale: 0.2, endScale: 1.9 });
     this.burst(position, color, 0.5, { count: 4, rise: 1.2, gravity: 0.4, life: 0.35 });
+  }
+
+  // A phase boundary can withdraw a promised enemy before it materialises.
+  // Close only that enemy's tear; its short ring/shard warning may finish
+  // naturally, which reads as the portal collapsing rather than popping out.
+  cancelSpawn(tearId) {
+    if (tearId >= 0) this.tears.close(tearId);
   }
 
   // A bolt connected but did not kill: a tight spark at the impact point.
@@ -219,7 +239,7 @@ export class CombatVfx {
 
   // ---- tower aliases (Zone 3's vocabulary, unchanged) --------------------
 
-  threatSpawn(position, type) { this.spawnTelegraph(position, type); }
+  threatSpawn(position, type) { return this.spawnTelegraph(position, type); }
 
   // Tower deaths happen on ledges high above the flood, so the residue ripple
   // is laid at the body's own height rather than the water line.
@@ -250,7 +270,14 @@ export class CombatVfx {
     if (kind === 'defeat') this.burst(position, color, 2);
   }
 
+  // Fat lines rasterise in screen space, so the tear needs the viewport size
+  // (the same contract StringBundle.setResolution exists for).
+  setResolution(w, h) { this.tears.setResolution(w, h); }
+
   update(dt) {
+    this._clock = (this._clock ?? 0) + dt;
+    this.tears.update(dt, this._clock);
+
     for (let i = 0; i < this.rings.length; i++) {
       const ring = this.rings[i];
       if (!ring.active) continue;
@@ -291,6 +318,7 @@ export class CombatVfx {
   }
 
   reset() {
+    this.tears.reset();
     for (let i = 0; i < this.rings.length; i++) {
       this.rings[i].active = false;
       this._hideInstance(this.ringMesh, i);
@@ -305,6 +333,7 @@ export class CombatVfx {
 
   dispose() {
     this.reset();
+    this.tears.dispose();
     this.scene.remove(this.ringMesh, this.shardMesh);
     this._ringGeometry.dispose();
     this._ringMaterial.dispose();

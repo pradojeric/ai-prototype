@@ -136,7 +136,7 @@ export const ARTIFACT_DATA = [
     fact: 'Lingayen and the fishing towns along the gulf honor bagoong — the salted, sun-fermented fish paste that has flavored Pangasinan cooking for centuries. Streets fill with street-dancing, floats, and stalls of freshly jarred bagoong and its amber fish sauce, patís.',
     note: 'A festival for a humble condiment is really a festival for the sea and the patient labor that preserves its gifts. Liket — joy — is found in giving thanks for what quietly sustains the everyday table.',
     spawnTag: 'near_wall',
-    image: 'assets/artifacts/zone2/bagoong-festival.jpg',
+    image: 'assets/artifacts/zone2/bagoong-festival.png',
     zone: 2,
   },
   {
@@ -146,7 +146,7 @@ export const ARTIFACT_DATA = [
     fact: 'Dagupan City’s grandest celebration, honoring the sweet Bonuan bangus that made the city the Bangus Capital of the Philippines. Its highlights include the "Gilon" street dance, the bangus rodeo, and a record-breaking grill that stretches down the boulevard in clouds of fragrant smoke.',
     note: 'When a city throws a festival for a single fish, the fish has become far more than food — it is livelihood, identity, and civic pride, all served on one banana leaf.',
     spawnTag: 'open_water',
-    image: 'assets/artifacts/zone2/bangus-festival.jpg',
+    image: 'assets/artifacts/zone2/bangus-festival.png',
     zone: 2,
   },
   {
@@ -156,7 +156,7 @@ export const ARTIFACT_DATA = [
     fact: 'Bolinao’s town fiesta built around binungey — glutinous rice and coconut milk roasted inside a length of bamboo until the cane chars and the rice steams sweet within. The festival lines the streets with smoking bamboo and dancers in coastal costume.',
     note: 'Binungey needs only bamboo, fire, and know-how, and so its festival is a quiet boast: this town can conjure a feast from the land itself.',
     spawnTag: 'submerged_interior',
-    image: 'assets/artifacts/zone2/binungey-festival.jpg',
+    image: 'assets/artifacts/zone2/binungey-festival.png',
     zone: 2,
   },
   {
@@ -166,7 +166,7 @@ export const ARTIFACT_DATA = [
     fact: 'A vibrant Pangasinan town festival of thanksgiving, marked by ground-shaking street-dance competitions, ornate floats, and offerings drawn from the season’s harvest. Colour and rhythm turn the whole plaza into a single moving crowd.',
     note: 'The particular steps may fade from memory, but the impulse behind them endures — a community pausing its labour to dance its gratitude in the open air.',
     spawnTag: 'elevated_rubble',
-    image: 'assets/artifacts/zone2/galicayo-festival.jpg',
+    image: 'assets/artifacts/zone2/galicayo-festival.png',
     zone: 2,
   },
   {
@@ -176,7 +176,7 @@ export const ARTIFACT_DATA = [
     fact: 'A festival honouring the mangunguna — the "first ones," the pioneers and forebears whose labour founded and fed a Pangasinan town. Processions, tributes, and communal feasting retell the story of those who came before.',
     note: 'To name a festival for the pioneers is to admit a debt: every harvest and every home rests on the hands of people whose names the tide has almost taken.',
     spawnTag: 'near_wall',
-    image: 'assets/artifacts/zone2/mangunguna-festival.jpg',
+    image: 'assets/artifacts/zone2/mangunguna-festival.png',
     zone: 2,
   },
   {
@@ -196,7 +196,7 @@ export const ARTIFACT_DATA = [
     fact: 'A festival built around pindang — beef or carabao cured with salt and garlic and dried under the Pangasinan sun into a tangy, savoury staple. Grills glow along the streets as the town shares its signature preserved meat.',
     note: 'Before ice and cold storage, drying and curing were how a town banked its meat against lean days; pindang’s festival celebrates thrift turned into flavour.',
     spawnTag: 'submerged_interior',
-    image: 'assets/artifacts/zone2/pindang-festival.jpg',
+    image: 'assets/artifacts/zone2/pindang-festival.png',
     zone: 2,
   },
   {
@@ -206,7 +206,7 @@ export const ARTIFACT_DATA = [
     fact: 'A thanksgiving festival of the coastal towns — Lingayen chief among them — held to honour the sea and pray for a bountiful, gentle harvest of fish. Fluvial parades, beach rites, and offerings carried out over the water mark the first of May.',
     note: 'Pista’y Dayat bows to the same gulf that gives and takes; its gratitude and its plea are the two halves of every fishing life along this shore.',
     spawnTag: 'elevated_rubble',
-    image: 'assets/artifacts/zone2/pistay-dayat.webp',
+    image: 'assets/artifacts/zone2/pistay-dayat.png',
     zone: 2,
   },
   {
@@ -231,7 +231,7 @@ export const ARTIFACT_DATA = [
     fact: 'The scattered green-capped islets of the Lingayen Gulf off Alaminos City — some one hundred and twenty-four at low tide — form Pangasinan’s most famous seascape and its first national park. Ancient coral, thought to be thousands of years old, shaped each mushroom-stemmed island.',
     note: 'The islands have watched over the gulf far longer than any town; to see them drowned is to feel how even the oldest, steadiest landmarks are not beyond the reach of the water.',
     spawnTag: 'open_water',
-    image: 'assets/artifacts/zone3/hundred-islands.jpg',
+    image: 'assets/artifacts/zone3/hundred-islands.png',
     zone: 3,
   },
   {
@@ -241,7 +241,7 @@ export const ARTIFACT_DATA = [
     fact: 'Bolinao’s centuries-old church, raised from coral stone in the early 1600s, its weathered façade carved with folk-Baroque saints and figures. It has stood through storms, fire, and war on the edge of the West Philippine Sea.',
     note: 'Coral hauled from the sea built these walls, and now the sea has come to reclaim them — a landmark returning, stone by stone, to where it began.',
     spawnTag: 'submerged_interior',
-    image: 'assets/artifacts/zone3/st-james-church.jpg',
+    image: 'assets/artifacts/zone3/st-james-church.png',
     zone: 3,
   },
   {
@@ -251,7 +251,7 @@ export const ARTIFACT_DATA = [
     fact: 'A quiet coastal stretch of Pangasinan where pale sand meets the open gulf, long treasured by fishing families and travellers for its calm water and unhurried horizon. Its shoreline gathers the light of every sunset over the sea.',
     note: 'Not every landmark is grand; some are simply the shore a community grew up beside — and their loss is measured in remembered afternoons, not in guidebooks.',
     spawnTag: 'elevated_rubble',
-    image: 'assets/artifacts/zone3/banaan.webp',
+    image: 'assets/artifacts/zone3/banaan.png',
     zone: 3,
   },
   {
@@ -261,7 +261,7 @@ export const ARTIFACT_DATA = [
     fact: 'Perched on Punta Piedra Point and lit since the early 1900s, the Cape Bolinao Lighthouse is among the tallest in the country, its beam long guiding ships past the rocky western cape. Generations climbed its spiral stair for the view over the sea.',
     note: 'A lighthouse exists to keep others from the deep; there is a hard irony in finding one swallowed by the very water it once warned against.',
     spawnTag: 'near_wall',
-    image: 'assets/artifacts/zone3/bolinao-lighthouse.jpg',
+    image: 'assets/artifacts/zone3/bolinao-lighthouse.png',
     zone: 3,
   },
   {
@@ -271,7 +271,7 @@ export const ARTIFACT_DATA = [
     fact: 'The stately neoclassical seat of the provincial government in Lingayen, its long colonnade and dome a landmark of civic Pangasinan for over a century. Its grounds face the gulf and the historic Lingayen beach.',
     note: 'The capitol is where a province keeps its records and its self-image; drowned, it becomes an archive of governance the strings must remember on its behalf.',
     spawnTag: 'open_water',
-    image: 'assets/artifacts/zone3/capitol.webp',
+    image: 'assets/artifacts/zone3/capitol.png',
     zone: 3,
   },
   {
@@ -281,7 +281,7 @@ export const ARTIFACT_DATA = [
     fact: 'One of the country’s most visited pilgrimage sites, the Manaoag basilica shelters the centuries-old ivory image of Our Lady of the Rosary, drawing the faithful from across the islands. Its bells and candle-lit shrine have answered prayers for generations.',
     note: 'Manaoag holds the weight of countless whispered petitions; of all the drowned places, a shrine may carry the most memory — every prayer still hanging on the strings.',
     spawnTag: 'submerged_interior',
-    image: 'assets/artifacts/zone3/manaoag-church.webp',
+    image: 'assets/artifacts/zone3/manaoag-church.png',
     zone: 3,
   },
   {
@@ -291,7 +291,7 @@ export const ARTIFACT_DATA = [
     fact: 'A landmark Art Deco hall in the Lingayen capitol complex, long the province’s stage for assemblies, ceremonies, and celebrations. Its clean pre-war lines make it one of Pangasinan’s most recognizable public buildings.',
     note: 'An auditorium is a vessel built to be filled with gathered voices; silent and submerged, its emptiness is its own kind of memory.',
     spawnTag: 'elevated_rubble',
-    image: 'assets/artifacts/zone3/sison-auditorium.webp',
+    image: 'assets/artifacts/zone3/sison-auditorium.png',
     zone: 3,
   },
 ];

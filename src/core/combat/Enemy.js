@@ -57,7 +57,7 @@ export class Enemy extends ThreatBody {
 
     this.figure = new THREE.Group();
     this.figure.position.y = CONFIG.WATER_LEVEL + this.cfg.HOVER;
-    this.group.add(this.figure);
+    this.rig.add(this.figure);          // rig carries the rise out of the spawn tear
 
     if (isChaser) {
       // Lean shard: a forward-tipped cone body with trailing fin planes.
@@ -94,7 +94,7 @@ export class Enemy extends ThreatBody {
   center(out) {
     return out.set(
       this.group.position.x,
-      CONFIG.WATER_LEVEL + this.cfg.HOVER,
+      CONFIG.WATER_LEVEL + this.cfg.HOVER + this.emergeOffset,
       this.group.position.z,
     );
   }

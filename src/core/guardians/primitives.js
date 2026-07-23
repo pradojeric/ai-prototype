@@ -14,6 +14,13 @@ export function fadeMat(color, emissive, emissiveIntensity, opacity, roughness =
   });
 }
 
+// Allocation-free idle glow for authored accent materials. `visibility` keeps
+// the emissive response synchronized with the Guardian's existing fade lifecycle.
+export function pulseEmissive(material, t, base, amplitude, speed, phase = 0, visibility = 1) {
+  const wave = Math.sin(t * speed + phase) * 0.5 + 0.5;
+  material.emissiveIntensity = (base + wave * amplitude) * visibility;
+}
+
 // A bamboo-style limb: a short stack of cylinders running down local -Y, with
 // a joint knob between segments. Returns a Group pivoted at its top.
 export function stackedLimb(mat, totalLen, rTop, rBot, count = 3) {

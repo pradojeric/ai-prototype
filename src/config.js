@@ -21,6 +21,7 @@ export const CONFIG = {
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
   DEBUG_TEST_ENDING_BUTTON: true, // true → show a title-menu shortcut for the full final cutscene
+  DEBUG_GUARDIAN_ZONE_BUTTON: true, // true → show the title shortcut to the Guardian showroom
 };
 
 // Replace this reserved example URL with the deployed City-Wide Portal endpoint.
@@ -80,21 +81,31 @@ export const ENDING = {
   MUSEUM_DURATION: 13.5,
   RESTORED_DURATION: 31,
   SUBTITLES: [
-    { start: 0.4, end: 5.0,
+    {
+      start: 0.4, end: 5.0,
       en: 'When memory is carried home, the waters loosen their hold.',
-      fil: 'Kapag naiuwi ang alaala, bumibitaw ang pagkakahawak ng tubig.' },
-    { start: 5.0, end: 11.0,
+      fil: 'Kapag naiuwi ang alaala, bumibitaw ang pagkakahawak ng tubig.'
+    },
+    {
+      start: 5.0, end: 11.0,
       en: 'The food of Pangasinan returns to tables, streets, and living hands.',
-      fil: 'Nagbabalik sa hapag, lansangan, at buhay na kamay ang pagkaing Pangasinense.' },
-    { start: 11.0, end: 17.5,
+      fil: 'Nagbabalik sa hapag, lansangan, at buhay na kamay ang pagkaing Pangasinense.'
+    },
+    {
+      start: 11.0, end: 17.5,
       en: 'Drums answer the morning. Festivals gather every scattered voice.',
-      fil: 'Sumasagot ang mga tambol sa umaga. Muling nagtitipon ang bawat tinig.' },
-    { start: 17.5, end: 24.0,
+      fil: 'Sumasagot ang mga tambol sa umaga. Muling nagtitipon ang bawat tinig.'
+    },
+    {
+      start: 17.5, end: 24.0,
       en: 'Landmarks stand beneath a clear sky, holding faith and homecoming.',
-      fil: 'Nakatindig sa maaliwalas na langit ang mga pook ng pananampalataya at pag-uwi.' },
-    { start: 24.0, end: 29.0,
+      fil: 'Nakatindig sa maaliwalas na langit ang mga pook ng pananampalataya at pag-uwi.'
+    },
+    {
+      start: 24.0, end: 29.0,
       en: 'The Strings fade, but what they joined will not be forgotten.',
-      fil: 'Naglalaho ang mga Hibla, ngunit hindi malilimutan ang kanilang pinag-ugnay.' },
+      fil: 'Naglalaho ang mga Hibla, ngunit hindi malilimutan ang kanilang pinag-ugnay.'
+    },
   ],
   // The gameplay bloom (0.8 / 0.6 / 0.2) is tuned for the dark underwater
   // world; the bright ending scenes push everything over that low threshold
@@ -216,7 +227,11 @@ export const COMBAT = {
   WAVE_GAP: 1.6,              // breather between cleared wave and the next
   FADE_IN: 0.5,               // enemies can't act until fully faded in
   SPIT_WINDUP: 0.4,           // spitter glow telegraph before each spit
-  SPAWN_TELEGRAPH: 0.7,       // ground-ring warning shown before an echo arrives
+  SPAWN_TELEGRAPH: 1.4,       // woven-thread tear that opens before any arena enemy arrives
+  // How the body comes through the tear: it is built DEPTH metres below its
+  // final spot and rises over TIME, overlapping FADE_IN so the arrival reads as
+  // caused by the rift instead of a fade-in beside it.
+  EMERGE: { DEPTH: 1.1, TIME: 0.35 },
   SPAWN_RADIUS_MIN: 7,        // spawn ring around the contested artifact
   SPAWN_RADIUS_MAX: 12,
   SPAWN_MIN_PLAYER_DIST: 5,
@@ -252,6 +267,19 @@ export const VFX = {
   SHARDS_PER_BURST: 6,
   WISPS_PER_DEATH: 5,         // upward gravity-free motes left by a kill
   RESIDUE_LIFE: 1.6,          // seconds the water ripple lingers after a death
+  // Woven-thread tear (src/core/combat/ThreadTear.js) — the spawn portal. Every
+  // strand of every pooled tear lives in ONE LineSegments2, so the whole pool
+  // costs one draw call plus one for the seam. POOL is the hard ceiling; the
+  // oldest tear is recycled when a wave needs more.
+  TEAR: {
+    POOL: 6,
+    STRANDS: 4,               // fishing lines peeled off each side of the seam
+    SAMPLES: 14,              // points per strand (SAMPLES-1 segments)
+    HEIGHT: 2.2,              // seam height (m) at full unzip
+    WIDTH: 0.9,               // how far the strands bow away from the seam (m)
+    LINEWIDTH: 2.6,           // strand thickness at peak strain (px, fat lines)
+    CLOSE_TIME: 0.3,          // recoil-and-fade once the body is through
+  },
 };
 
 // Combat HUD (src/ui/CombatHud.js) — pooled DOM overlays. Element counts are
@@ -274,15 +302,22 @@ export const ARENA = {
   WALL_RADIUS: 26,          // circular wall ring enclosing the play space
   CENTER: { x: 0, z: 0 },   // player spawn + wave/riddle origin
   ROUNDS: RIDDLE_COUNT,     // riddle rounds = guardian armor layers to break
-  RIDDLE_FIRST: 6,          // seconds of pure survival before the first riddle
-  RIDDLE_CADENCE: 16,       // seconds between riddle rounds (if none is active)
+  // Wave-gated pacing: the encounter is a fixed 10-wave run, and clearing one of
+  // the RIDDLE_WAVES opens a bugtong round that HOLDS the wave clock until it is
+  // answered. Structure, not a wall clock — the player can see the end coming.
+  TOTAL_WAVES: 10,
+  RIDDLE_WAVES: [3, 6, 10],
   NODE_DIST: 8,             // answer-node ring radius around the center
   NODE_HEIGHT: 1.7,         // answer-node height above water (shootable at aim height)
   NODE_RADIUS: 0.85,        // answer-node bolt hit radius
   NODE_ANGLE: Math.PI / 5,  // angular spread between the three nodes (fan in front)
   NODE_DELAY: 3,            // seconds after the riddle appears before the choices spawn
   PENALTY_CHASERS: 2,       // Starved Fishers spawned on a wrong answer
+  PENALTY_SPITTERS: 1,      // the lockout squad has to be a real threat, not a speed bump
   COLLAPSE: 1.4,            // victory flash/collapse beat before returning
+  // The final boss phase is NOT tuned here: each zone's boss is an ArenaBoss
+  // subclass owning its own numbers beside its own mechanics
+  // (arena/ArenaBoss.js, arena/FeastkeeperBoss.js).
 };
 
 // Zone 2's stationary-boat rail encounter. World-space travel is an illusion:
@@ -297,10 +332,11 @@ export const RAIL_ARENA = {
   CAMERA_BOB: 0.08,
   CAMERA_ROLL: 0.018,
   ROUNDS: RIDDLE_COUNT,
-  FIRST_RIDDLE: 25,
-  RIDDLE_CADENCE: 55,
+  RIDDLE_TIMES: [20, 55, 90],
   PROMPT_DELAY: 3,
-  LANTERN_STAGGER: 0.75,
+  CHOICE_READ_DELAY: 3,
+  LANTERN_STAGE_TRAVEL: 1,
+  LANTERN_LINEUP_GAP: 4.5,
   LANTERN_FLIGHT: 6,
   LANTERN_RADIUS: 0.78,
   WRONG_DAMAGE: 18,
@@ -308,14 +344,14 @@ export const RAIL_ARENA = {
   RETRY_DELAY: 3,
   RIDDLE_THREAT_SCALE: 0.65,
   ZEPHYR_THREAT_SCALE: 0.55,
-  WAVE_INTERVAL: 10,
-  MAX_THREATS: 6,
-  WAVES: [
-    { snipers: 1, boarders: 1 },
-    { snipers: 2, boarders: 1 },
-    { snipers: 1, boarders: 2 },
-    { snipers: 2, boarders: 2 },
-  ],
+  SPAWN_INTERVAL: [3, 5],
+  EMPTY_SPAWN_DELAY: 0.5,
+  POST_RIDDLE_SPAWN_DELAY: 1,
+  MAX_THREATS: 8,
+  RIVER_X_LIMIT: 6.5,
+  SPAWN_MIN_SEPARATION: 2.2,
+  SNIPER_Z_RANGE: [-24, -18],
+  BOARDER_Z_RANGE: [-31, -26],
   SNIPER: {
     HP: 2, RADIUS: 0.62, SHOT_INTERVAL: 1.8, SHOT_SPEED: 11, DAMAGE: 10,
   },
@@ -337,15 +373,34 @@ export const TOWER_ARENA = {
   WARNING_CLEARANCE: 2.5,
   CRITICAL_CLEARANCE: 0.85,
   DROWN_CLEARANCE: 0.12,
+  BOSS_WATER_HEIGHT: 15,
   MAX_THREATS: 6,
-  THREAT_BANDS: [2.8, 7.2, 11.8, 16.2],
-  GARGOYLE: { HP: 4, SPEED: 2.4, DAMAGE: 18, KNOCKBACK: 5.2, RADIUS: 0.55 },
+  MAX_GALES: 2,
+  GARGOYLE: {
+    HP: 4,
+    DAMAGE: 18,
+    KNOCKBACK: 5.2,
+    RADIUS: 0.55,
+    ATTACK_RANGE: 2.05,
+    TELEGRAPH: 0.6,
+    ATTACK_INTERVAL: 1.4,
+  },
   GALE: {
-    HP: 2, DAMAGE: 10, SHOT_INTERVAL: 2.8, SHOT_SPEED: 9,
-    KNOCKBACK: 3.6, RADIUS: 0.42,
+    HP: 2,
+    DAMAGE: 10,
+    SHOT_INTERVAL: 2.8,
+    SHOT_TELEGRAPH: 0.45,
+    SHOT_SPEED: 9,
+    KNOCKBACK: 3.6,
+    RADIUS: 0.42,
+    INITIAL_SPAWN: [7, 10],
+    SPAWN_INTERVAL: [6, 10],
+    CENTER_RADIUS: 4.5,
+    CENTER_MIN_RADIUS: 1.5,
+    SPAWN_SEPARATION: 2,
+    HEIGHT_FOLLOW: 5,
   },
   GATE_HEIGHTS: [6, 12, 18],
-  KEEPER: { HP: 12, DAMAGE: 12, SHOT_INTERVAL: 2.4, KNOCKBACK: 5.2, REINFORCE: 8 },
   WRONG_SLOW: 0.55,
   WRONG_SLOW_TIME: 4,
   VERTICAL_LUMINA_BAND: 1.5,
