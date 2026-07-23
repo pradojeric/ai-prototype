@@ -1,3 +1,90 @@
+# Task — Multiline Riddle Readability (2026-07-23)
+
+## Objective
+
+Widen the shared riddle banner and replace compressed single-line answer labels
+with fixed-size, centered, maximum-three-line panels across all arenas.
+
+## Checklist
+
+- [x] Trace the shared banner and answer-label paths across Arenas 1–3
+- [x] Lock banner width, wrapping, line count, alignment, tower spacing, and desktop scope
+- [x] Write the focused implementation plan
+- [x] User review and approval of the riddle readability plan
+- [x] Implement and test shared multiline canvas layout
+- [x] Apply dynamic label aspect sizing to nodes and lanterns
+- [x] Spread Tower seal choices without label scaling
+- [x] Widen and audit the riddle banner
+- [x] Run static and mocked verification
+- [ ] Manually verify longest text in all three arenas (local server permission
+      remains unavailable)
+
+Plan: `_partials/implementation_plan_riddle_readability.md`
+
+---
+
+# Task — Remove Superseded Exploration HUD (2026-07-23)
+
+## Objective
+
+Remove the legacy Rift hint and artifact counter now represented by the Journey
+panel, while preserving interaction prompts and all combat/status UI.
+
+## Checklist
+
+- [x] Confirm legacy ownership and replacement coverage
+- [x] Remove legacy markup and CSS
+- [x] Remove obsolete DOM bindings and visibility calls
+- [x] Run syntax, stale-reference, line-count, test, and whitespace checks
+- [ ] Manually verify the Journey panel remains readable in browser (local
+      server permission remains unavailable)
+
+---
+
+# Task — Journey Objective & First-Time Guidance UI (2026-07-23)
+
+## Objective
+
+Add a museum-styled desktop guidance layer that always communicates the player's
+current objective outside combat, collapses to a small status label during arena
+combat, and teaches controls and Memory Lumina effects through short, non-pausing,
+once-per-run notifications.
+
+## Locked decisions
+
+- [x] Show only the current objective, revealed as progression changes
+- [x] Guide the full required loop: Rift challenge, Guardian defeat, scattered
+      memories, Guardian Soul, museum return, and Final Memory
+- [x] Keep optional activities and world-space navigation markers out of scope
+- [x] Use short actionable copy with a story-led museum/archive voice
+- [x] Show count plus progress bar where measurable
+- [x] Collapse automatically to a small label during combat; no manual toggle
+- [x] Reuse the existing combat HUD instead of duplicating waves, riddles, or boss HP
+- [x] Animate objective changes without pausing gameplay
+- [x] Add contextual first-time keyboard/mouse hints, one at a time, timeout dismissal
+- [x] Explain each Lumina color briefly when its effect first applies
+- [x] Reset objectives and tutorial-seen state on browser refresh
+- [x] Target desktop only; mobile UI is not included
+
+## Planning and implementation checklist
+
+- [x] Trace museum, zone, arena, artifact, Soul, and Lumina state transitions
+- [x] Inventory the affected UI states and current HUD ownership
+- [x] Load the game UI pattern reference and record it in the plan
+- [x] Write the scoped implementation plan
+- [x] User review and approval of `implementation_plan.md`
+- [x] Add semantic objective definitions and a focused guidance UI module
+- [x] Add objective, collapsed-combat, and transient-toast markup/styles
+- [x] Wire progression updates to existing authoritative game transitions
+- [x] Wire once-per-run contextual control hints
+- [x] Wire first-application Lumina explanations
+- [x] Run syntax, DOM-reference, line-count, reduced-motion, and whitespace checks
+- [ ] Manually verify desktop text fit, transitions, combat collapse, restart/faint
+      behavior, all three Lumina explanations, and clean browser console (local
+      server sandbox denied; escalated server permission declined)
+
+---
+
 # Task — Bring Enemy Direction Arrows Inward (2026-07-23)
 
 ## Objective

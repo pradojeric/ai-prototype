@@ -289,7 +289,7 @@ export const HUD = {
   DMG_ARC_LIFE: 0.9,          // seconds an arc takes to fade out
   THREAT_MARKERS: 8,          // off-screen echo markers
   THREAT_INTERVAL: 0.05,      // seconds between marker refreshes (~20 Hz)
-  THREAT_MARGIN: 0.62,        // pull off-screen arrows inward, nearer the crosshair
+  THREAT_MARGIN: 0.4,        // pull off-screen arrows inward, nearer the crosshair
   HEALTH_LAG: 1.1,            // ghost-fill drain rate, fraction of the bar per second
 };
 
@@ -401,6 +401,7 @@ export const TOWER_ARENA = {
     HEIGHT_FOLLOW: 5,
   },
   GATE_HEIGHTS: [6, 12, 18],
+  GATE_CHOICE_GAP: 3.8,
   WRONG_SLOW: 0.55,
   WRONG_SLOW_TIME: 4,
   VERTICAL_LUMINA_BAND: 1.5,

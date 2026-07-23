@@ -52,7 +52,11 @@ export class LanternProjectile {
     this.labelTex = makeAnswerLabelTexture(choice.text);
     this.labelMat = new THREE.SpriteMaterial({ map: this.labelTex, transparent: true, depthWrite: false });
     this.label = new THREE.Sprite(this.labelMat);
-    this.label.scale.set(3.2, 1, 1);
+    this.label.scale.set(
+      this.labelTex.userData.labelWorldWidth,
+      this.labelTex.userData.labelWorldHeight,
+      1,
+    );
     this.label.position.y = 1.35;
     this.group.add(this.label);
     this._center = new THREE.Vector3();

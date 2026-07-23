@@ -97,11 +97,11 @@ export class TowerGateManager {
     if (this.elHint) this.elHint.textContent = 'Shoot the correct seal mechanism.';
     riddle.choices.forEach((choice, index) => {
       const position = new THREE.Vector3(
-        gate.x + (index - 1) * 1.5,
+        gate.x + (index - 1) * TOWER_ARENA.GATE_CHOICE_GAP,
         gate.height + 1.4,
         gate.z - 1.5,
       );
-      gate.nodes.push(new AnswerNode(this.scene, choice, position, { labelScale: 0.72 }));
+      gate.nodes.push(new AnswerNode(this.scene, choice, position));
     });
   }
 

@@ -7,11 +7,6 @@ import { CONFIG } from '../../config.js';
 // existing element fields. The fields remain on Game because its state-machine
 // transitions are the source of truth for which overlays are visible.
 export function bindGameUi(game) {
-  game.elFound = document.getElementById('found');
-  game.elTotal = document.getElementById('total');
-  game.elHud = document.getElementById('hud');
-  game.elGhint = document.getElementById('ghint');
-  game.elGhintLabel = document.getElementById('ghint-label');
   game.elPrompt = document.getElementById('prompt');
   game.elCross = document.getElementById('crosshair');
   game.elTitle = document.getElementById('title');

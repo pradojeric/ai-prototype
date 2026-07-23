@@ -37,7 +37,7 @@ export class ArenaController {
       this.lumina.tryDrop(position, dropMultiplier);
     };
 
-    // Non-blocking bugtong banner (declared in index.html; styled like #ghint).
+    // Non-blocking bugtong banner declared in index.html.
     this.elBanner = document.getElementById('arena-riddle');
     this.elStep = document.getElementById('ar-step');
     this.elFil = document.getElementById('ar-fil');

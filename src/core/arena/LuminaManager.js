@@ -226,6 +226,9 @@ export class LuminaManager {
     }
     this.audio.playLuminaPickup();
     this._syncHud(true);
+    document.dispatchEvent(new CustomEvent('strings:lumina-effect', {
+      detail: { type: slot.type },
+    }));
   }
 
   _updateBuffs(dt) {

@@ -74,34 +74,6 @@
   filter: drop-shadow(0 0 6px rgba(111, 216, 208, .85));
 }
 
-/* ---- Artifact HUD ---- */
-#hud {
-  position: fixed;
-  top: 22px;
-  right: 26px;
-  text-align: right;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .6s;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
-}
-
-#hud.active { opacity: 1; }
-
-#hud .label {
-  font-size: 12px;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--teal);
-  opacity: .8;
-}
-
-#hud .count {
-  font-size: 30px;
-  font-weight: bold;
-  letter-spacing: 2px;
-}
-
 /* ---- Stamina and health ---- */
 #stamina,
 #health {
@@ -496,43 +468,13 @@
 #prompt.active { opacity: 1; }
 #prompt b { color: var(--amber); }
 
-/* ---- Guardian / Rift hint ---- */
-#ghint {
-  position: fixed;
-  top: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .6s;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
-}
-
-#ghint.active { opacity: 1; }
-
-#ghint .label {
-  font-size: 12px;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--teal);
-  opacity: .85;
-}
-
-#ghint .sub {
-  font-size: 14px;
-  font-style: italic;
-  opacity: .6;
-  margin-top: 4px;
-}
-
 /* ---- Arena riddle banner ---- */
 #arena-riddle {
   position: fixed;
   top: 96px;    /* clears the boss frame, which owns the top of the screen */
   left: 50%;
   transform: translateX(-50%);
-  width: min(640px, 82vw);
+  width: min(900px, 88vw);
   text-align: center;
   pointer-events: none;
   opacity: 0;
@@ -560,6 +502,7 @@
   font-size: 18px;
   font-weight: 600;
   white-space: pre-line;
+  overflow-wrap: break-word;
   line-height: 1.35;
 }
 
@@ -568,6 +511,8 @@
   font-style: italic;
   opacity: .7;
   margin-top: 4px;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 #arena-riddle .hint {

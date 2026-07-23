@@ -48,12 +48,11 @@ export const debugZoneFlowMethods = {
     this.viewmodel.setReach(0);
     this.viewmodel.group.visible = false;
     this.elRingWrap.classList.remove('active');
-    this.elHud.classList.remove('active');
-    this.elGhint.classList.remove('active');
     this.elPrompt.classList.remove('active');
     this.elCross.classList.remove('active');
 
     this.phase = 'debug';
+    this._syncJourneyGuide();
     this.player.controls.lock();
   },
 

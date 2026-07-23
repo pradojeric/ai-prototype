@@ -18,8 +18,10 @@ import { bindGameUi, wireGameEvents } from './_partials/GameUI.js';
 import { GamePauseController } from './_partials/GamePause.js';
 import { arenaFlowMethods } from './_partials/ArenaFlow.js';
 import { debugZoneFlowMethods } from './_partials/DebugZoneFlow.js';
+import { gameGuidanceMethods } from './_partials/GameGuidance.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
+import { JourneyGuide } from '../ui/JourneyGuide.js';
 import { Museum } from '../museum/Museum.js';
 import { IntroCutscene } from '../cutscene/IntroCutscene.js';
 import { FaintCutscene } from '../cutscene/FaintCutscene.js';
@@ -90,6 +92,9 @@ export class Game {
     this.holdProgress = 0;    // 0..1 hold-to-collect progress
     bindGameUi(this);
     this.pause = new GamePauseController(this);
+    this.journeyGuide = new JourneyGuide(
+      (milliseconds) => this.pause.wait(milliseconds),
+    );
     this.discovery = new DiscoveryScreen((milliseconds) => this.pause.wait(milliseconds));
     this.cutscene = new IntroCutscene(
       this.museum,
@@ -101,6 +106,7 @@ export class Game {
       this.elEndingSubtitle, this.elEndingSubtitleEn, this.elEndingSubtitleFil,
     );
     wireGameEvents(this);
+    this._syncJourneyGuide(false);
 
     document.getElementById('loading').style.display = 'none';
     this.elTitle.style.display = 'flex';      // the intro begins at the title screen
@@ -130,18 +136,19 @@ export class Game {
     if (this.busy) return;
     this.busy = true;
     this.holdProgress = 0;
+    this.journeyGuide.setObjective({ mode: 'hidden' }, false);
     this.pause.releasePointerLock();
     await this.discovery.show(nearest.data, this.world.zone.name, () => {
       this.artifacts.collect(nearest);
       void this.api.recordArtifactCollection(nearest.data, this.world.zone.name);
       this.audio.removeEcho(nearest);   // silence this artifact's echo on pickup
-      this._updateArtifactCount();      // whole-zone progress (e.g. 4 / 11)
     });
     this.busy = false;
 
     if (this.artifacts.zoneComplete && this.collectedSouls.has(this.currentZone)) {
       this._zoneComplete();             // memories + this zone's Soul are safely recovered
     } else {
+      this._syncJourneyGuide();
       this.player.controls.lock();      // keep collecting memories / recover the Soul
     }
   }
@@ -153,19 +160,15 @@ export class Game {
     if (this.busy) return;
     this.busy = true;
     this.elPrompt.classList.remove('active');
+    this.journeyGuide.setObjective({ mode: 'hidden' }, false);
     this.pause.releasePointerLock();
     // In the museum this.world is the hub, so derive provenance from the
     // artifact's own zone number via the zone registry.
     const zoneName = ZONES['zone' + data.zone]?.name;
     await this.discovery.show(data, zoneName);   // no onSaved — view-only
     this.busy = false;
+    this._syncJourneyGuide();
     this.player.controls.lock();
-  }
-
-  // Sync the HUD counter to whole-zone progress (recovered across all visits).
-  _updateArtifactCount() {
-    this.elFound.textContent = this.artifacts.zoneFoundCount;
-    this.elTotal.textContent = this.artifacts.zoneTotal;
   }
 
   // Recovered artifact-data objects grouped by zone number ({ 1: [...], ... }),
@@ -188,6 +191,7 @@ export class Game {
     this.collectedSouls.add(zone);
     this.soul = null;
     this.audio.playWaveClear();
+    this._syncJourneyGuide();
     if (this.phase === 'playing' && this.artifacts.zoneComplete) this._zoneComplete();
   }
 
@@ -221,6 +225,7 @@ export class Game {
     const lookAt = camPos.clone().addScaledVector(this._faintLook, 5);
 
     this.phase = 'faint';
+    this._syncJourneyGuide(false);
     this.elCross.classList.remove('active');
     this.viewmodel.group.visible = false;
     this.renderPass.camera = this.faintCutscene.camera;
@@ -286,6 +291,7 @@ export class Game {
     if (this._promptHtml === html) return;
     this._promptHtml = html;
     this.elPrompt.innerHTML = html;
+    if (html.includes('<b>E</b>')) this.journeyGuide.showControl('interact');
   }
 
   // Show the Descend screen for the currently-built zone: label it with the
@@ -308,14 +314,8 @@ export class Game {
     // guards on _loadingZone) is never left blocked after a hub-entered zone.
     this._loadingZone = false;
     this.elCross.classList.add('active');
-    if (this.bossDefeated) {
-      this.elHud.classList.add('active');     // artifacts are loose: show the counter
-      this.elGhint.classList.remove('active');
-    } else {
-      this.elGhintLabel.textContent = 'Find the Memory Rift';
-      this.elGhint.classList.add('active');   // still seeking the rift
-      this.elHud.classList.remove('active');
-    }
+    this._syncJourneyGuide();
+    this._queueExplorationGuidance();
   }
 
   // Play the active zone's intro dialogue as a subtitle, one line at a time, over
@@ -344,11 +344,10 @@ export class Game {
     this.endingPlayed = true;
     this.busy = true;
     this.phase = 'endingPortal';
+    this._syncJourneyGuide();
     this._introToken = (this._introToken || 0) + 1;
     this.holdKey = false;
     this.holdProgress = 0;
-    this.elHud.classList.remove('active');
-    this.elGhint.classList.remove('active');
     this.elPrompt.classList.remove('active');
     this.elCross.classList.remove('active');
     this.elRingWrap.classList.remove('active');
@@ -476,13 +475,13 @@ export class Game {
     this.elZcQuote.textContent = '"Hindi natin malilimutan ang isang bagay na ating minahal."';
     this.elZcTrans.textContent = '(We cannot forget something we have loved.)';
     this.elZcEnter.textContent = 'Return to your Museum';
+    this._syncJourneyGuide();
     this._showCompletionCard();
   }
 
   // Shared reveal for the zone completion card (controls already unlocked by the
   // discovery flow).
   _showCompletionCard() {
-    this.elHud.classList.remove('active');
     this.elCross.classList.remove('active');
     this.elPrompt.classList.remove('active');
     this.elZoneDone.classList.add('active');
@@ -507,7 +506,6 @@ export class Game {
       (this.collectedByZone[zoneId] ||= new Set()).add(data.id);
     }
     for (const zone of this.zoneOrder) this.collectedSouls.add(zone);
-    this._updateArtifactCount();
     this._skipToMuseum();
   }
 
@@ -539,6 +537,7 @@ export class Game {
     this.museum.setHubLighting(true);
     this.museum.populate(this._collectedArtifacts());
     this._syncMuseumSouls();
+    this._syncJourneyGuide();
 
     // Move the player (camera + its hand mesh) into the museum scene so its world
     // matrix updates when we render museum.scene, and point physics at the museum.
@@ -628,6 +627,7 @@ export class Game {
     // replays alike). Coming from the hub the player is pointer-locked, so unlock
     // to surface the overlay; the descend click re-locks and starts gameplay.
     this._showDescend();
+    this._syncJourneyGuide();
     if (this.player.controls.isLocked) this.pause.releasePointerLock();
   }
 
@@ -845,3 +845,4 @@ export class Game {
 
 Object.assign(Game.prototype, arenaFlowMethods);
 Object.assign(Game.prototype, debugZoneFlowMethods);
+Object.assign(Game.prototype, gameGuidanceMethods);

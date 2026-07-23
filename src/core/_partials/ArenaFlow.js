@@ -101,9 +101,9 @@ export const arenaFlowMethods = {
     this.phase = 'arena';
     this._loadingZone = false;
     this.elCross.classList.add('active');
-    this.elHud.classList.remove('active');
-    this.elGhint.classList.remove('active');
     this.elPrompt.classList.remove('active');
+    this._syncJourneyGuide();
+    this.journeyGuide.showControl('cast');
   },
 
   async _returnFromArena() {
@@ -152,8 +152,6 @@ export const arenaFlowMethods = {
         this.world.scene, this._returnZone, origin, (zone) => this._collectSoul(zone),
       );
     }
-    this._updateArtifactCount();
-
     this._levelCamera();
     this.busy = false;
     this._loadingZone = false;

@@ -8,12 +8,21 @@
 // ============================================================
 import * as THREE from 'three';
 import { ARENA } from '../../config.js';
+import { layoutAnswerLabel } from './_partials/AnswerLabelLayout.js';
 
 // Render a choice's text to a canvas → sprite so the label always faces the
 // camera without per-frame billboard math (THREE.Sprite is view-aligned).
 export function makeAnswerLabelTexture(text) {
+  const measureCanvas = document.createElement('canvas');
+  const measureContext = measureCanvas.getContext('2d');
+  const measureText = (value, fontSize) => {
+    measureContext.font = `bold ${fontSize}px Georgia, serif`;
+    return measureContext.measureText(value).width;
+  };
+  const layout = layoutAnswerLabel(text, measureText);
   const canvas = document.createElement('canvas');
-  canvas.width = 512; canvas.height = 160;
+  canvas.width = layout.width;
+  canvas.height = layout.height;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = 'rgba(4, 18, 26, 0.82)';
   ctx.strokeStyle = 'rgba(127, 232, 255, 0.9)';
@@ -33,19 +42,24 @@ export function makeAnswerLabelTexture(text) {
   ctx.fill(); ctx.stroke();
 
   ctx.fillStyle = '#eafdff';
-  ctx.font = 'bold 52px Georgia, serif';
+  ctx.font = `bold ${layout.fontSize}px Georgia, serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - 40);
+  const firstY = canvas.height / 2 - ((layout.lines.length - 1) * layout.lineHeight) / 2;
+  layout.lines.forEach((line, index) => {
+    ctx.fillText(line, canvas.width / 2, firstY + index * layout.lineHeight);
+  });
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.anisotropy = 4;
+  tex.userData.labelWorldWidth = layout.worldWidth;
+  tex.userData.labelWorldHeight = layout.worldHeight;
   return tex;
 }
 
 export class AnswerNode {
   // `choice` is { text, correct }; `pos` is the world-space ring position.
-  constructor(scene, choice, pos, options = {}) {
+  constructor(scene, choice, pos) {
     this.scene = scene;
     this.choice = choice;
     this.correct = !!choice.correct;
@@ -55,8 +69,6 @@ export class AnswerNode {
     this.dead = false;
     this._fade = 1;
     this._t0 = Math.random() * Math.PI * 2;   // bob phase offset
-    this._labelScale = options.labelScale || 1;
-
     this.group = new THREE.Group();
     this.group.position.copy(this.pos);
     scene.add(this.group);
@@ -88,7 +100,11 @@ export class AnswerNode {
     this.labelTex = makeAnswerLabelTexture(choice.text);
     this.labelMat = new THREE.SpriteMaterial({ map: this.labelTex, transparent: true, depthWrite: false });
     this.label = new THREE.Sprite(this.labelMat);
-    this.label.scale.set(3.2 * this._labelScale, 1.0 * this._labelScale, 1);
+    this.label.scale.set(
+      this.labelTex.userData.labelWorldWidth,
+      this.labelTex.userData.labelWorldHeight,
+      1,
+    );
     this.label.position.y = 1.4;
     this.group.add(this.label);
 
