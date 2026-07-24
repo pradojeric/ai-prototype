@@ -96,6 +96,13 @@ export class LuminaManager {
   // scheduled waves (1.0) from wrong-answer penalty waves (0.5).
   tryDrop(position, dropMultiplier = 1) {
     if (!this.combat || this._rng() >= LUMINA.DROP_CHANCE * dropMultiplier) return false;
+    return this.drop(position);
+  }
+
+  // Spawn a guaranteed reward. Boss mechanics can own their own probability
+  // roll while still reusing the same pooled Lumina pickup and effect rules.
+  drop(position) {
+    if (!this.combat) return false;
     const type = this._selectType(this.combat.hp / this.combat.maxHp);
     const slot = this._availableSlot();
     slot.active = true;
@@ -222,7 +229,7 @@ export class LuminaManager {
       else this.player.setZephyr(true, LUMINA.ZEPHYR_SPEED_MULT);
     } else {
       this._overchargeRemaining = LUMINA.OVERCHARGE_DURATION;
-      this.combat.setOvercharge(true, LUMINA.OVERCHARGE_SHOTS_PER_SECOND);
+      this.combat.setOvercharge(true, LUMINA.OVERCHARGE_DAMAGE_MULT);
     }
     this.audio.playLuminaPickup();
     this._syncHud(true);

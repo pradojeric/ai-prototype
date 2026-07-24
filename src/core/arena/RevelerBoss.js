@@ -9,7 +9,7 @@ import { ArenaBoss } from './ArenaBoss.js';
 import { RevelerProjectilePool } from './RevelerProjectilePool.js';
 
 const REVELER_TUNING = {
-  HP: 20,
+  HP: 70,
   ANCHORS: [-5.5, 0, 5.5],
   MOVE_WARNING: 0.45,
   MOVE_DURATION: 0.6,
@@ -130,7 +130,7 @@ export class RevelerBoss extends ArenaBoss {
       this.pingArmored(position);
       return;
     }
-    this.damage(this.tuning.REFLECT_DAMAGE);
+    this.damage(this.tuning.REFLECT_DAMAGE, position);
   }
 
   _onPhaseChanged() {

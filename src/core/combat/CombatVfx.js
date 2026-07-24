@@ -39,6 +39,32 @@ function colorFor(type) {
   return VFX_COLORS[type] ?? VFX_COLORS.memory;
 }
 
+// Boss feedback keeps a consistent shape language between arenas while its
+// colors stay native to the guardian: old gold/ember in the flooded feast hall,
+// river-cyan/coral aboard the reveler's route, and memory-gold/spectral blue at
+// the tower summit.
+const BOSS_PALETTES = {
+  zone1: {
+    shield: 0xffe6a3,
+    primary: 0xffc052,
+    fracture: 0xff793d,
+  },
+  zone2: {
+    shield: 0xa4f7ff,
+    primary: 0x48dff1,
+    fracture: 0xff7185,
+  },
+  zone3: {
+    shield: 0xffedc2,
+    primary: 0xffcf87,
+    fracture: 0x9fd8ff,
+  },
+};
+
+function bossPaletteFor(style) {
+  return BOSS_PALETTES[style] ?? BOSS_PALETTES.zone1;
+}
+
 export class CombatVfx {
   // `camera` is only read when a tear opens, to freeze its facing toward the
   // player; the effects layer never drives the camera.
@@ -74,6 +100,7 @@ export class CombatVfx {
         startScale: 1,
         endScale: 1,
         horizontal: false,
+        billboard: false,
         position: new THREE.Vector3(),
         color: new THREE.Color(VFX_COLORS.memory),
       });
@@ -142,6 +169,7 @@ export class CombatVfx {
     ring.startScale = options.startScale ?? 0.25;
     ring.endScale = options.endScale ?? 2.2;
     ring.horizontal = options.horizontal ?? false;
+    ring.billboard = options.billboard ?? false;
     ring.position.copy(position);
     ring.color.setHex(color);
   }
@@ -216,6 +244,103 @@ export class CombatVfx {
     this.burst(position, colorFor(type), 0.6, { count: 3, life: 0.28 });
   }
 
+  // A blocked bolt draws the shield inward around the contact point, followed
+  // by a restrained surface ripple. This is intentionally quieter than either
+  // armor failure or real boss damage.
+  shieldImpact(position, style) {
+    const palette = bossPaletteFor(style);
+    this.ring(position, palette.shield, {
+      duration: 0.34, startScale: 1.15, endScale: 0.28, billboard: true,
+    });
+    this.ring(position, palette.primary, {
+      duration: 0.26, startScale: 0.12, endScale: 0.82, billboard: true,
+    });
+    this.burst(position, palette.fracture, 0.32, {
+      count: 3, gravity: 0.15, rise: 0.05, life: 0.22,
+    });
+  }
+
+  // Correct answers fracture a visible layer with a strong outward break.
+  // The third answer collapses the remaining shell before the larger shatter,
+  // making the transition to a vulnerable boss unmistakable.
+  armorBreak(position, style, final = false) {
+    const palette = bossPaletteFor(style);
+    if (final) {
+      this.ring(position, palette.shield, {
+        duration: 0.68, startScale: 2.8, endScale: 0.18, billboard: true,
+      });
+      this.ring(position, palette.fracture, {
+        duration: 0.78, startScale: 0.22, endScale: 3.7, billboard: true,
+      });
+      this.ring(position, palette.primary, {
+        duration: 0.55, startScale: 0.55, endScale: 2.45, billboard: true,
+      });
+      this.burst(position, palette.fracture, 1.75, {
+        count: 14, gravity: 0.65, rise: 0.5, life: 0.68,
+      });
+      this.burst(position, palette.shield, 1.05, {
+        count: 8, gravity: 0.35, rise: 1.1, life: 0.82,
+      });
+      return;
+    }
+
+    this.ring(position, palette.fracture, {
+      duration: 0.52, startScale: 0.18, endScale: 1.9, billboard: true,
+    });
+    this.ring(position, palette.primary, {
+      duration: 0.36, startScale: 0.42, endScale: 1.25, billboard: true,
+    });
+    this.burst(position, palette.fracture, 1.1, {
+      count: 8, gravity: 0.65, rise: 0.35, life: 0.48,
+    });
+  }
+
+  // Real damage stays tight to the hit point: two short ripples and a handful
+  // of sparks, with no camera motion to compete with sustained fire.
+  bossHit(position, style) {
+    const palette = bossPaletteFor(style);
+    this.ring(position, palette.fracture, {
+      duration: 0.2, startScale: 0.08, endScale: 0.68, billboard: true,
+    });
+    this.ring(position, palette.primary, {
+      duration: 0.28, startScale: 0.16, endScale: 1.05, billboard: true,
+    });
+    this.burst(position, palette.fracture, 0.7, {
+      count: 4, gravity: 0.25, rise: 0.08, life: 0.24,
+    });
+  }
+
+  // Enrage/phase boundaries expand across the whole arena rather than staying
+  // on the body. A ground shockwave, layered body rings, and an upward shard
+  // surge give this beat a silhouette unlike a hit or an armor crack.
+  bossPhase(position, style, phase = 1, surfaceY = CONFIG.WATER_LEVEL + 0.04) {
+    const palette = bossPaletteFor(style);
+    const strength = 1 + (Math.min(3, Math.max(1, phase)) - 1) * 0.14;
+
+    this._dummy.position.set(position.x, surfaceY, position.z);
+    this.ring(this._dummy.position, palette.primary, {
+      horizontal: true,
+      duration: 0.95,
+      startScale: 0.45,
+      endScale: 5.4 * strength,
+    });
+    this.ring(position, palette.shield, {
+      duration: 0.82, startScale: 3.2 * strength, endScale: 0.3, billboard: true,
+    });
+    this.ring(position, palette.primary, {
+      duration: 0.76, startScale: 0.3, endScale: 4.1 * strength, billboard: true,
+    });
+    this.ring(position, palette.fracture, {
+      duration: 0.56, startScale: 0.85, endScale: 2.8 * strength, billboard: true,
+    });
+    this.burst(position, palette.primary, 1.35 * strength, {
+      count: 10, gravity: 0.25, rise: 0.85, life: 0.82,
+    });
+    this.burst(position, palette.fracture, 1.05 * strength, {
+      count: 8, gravity: 0.55, rise: 0.2, life: 0.58,
+    });
+  }
+
   // The kill beat: shockwave, shard burst, and slow wisps rising off the body.
   death(position, type) {
     const color = colorFor(type);
@@ -286,6 +411,7 @@ export class CombatVfx {
       const scale = THREE.MathUtils.lerp(ring.startScale, ring.endScale, progress);
       this._dummy.position.copy(ring.position);
       this._dummy.rotation.set(ring.horizontal ? Math.PI / 2 : 0, 0, 0);
+      if (ring.billboard && this.camera) this._dummy.lookAt(this.camera.position);
       this._dummy.scale.setScalar(Math.max(0.001, scale));
       this._dummy.updateMatrix();
       this.ringMesh.setMatrixAt(i, this._dummy.matrix);

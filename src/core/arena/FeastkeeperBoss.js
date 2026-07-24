@@ -18,7 +18,7 @@ import { ArenaBoss } from './ArenaBoss.js';
 // These live here, beside the mechanics that read them, rather than in config.js
 // where three unrelated boss fights would pile into one block.
 export const FEASTKEEPER_TUNING = {
-  HP: 10,
+  HP: 70,
   SHOT_INTERVAL: [2.6, 1.9, 1.3],
   TELEGRAPH: 0.45,                  // warning pulse before each shot leaves
   SPIT_SPEED: 11,

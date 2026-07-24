@@ -42,6 +42,9 @@ export class TowerCombatManager extends CombatManager {
     this.camera.updateProjectionMatrix();
     this.hud.hurt(false);
     this.setOvercharge(false);
+    this._alabActive = false;
+    this._alabCooldown = 0;
+    this.hud.setAlab(this._alabCharge, false);
   }
 
   startFight({ mode = 'ascent', attempt = 1 } = {}) {
@@ -276,7 +279,8 @@ export class TowerCombatManager extends CombatManager {
           (enemy.radius + COMBAT.BOLT.RADIUS) ** 2) continue;
         this.bolts.deactivate(shot);
         this._hitMarker();
-        const defeated = enemy.hit(COMBAT.BOLT.DAMAGE);
+        const defeated = enemy.hit(this.boltDamage);
+        this.registerPlayerBoltHit(defeated);
         this.vfx.enemyImpact(this._vEnemy, enemy.type, defeated);
         if (defeated) {
           this.audio.playEnemyDeath();
@@ -364,7 +368,7 @@ export class TowerCombatManager extends CombatManager {
     this.enemies.length = 0;
   }
 
-  abortFight() {
+  abortFight({ preserveVfx = false } = {}) {
     this._clearAllThreats();
     this.cancelPendingSpawns();
     this.bolts.clear();
@@ -374,11 +378,11 @@ export class TowerCombatManager extends CombatManager {
     this.hp = COMBAT.PLAYER_HP;
     this._playerDied = false;
     this._resetCombatFeel();
-    this.vfx.reset();
+    if (!preserveVfx) this.vfx.reset();
     this._hideHud();
   }
 
-  stop() { this.abortFight(); }
+  stop(options = {}) { this.abortFight(options); }
 
   dispose() {
     super.dispose();

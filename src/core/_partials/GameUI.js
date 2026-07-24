@@ -99,6 +99,11 @@ export function wireGameEvents(game) {
     if (wasDescending) game._playZoneIntro();
   });
   document.addEventListener('keydown', (e) => {
+    if (!game.pause.isPaused && e.code === 'KeyR' && !e.repeat &&
+        game.phase === 'arena' && !game.busy && game.combat?.active) {
+      game.combat.activateAlab();
+      return;
+    }
     if (game.pause.isPaused || e.code !== 'KeyE') return;
     if (!game.holdKey) game._ePressed = true;
     game.holdKey = true;
@@ -119,6 +124,7 @@ export function wireGameEvents(game) {
     game.camera.aspect = innerWidth / innerHeight;
     game.camera.updateProjectionMatrix();
     game.cutscene.resize(innerWidth, innerHeight);
+    game.guardianIntro.resize(innerWidth, innerHeight);
     game.faintCutscene.resize(innerWidth, innerHeight);
     game.portalCutscene.resize(innerWidth, innerHeight);
     game.museumEndingCutscene.resize(innerWidth, innerHeight);

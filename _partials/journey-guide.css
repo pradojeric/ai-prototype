@@ -71,7 +71,8 @@
   text-wrap: balance;
 }
 
-#journey-progress {
+#journey-progress,
+#journey-soul-progress {
   display: none;
   grid-template-columns: minmax(0, 1fr) 50px;
   align-items: center;
@@ -79,15 +80,18 @@
   margin-top: 15px;
 }
 
-#journey-progress.active { display: grid; }
+#journey-progress.active,
+#journey-soul-progress.active { display: grid; }
 
-#journey-progress .track {
+#journey-progress .track,
+#journey-soul-progress .track {
   height: 3px;
   overflow: hidden;
   background: rgba(234, 246, 244, .14);
 }
 
-#journey-progress-fill {
+#journey-progress-fill,
+#journey-soul-progress-fill {
   width: 0;
   height: 100%;
   background: linear-gradient(90deg, rgba(111, 216, 208, .72), var(--amber));
@@ -95,12 +99,30 @@
   transition: width .38s ease;
 }
 
-#journey-progress-count {
+#journey-progress-count,
+#journey-soul-progress-count {
   color: rgba(234, 246, 244, .72);
   font-size: 11px;
   letter-spacing: 1px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+#journey-soul-progress {
+  grid-template-columns: auto minmax(0, 1fr) 50px;
+  margin-top: 10px;
+}
+
+#journey-soul-progress .progress-label {
+  color: rgba(127, 232, 255, .78);
+  font-size: 9px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+
+#journey-soul-progress-fill {
+  background: linear-gradient(90deg, rgba(75, 166, 180, .72), #bff7ff);
+  box-shadow: 0 0 8px rgba(127, 232, 255, .55);
 }
 
 #journey-collapsed {
@@ -176,10 +198,10 @@
   #journey-guide,
   #journey-collapsed,
   #guidance-toast,
-  #journey-progress-fill {
+  #journey-progress-fill,
+  #journey-soul-progress-fill {
     transition-duration: .01ms;
   }
 
   #journey-guide.updated { animation: none; }
 }
-

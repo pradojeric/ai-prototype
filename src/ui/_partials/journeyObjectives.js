@@ -70,8 +70,9 @@ export function resolveJourneyObjective(state) {
       mode: 'expanded',
       archive: state.zoneLabel,
       story: 'The Guardian has fallen. Its memories are scattered.',
-      objective: 'Recover the scattered memories',
+      objective: 'Recover the scattered artifacts to restore your memory',
       progress: progress(state.memoriesFound, state.memoriesTotal),
+      soulProgress: progress(state.soulFound ? 1 : 0, 1),
     };
   }
 
@@ -82,7 +83,7 @@ export function resolveJourneyObjective(state) {
       archive: state.zoneLabel,
       story: 'One final light still binds this place.',
       objective: 'Claim the Guardian Soul',
-      progress: progress(0, 1),
+      soulProgress: progress(0, 1),
     };
   }
 
@@ -94,4 +95,3 @@ export function resolveJourneyObjective(state) {
     objective: 'Return to the Museum',
   };
 }
-

@@ -62,12 +62,23 @@ function testObjectiveResolver() {
   });
   assert.equal(scattered.id, 'scattered-memories');
   assert.deepEqual(scattered.progress, { current: 4, total: 9, label: '4 / 9' });
+  assert.deepEqual(scattered.soulProgress, { current: 0, total: 1, label: '0 / 1' });
 
-  assert.equal(resolveJourneyObjective({
+  const soulRecovered = resolveJourneyObjective({
+    ...baseState,
+    guardianDefeated: true,
+    memoriesFound: 4,
+    soulFound: true,
+  });
+  assert.deepEqual(soulRecovered.soulProgress, { current: 1, total: 1, label: '1 / 1' });
+
+  const guardianSoul = resolveJourneyObjective({
     ...baseState,
     guardianDefeated: true,
     memoriesFound: 9,
-  }).id, 'guardian-soul');
+  });
+  assert.equal(guardianSoul.id, 'guardian-soul');
+  assert.deepEqual(guardianSoul.soulProgress, { current: 0, total: 1, label: '0 / 1' });
 
   assert.equal(resolveJourneyObjective({
     ...baseState,
@@ -97,6 +108,10 @@ function testRenderingAndProgressAria() {
   assert.equal(guide.progressFill.style.width, `${(4 / 9) * 100}%`);
   assert.equal(guide.progress.attributes.get('aria-valuenow'), '4');
   assert.equal(guide.progressCount.textContent, '4 / 9');
+  assert.equal(guide.soulProgress.classList.contains('active'), true);
+  assert.equal(guide.soulProgressFill.style.width, '0%');
+  assert.equal(guide.soulProgress.attributes.get('aria-valuenow'), '0');
+  assert.equal(guide.soulProgressCount.textContent, '0 / 1');
 
   guide.setObjective(resolveJourneyObjective({ ...baseState, phase: 'arena' }), false);
   assert.equal(guide.panel.classList.contains('active'), false);
@@ -137,4 +152,3 @@ testRenderingAndProgressAria();
 await testNotificationQueueAndOncePerRunState();
 
 console.log('JourneyGuide tests passed');
-

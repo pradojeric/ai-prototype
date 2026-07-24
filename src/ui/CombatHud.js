@@ -19,6 +19,8 @@ export class CombatHud {
     this.elHealthLabel = document.getElementById('health-label');
     this.elHealthFill = document.getElementById('health-fill');
     this.elHealthLag = document.getElementById('health-lag');
+    this.elAlab = document.getElementById('alab');
+    this.elAlabFill = document.getElementById('alab-fill');
     this.elWave = document.getElementById('wavehud');
     this.elWaveLabel = document.getElementById('wave-label');
     this.elWaveN = document.getElementById('wave-n');
@@ -87,6 +89,7 @@ export class CombatHud {
 
   show({ wave = true } = {}) {
     this.elHealth.classList.add('active');
+    this.elAlab?.classList.add('active');
     if (wave) this.elWave.classList.add('active');
     else this.elWave.classList.remove('active');
     this.elCross.classList.add('combat');
@@ -94,6 +97,7 @@ export class CombatHud {
 
   hide() {
     this.elHealth.classList.remove('active', 'lumina-heal');
+    this.elAlab?.classList.remove('active', 'firing');
     this.elWave.classList.remove('active', 'boss');
     this.elCross.classList.remove('combat');
     this.elCross.classList.remove('hit');
@@ -155,6 +159,16 @@ export class CombatHud {
   }
 
   setOvercharge(active) { this.elCross.classList.toggle('overcharge', active); }
+
+  setAlab(charge, firing) {
+    const pct = clamp01(charge);
+    if (this.elAlabFill) this.elAlabFill.style.width = `${pct * 100}%`;
+    if (this.elAlab) {
+      this.elAlab.setAttribute('aria-valuenow', Math.round(pct * 100));
+      this.elAlab.classList.toggle('firing', !!firing);
+      this.elAlab.classList.toggle('ready', pct >= 0.999);
+    }
+  }
 
   hitMarker() {
     this.elCross.classList.add('hit');

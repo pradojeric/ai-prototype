@@ -202,6 +202,12 @@ export const COMBAT = {
     SPEED: 38, RADIUS: 0.18, LIFE: 1.2, COOLDOWN: 0.22, DAMAGE: 1,
     COLOR: 0x7fe8ff, SIZE: 0.09,
   },
+  ALAB: {
+    KILL_GAIN: 0.10,
+    HIT_GAIN: 0.01,
+    FULL_DURATION: 3,
+    SHOTS_PER_SECOND: 8,
+  },
   // Melee chaser: speed sits between wade (2.6) and sprint (~4.7) so kiting
   // costs stamina — sprint escapes, walking gets caught.
   CHASER: {
@@ -308,6 +314,9 @@ export const ARENA = {
   TOTAL_WAVES: 10,
   RIDDLE_WAVES: [3, 6, 10],
   NODE_DIST: 8,             // answer-node ring radius around the center
+  // Pull the whole fan toward the player so the center choice stays visibly
+  // outside the guardian's full-body shield without compressing label spacing.
+  NODE_FORWARD_OFFSET: 3,
   NODE_HEIGHT: 1.7,         // answer-node height above water (shootable at aim height)
   NODE_RADIUS: 0.85,        // answer-node bolt hit radius
   NODE_ANGLE: Math.PI / 5,  // angular spread between the three nodes (fan in front)
@@ -425,8 +434,8 @@ export const LUMINA = {
   HEAL: COMBAT.HEAL_ON_CLEAR,
   ZEPHYR_DURATION: 8,
   ZEPHYR_SPEED_MULT: 2.2,
-  OVERCHARGE_DURATION: 5,
-  OVERCHARGE_SHOTS_PER_SECOND: 8,
+  OVERCHARGE_DURATION: 10,
+  OVERCHARGE_DAMAGE_MULT: 2,
   COLORS: {
     vitality: 0x62ef8a,
     zephyr: 0x63b9ff,

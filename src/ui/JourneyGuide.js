@@ -10,7 +10,7 @@ const CONTROL_HINTS = Object.freeze({
 const LUMINA_HINTS = Object.freeze({
   vitality: ['Memory Lumina', 'Vitality — Health restored'],
   zephyr: ['Memory Lumina', 'Zephyr — Movement empowered'],
-  overcharge: ['Memory Lumina', 'Overcharge — Rapid casting awakened'],
+  overcharge: ['Memory Lumina', 'Overcharge — Bolt damage doubled'],
 });
 
 export class JourneyGuide {
@@ -24,6 +24,9 @@ export class JourneyGuide {
     this.progress = document.getElementById('journey-progress');
     this.progressFill = document.getElementById('journey-progress-fill');
     this.progressCount = document.getElementById('journey-progress-count');
+    this.soulProgress = document.getElementById('journey-soul-progress');
+    this.soulProgressFill = document.getElementById('journey-soul-progress-fill');
+    this.soulProgressCount = document.getElementById('journey-soul-progress-count');
     this.toast = document.getElementById('guidance-toast');
     this.toastKind = document.getElementById('guidance-kind');
     this.toastMessage = document.getElementById('guidance-message');
@@ -59,6 +62,12 @@ export class JourneyGuide {
     this.story.textContent = model.story || '';
     this.objective.textContent = model.objective || '';
     this._setProgress(model.progress);
+    this._setProgress(
+      model.soulProgress,
+      this.soulProgress,
+      this.soulProgressFill,
+      this.soulProgressCount,
+    );
 
     if (animate) {
       this.panel.classList.remove('updated');
@@ -92,16 +101,21 @@ export class JourneyGuide {
     document.removeEventListener('strings:lumina-effect', this._onLumina);
   }
 
-  _setProgress(value) {
+  _setProgress(
+    value,
+    element = this.progress,
+    fill = this.progressFill,
+    count = this.progressCount,
+  ) {
     const active = !!value && value.total > 0;
-    this.progress.classList.toggle('active', active);
+    element.classList.toggle('active', active);
     if (!active) return;
     const current = Math.max(0, Math.min(value.current, value.total));
-    this.progressCount.textContent = value.label;
-    this.progressFill.style.width = `${(current / value.total) * 100}%`;
-    this.progress.setAttribute('aria-valuemin', '0');
-    this.progress.setAttribute('aria-valuemax', String(value.total));
-    this.progress.setAttribute('aria-valuenow', String(current));
+    count.textContent = value.label;
+    fill.style.width = `${(current / value.total) * 100}%`;
+    element.setAttribute('aria-valuemin', '0');
+    element.setAttribute('aria-valuemax', String(value.total));
+    element.setAttribute('aria-valuenow', String(current));
   }
 
   _enqueue([kind, message]) {
@@ -125,4 +139,3 @@ export class JourneyGuide {
     this.draining = false;
   }
 }
-

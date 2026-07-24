@@ -306,6 +306,60 @@ export class AudioManager {
     });
   }
 
+  // Dramatic, zone-colored Guardian reveal. The cue is deliberately synthesized
+  // on the shared SFX bus so it honors the player's volume setting and inherits
+  // the same drowned-space echo as the rest of the Memory Rift.
+  playGuardianIntro(arenaId, duration = 11.5) {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.04;
+    const palettes = {
+      arena1: { root: 55, intervals: [1, 1.5, 2, 2.5], type: 'sawtooth' },
+      arena2: { root: 73.42, intervals: [1, 1.25, 1.5, 2], type: 'triangle' },
+      arena3: { root: 49, intervals: [1, 1.5, 2, 3], type: 'sine' },
+    };
+    const palette = palettes[arenaId] || palettes.arena1;
+
+    // Low ceremonial drone swells under the complete camera move.
+    const drone = ctx.createOscillator();
+    const droneFilter = ctx.createBiquadFilter();
+    const droneGain = ctx.createGain();
+    drone.type = palette.type;
+    drone.frequency.setValueAtTime(palette.root, t0);
+    const cueDuration = Math.max(4, duration);
+    const fadeAt = Math.max(1.5, cueDuration - 1);
+    drone.frequency.exponentialRampToValueAtTime(palette.root * 0.72, t0 + cueDuration * 0.76);
+    droneFilter.type = 'lowpass';
+    droneFilter.frequency.setValueAtTime(180, t0);
+    droneFilter.frequency.exponentialRampToValueAtTime(720, t0 + cueDuration * 0.34);
+    droneFilter.frequency.exponentialRampToValueAtTime(140, t0 + fadeAt);
+    droneGain.gain.setValueAtTime(0.0001, t0);
+    droneGain.gain.exponentialRampToValueAtTime(0.22, t0 + 1.2);
+    droneGain.gain.setValueAtTime(0.18, t0 + Math.max(1.3, fadeAt - 0.7));
+    droneGain.gain.exponentialRampToValueAtTime(0.0001, t0 + cueDuration);
+    drone.connect(droneFilter).connect(droneGain).connect(this.sfxBus);
+    drone.start(t0);
+    drone.stop(t0 + cueDuration + 0.05);
+
+    // Four widely spaced struck tones mark reveal, name, challenge, and release.
+    palette.intervals.forEach((interval, index) => {
+      const at = t0 + [0.06, 0.22, 0.47, 0.75][index] * cueDuration;
+      const oscillator = ctx.createOscillator();
+      const envelope = ctx.createGain();
+      oscillator.type = index === 0 ? 'sine' : 'triangle';
+      oscillator.frequency.setValueAtTime(palette.root * interval * 2, at);
+      oscillator.frequency.exponentialRampToValueAtTime(
+        palette.root * interval * 1.92, at + 1.8,
+      );
+      envelope.gain.setValueAtTime(0.0001, at);
+      envelope.gain.exponentialRampToValueAtTime(index === 0 ? 0.48 : 0.24, at + 0.035);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, at + 2.3);
+      oscillator.connect(envelope).connect(this.sfxBus);
+      oscillator.start(at);
+      oscillator.stop(at + 2.4);
+    });
+  }
+
   // ---- wave-combat one-shots ------------------------------------------------
   // All follow the playScatter/playTeleport shape (osc + gain envelope → sfxBus)
   // with a ±SFX_PITCH_VAR frequency wobble per shot so rapid repeats stay alive.
@@ -589,6 +643,114 @@ export class AudioManager {
     oscillator.connect(envelope).connect(this.sfxBus);
     oscillator.start(at);
     oscillator.stop(at + 0.38);
+  }
+
+  // Guardian shield damage: a brittle filtered crack with glassy magic shards.
+  // The final hit adds more fragments and a restrained low shatter impact.
+  playArmorBreak(final = false) {
+    if (!this.ready || this._sfxTarget() <= 0) return;
+    const ctx = this.ctx;
+    const at = ctx.currentTime + 0.01;
+    const isFinal = !!final;
+    const v = this._pitchVar();
+    const duration = isFinal ? 0.28 : 0.14;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const decay = Math.pow(1 - i / data.length, 2.4);
+      data[i] = (this._sfxRng() * 2 - 1) * decay;
+    }
+
+    const crack = ctx.createBufferSource();
+    const crackFilter = ctx.createBiquadFilter();
+    const crackEnv = ctx.createGain();
+    crack.buffer = buffer;
+    crackFilter.type = 'bandpass';
+    crackFilter.Q.value = 0.75;
+    crackFilter.frequency.setValueAtTime(2800 * v, at);
+    crackFilter.frequency.exponentialRampToValueAtTime(950 * v, at + duration);
+    crackEnv.gain.setValueAtTime(0.0001, at);
+    crackEnv.gain.exponentialRampToValueAtTime(isFinal ? 0.28 : 0.2, at + 0.004);
+    crackEnv.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+    crack.connect(crackFilter).connect(crackEnv).connect(this.sfxBus);
+    crack.start(at);
+    crack.stop(at + duration);
+
+    const shardFrequencies = isFinal
+      ? [1174.66, 1567.98, 2093.0, 2637.02, 3135.96]
+      : [1318.51, 1975.53];
+    shardFrequencies.forEach((frequency, index) => {
+      const start = at + 0.012 + index * (isFinal ? 0.025 : 0.018);
+      const tail = isFinal ? 0.48 : 0.28;
+      const shard = ctx.createOscillator();
+      const shardEnv = ctx.createGain();
+      shard.type = 'triangle';
+      shard.frequency.setValueAtTime(frequency * v, start);
+      shard.frequency.exponentialRampToValueAtTime(frequency * 0.72 * v, start + tail);
+      shardEnv.gain.setValueAtTime(0.0001, start);
+      shardEnv.gain.exponentialRampToValueAtTime(isFinal ? 0.065 : 0.055, start + 0.006);
+      shardEnv.gain.exponentialRampToValueAtTime(0.0001, start + tail);
+      shard.connect(shardEnv).connect(this.sfxBus);
+      shard.start(start);
+      shard.stop(start + tail + 0.02);
+    });
+
+    if (isFinal) {
+      const impact = ctx.createOscillator();
+      const impactEnv = ctx.createGain();
+      impact.type = 'sine';
+      impact.frequency.setValueAtTime(145 * v, at);
+      impact.frequency.exponentialRampToValueAtTime(48 * v, at + 0.34);
+      impactEnv.gain.setValueAtTime(0.0001, at);
+      impactEnv.gain.exponentialRampToValueAtTime(0.2, at + 0.01);
+      impactEnv.gain.exponentialRampToValueAtTime(0.0001, at + 0.36);
+      impact.connect(impactEnv).connect(this.sfxBus);
+      impact.start(at);
+      impact.stop(at + 0.38);
+    }
+  }
+
+  // Boss phase transition: a sustained low surge that rises into a dark dyad.
+  // Later phase numbers lift the cue slightly without materially raising volume.
+  playBossPhase(phase = 1) {
+    if (!this.ready || this._sfxTarget() <= 0) return;
+    const ctx = this.ctx;
+    const at = ctx.currentTime + 0.01;
+    const normalizedPhase = Number.isFinite(phase) ? Math.max(1, phase) : 1;
+    const lift = 1 + Math.min(normalizedPhase - 1, 4) * 0.05;
+    const duration = 0.95;
+
+    const surge = ctx.createOscillator();
+    const surgeFilter = ctx.createBiquadFilter();
+    const surgeEnv = ctx.createGain();
+    surge.type = 'sawtooth';
+    surge.frequency.setValueAtTime(46 * lift, at);
+    surge.frequency.exponentialRampToValueAtTime(155 * lift, at + 0.72);
+    surgeFilter.type = 'lowpass';
+    surgeFilter.Q.value = 1.1;
+    surgeFilter.frequency.setValueAtTime(170, at);
+    surgeFilter.frequency.exponentialRampToValueAtTime(1350 * lift, at + 0.72);
+    surgeEnv.gain.setValueAtTime(0.0001, at);
+    surgeEnv.gain.exponentialRampToValueAtTime(0.14, at + 0.32);
+    surgeEnv.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+    surge.connect(surgeFilter).connect(surgeEnv).connect(this.sfxBus);
+    surge.start(at);
+    surge.stop(at + duration + 0.02);
+
+    const stingerAt = at + 0.62;
+    [196, 293.66].forEach((frequency, index) => {
+      const tone = ctx.createOscillator();
+      const toneEnv = ctx.createGain();
+      tone.type = index === 0 ? 'sine' : 'triangle';
+      tone.frequency.setValueAtTime(frequency * lift, stingerAt);
+      tone.frequency.exponentialRampToValueAtTime(frequency * 1.12 * lift, stingerAt + 0.22);
+      toneEnv.gain.setValueAtTime(0.0001, stingerAt);
+      toneEnv.gain.exponentialRampToValueAtTime(index === 0 ? 0.13 : 0.07, stingerAt + 0.025);
+      toneEnv.gain.exponentialRampToValueAtTime(0.0001, stingerAt + 0.5);
+      tone.connect(toneEnv).connect(this.sfxBus);
+      tone.start(stingerAt);
+      tone.stop(stingerAt + 0.52);
+    });
   }
 
   // ---- final sequence ------------------------------------------------------

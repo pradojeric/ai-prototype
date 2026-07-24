@@ -51,8 +51,10 @@ export class CombatManager {
     this._waveGap = 0;             // countdown between waves
     this._fireCooldown = 0;
     this._fireRequested = false;
-    this._overchargeRate = 0;
-    this._overchargeCooldown = 0;
+    this._overchargeDamageMult = 1;
+    this._alabCharge = 0;
+    this._alabActive = false;
+    this._alabCooldown = 0;
     this._onEnemyDefeated = null;
     this._playerDied = false;      // one-shot flag Game consumes
     this._hurtTimer = 0;
@@ -91,10 +93,37 @@ export class CombatManager {
     return this.hp - before;
   }
 
-  setOvercharge(active, shotsPerSecond = 0) {
-    this._overchargeRate = active ? Math.max(0, shotsPerSecond) : 0;
-    this._overchargeCooldown = 0;
-    this.hud.setOvercharge(this._overchargeRate > 0);
+  setOvercharge(active, damageMult = 1) {
+    this._overchargeDamageMult = active ? Math.max(1, damageMult) : 1;
+    this.hud.setOvercharge(this._overchargeDamageMult > 1);
+  }
+
+  get boltDamage() { return COMBAT.BOLT.DAMAGE * this._overchargeDamageMult; }
+
+  resetAlab() {
+    this._alabCharge = 0;
+    this._alabActive = false;
+    this._alabCooldown = 0;
+    this.hud.setAlab(0, false);
+  }
+
+  activateAlab() {
+    // Activation is committed: once released, Alab burns through the stored
+    // charge and cannot be canceled or restarted until the reserve is empty.
+    if (this._alabActive || this._alabCharge <= 0) return;
+    this._alabActive = true;
+    this._alabCooldown = 0;
+    this.hud.setAlab(this._alabCharge, this._alabActive);
+  }
+
+  registerPlayerBoltHit(defeated = false) {
+    // Hits landed by the rapid-fire release do not feed Alab back into itself.
+    if (this._alabActive) return;
+    this._alabCharge = Math.min(
+      1,
+      this._alabCharge + COMBAT.ALAB.HIT_GAIN + (defeated ? COMBAT.ALAB.KILL_GAIN : 0),
+    );
+    this.hud.setAlab(this._alabCharge, this._alabActive);
   }
 
   // Begin a fight: waves spawn around `origin` (a THREE.Vector3). Options:
@@ -181,8 +210,9 @@ export class CombatManager {
   }
 
   // Reset an in-progress fight (faint, leash, or arena victory): everything
-  // poofs out, pools clear, hp refills, HUD hides.
-  abortFight() {
+  // poofs out, pools clear, hp refills, HUD hides. Arena victories can preserve
+  // already-emitted feel VFX long enough for the killing hit to render.
+  abortFight({ preserveVfx = false } = {}) {
     if (!this.active) return;
     for (const e of this.enemies) e.vanish();
     this.cancelPendingSpawns();   // telegraphed echoes never arrive
@@ -192,7 +222,10 @@ export class CombatManager {
     this._origin = null;
     this.hp = COMBAT.PLAYER_HP;
     this.setOvercharge(false);
-    this.vfx.reset();
+    this._alabActive = false;
+    this._alabCooldown = 0;
+    this.hud.setAlab(this._alabCharge, false);
+    if (!preserveVfx) this.vfx.reset();
     this._hideHud();
   }
 
@@ -348,14 +381,17 @@ export class CombatManager {
 
   _updatePlayerFire(dt) {
     this._fireCooldown = Math.max(0, this._fireCooldown - dt);
-    if (this._overchargeRate > 0) {
-      this._overchargeCooldown -= dt;
+    if (this._alabActive && this._alabCharge > 0) {
+      this._alabCharge = Math.max(0, this._alabCharge - dt / COMBAT.ALAB.FULL_DURATION);
+      this._alabCooldown -= dt;
       let shotsThisFrame = 0;
-      while (this._overchargeCooldown <= 0 && shotsThisFrame < 4) {
+      while (this._alabCooldown <= 0 && shotsThisFrame < 4) {
         this._fireBolt();
-        this._overchargeCooldown += 1 / this._overchargeRate;
+        this._alabCooldown += 1 / COMBAT.ALAB.SHOTS_PER_SECOND;
         shotsThisFrame++;
       }
+      if (this._alabCharge <= 0) this._alabActive = false;
+      this.hud.setAlab(this._alabCharge, this._alabActive);
     } else if (this._fireRequested && this._fireCooldown <= 0) {
       this._fireBolt();
       this._fireCooldown = COMBAT.BOLT.COOLDOWN;
@@ -427,7 +463,9 @@ export class CombatManager {
         this._vDir.copy(s.vel).setY(0).normalize();
         this.bolts.deactivate(s);
         this._hitMarker();
-        if (e.hit(COMBAT.BOLT.DAMAGE)) {
+        const defeated = e.hit(this.boltDamage);
+        this.registerPlayerBoltHit(defeated);
+        if (defeated) {
           this.audio.playEnemyDeath();
           this._hitstop = COMBAT.FEEL.HITSTOP;
           this.vfx.death(this._vEnemy, e.type);
@@ -512,7 +550,7 @@ export class CombatManager {
   }
 
   // ArenaController victory: end the fight cleanly (enemies poof, HUD hides).
-  stop() { this.abortFight(); }
+  stop(options = {}) { this.abortFight(options); }
 
   // Advance every enemy (scaled sim time) and reap the fully-dissolved ones.
   _reapAndUpdate(simDt, t, playerPos, dt) {

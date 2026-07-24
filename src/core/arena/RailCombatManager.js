@@ -117,7 +117,9 @@ export class RailCombatManager extends CombatManager {
   _playDamageSound() { this.audio.playHullImpact(); }
 
   _defeatThreat(threat, position, reflected = false) {
-    if (!threat.hit(reflected ? threat.hp : COMBAT.BOLT.DAMAGE, reflected)) {
+    const defeated = threat.hit(reflected ? threat.hp : this.boltDamage, reflected);
+    if (!reflected) this.registerPlayerBoltHit(defeated);
+    if (!defeated) {
       this.audio.playHit();
       this.vfx.impact(position, threat.type);
       return false;
@@ -245,8 +247,8 @@ export class RailCombatManager extends CombatManager {
     }
   }
 
-  abortFight() {
-    super.abortFight();
+  abortFight(options = {}) {
+    super.abortFight(options);
     this._riddleScale = 1;
     this._zephyrScale = 1;
   }

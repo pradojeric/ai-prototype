@@ -55,18 +55,21 @@ export class ArenaController {
     // 'waves'  — surviving the wave run, no riddle open
     // 'riddle' — a bugtong is up and its nodes are answerable
     // 'locked' — a wrong answer is being paid off; nodes inert until adds die
+    // 'boss-intro' — final shield shatter; the cleared arena holds for one beat
     // 'boss'   — armor gone, FeastkeeperBoss owns the fight
     // 'won'    — boss down, Game is collapsing the arena
     this._phase = 'waves';
     this._nodes = [];
     this._pendingChoices = null;  // choices waiting out the reveal delay
     this._nodeDelay = 0;          // countdown before the choices spawn
+    this._bossIntroTimer = 0;
     this._v = new THREE.Vector3();
   }
 
   // Begin the encounter. `combat` is a fresh CombatManager on the arena scene;
   // `guardian` is the arena's Feastkeeper (kept invincible until armor is gone).
   begin(combat, guardian) {
+    combat.resetAlab();
     this._clearRound();        // clear any leftover round (e.g. a mid-fight death)
     if (this.combat && this.combat !== combat) this.combat.setEnemyDefeatedHandler(null);
     this.combat = combat;
@@ -74,6 +77,7 @@ export class ArenaController {
     this.armor = ARENA.ROUNDS;
     this.won = false;
     this._phase = 'waves';
+    this._bossIntroTimer = 0;
     if (this.elHint) this.elHint.textContent = RIDDLE_HINT;
 
     // Draw one distinct riddle per armor layer (extra +2 as spares in case a
@@ -98,7 +102,7 @@ export class ArenaController {
   // player faints mid-boss: they already earned the armor breaks, so replaying
   // ten waves to reach the same fight would be pure repetition.
   restartAfterFaint(combat, guardian) {
-    if (this._phase !== 'boss' && this._phase !== 'won') {
+    if (this._phase !== 'boss' && this._phase !== 'boss-intro' && this._phase !== 'won') {
       this.begin(combat, guardian);
       return;
     }
@@ -166,8 +170,11 @@ export class ArenaController {
     if (!this.won) {
       if (this._phase === 'riddle') this._updateRound(dt);
       else if (this._phase === 'locked') this._updateLockout();
+      else if (this._phase === 'boss-intro') this._updateBossIntro(dt);
       else if (this._phase === 'boss') this._updateBoss(dt, playerPos);
-      else if (this.boss) this.boss.testArmoredHits();   // waves: armor just flares
+      if (this._phase !== 'boss' && this._phase !== 'won') {
+        this.boss?.testArmoredHits(dt);
+      }
     }
 
     // Hit priority is enemy -> answer node -> Lumina. Critical riddle progress
@@ -211,7 +218,7 @@ export class ArenaController {
       const pos = new THREE.Vector3(
         ARENA.CENTER.x + Math.sin(a) * ARENA.NODE_DIST,
         ARENA.NODE_HEIGHT,
-        ARENA.CENTER.z - Math.cos(a) * ARENA.NODE_DIST,   // forward = -Z
+        ARENA.CENTER.z - Math.cos(a) * ARENA.NODE_DIST + ARENA.NODE_FORWARD_OFFSET,
       );
       this._nodes.push(new AnswerNode(this.scene, choice, pos));
     });
@@ -260,11 +267,12 @@ export class ArenaController {
       this._nodeDelay = 0;
       this.elBanner.classList.remove('active');
       this.armor = Math.max(0, this.armor - 1);
+      this.boss?.breakArmor(this.armor);
       this._showBoss();
-      this.audio.playWaveClear();
       if (this.armor <= 0) {
-        this._beginBossPhase();
+        this._startBossIntro();
       } else {
+        this.audio.playWaveClear();
         this._phase = 'waves';
         this.combat?.holdWaves(false);   // the wave run resumes where it paused
       }
@@ -280,17 +288,32 @@ export class ArenaController {
     }
   }
 
-  // Armor gone: the wave run is over and the Feastkeeper itself becomes the
-  // fight. Leftover adds are poofed (not killed) so the handoff reads cleanly —
-  // from here every echo on the field is one the boss summoned.
-  _beginBossPhase() {
-    this._phase = 'boss';
+  // The last answer earns a threat-free shatter beat. This keeps the final
+  // crack, armor-break sound, and boss activation from stacking in one frame.
+  _startBossIntro() {
+    this._phase = 'boss-intro';
+    this._bossIntroTimer = 0.85;
     this.elBanner.classList.remove('active');
     if (this.combat) {
       this.combat.holdWaves(true);
       this.combat.clearEnemies();
+      this.combat.spits.clear();
       this.combat.hud.setBossWaves(true);
     }
+  }
+
+  _updateBossIntro(dt) {
+    if (!this.player.controls.isLocked) return;
+    this._bossIntroTimer = Math.max(0, this._bossIntroTimer - dt);
+    if (this._bossIntroTimer <= 0) this._beginBossPhase();
+  }
+
+  // Armor gone: the wave run is over and the Feastkeeper itself becomes the
+  // fight. From here every echo on the field is one the boss summoned.
+  _beginBossPhase() {
+    this._phase = 'boss';
+    this.elBanner.classList.remove('active');
+    this.combat?.bolts.clear();
     this.boss?.begin();
     this._showBoss();
   }
@@ -315,7 +338,7 @@ export class ArenaController {
     this.elBanner.classList.remove('active');
     for (const n of this._nodes) n.break();
     this.resetLumina();
-    if (this.combat) this.combat.stop();
+    if (this.combat) this.combat.stop({ preserveVfx: true });
     if (this.guardian) this.guardian.defeat();   // implode poof at the guardian's spot
   }
 
@@ -324,6 +347,10 @@ export class ArenaController {
   guardianCenter() {
     if (this.guardian) return this.guardian.center().clone();
     return new THREE.Vector3(ARENA.CENTER.x, 0, ARENA.CENTER.z);
+  }
+
+  collidesPlayerAt(x, z, radius) {
+    return !!this.boss?.shieldVfx?.blocksPlayerAt(x, z, radius);
   }
 
   resetLumina() { this.lumina.reset(); }

@@ -20,6 +20,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { COMBAT } from '../../config.js';
+import { GuardianShieldVfx } from './GuardianShieldVfx.js';
 
 // Contract-level defaults. A subclass spreads its own numbers over these, so it
 // only has to state what actually differs from the baseline boss.
@@ -52,6 +53,15 @@ export class ArenaBoss {
     this.defeated = false;
     this.phase = 0;          // deepened at each PHASE_THRESHOLDS crossing
     this._invuln = 0;
+    const shieldStyle = guardian?.variant === 'zone2'
+      ? 'zone2'
+      : guardian?.variant === 'zone1' ? 'zone1' : null;
+    this._vfxStyle = this.tuning.VFX_STYLE || shieldStyle;
+    this.shieldVfx = shieldStyle && guardian && combat
+      ? new GuardianShieldVfx(guardian, combat, shieldStyle)
+      : null;
+    this._armorBreakAudioDelay = -1;
+    this._armorBreakAudioFinal = false;
 
     // Scratch — a boss runs every frame alongside the whole combat sim.
     this._center = new THREE.Vector3();
@@ -62,6 +72,11 @@ export class ArenaBoss {
   begin() {
     if (this.active || this.defeated) return;
     this.active = true;
+    this.shieldVfx?.openForCombat();
+    if (this._armorBreakAudioDelay >= 0 && this._armorBreakAudioFinal) {
+      this._armorBreakAudioDelay = -1;
+      this.audio?.playArmorBreak?.(true);
+    }
     this.combat.vfx.keeperPulse(this.center(), 'telegraph');
     this.audio?.playTeleport?.();
   }
@@ -79,19 +94,56 @@ export class ArenaBoss {
   // Armored feedback: the bolt is spent, the armor flares, nothing else happens.
   // Reads as "that did not work", not as a missed shot.
   pingArmored(position) {
-    this.combat.vfx.keeperPulse(position || this.center(), 'telegraph');
+    const impact = position || this.center();
+    if (this.shieldVfx) this.shieldVfx.impact(impact);
+    else this.combat.vfx.keeperPulse(impact, 'telegraph');
     this.audio?.playHit?.();
+  }
+
+  // Riddle controllers own the armor count, while the shared boss owns its
+  // world-space presentation. Arena 2 delays this call so the reflected answer
+  // reaches the guardian before the matching crack appears.
+  breakArmor(remaining, delay = 0) {
+    this.shieldVfx?.breakLayer(remaining, delay);
+    if (delay > 0) {
+      this._armorBreakAudioDelay = delay;
+      this._armorBreakAudioFinal = remaining <= 0;
+    } else {
+      this.audio?.playArmorBreak?.(remaining <= 0);
+    }
+  }
+
+  _updateVfx(dt) {
+    this.shieldVfx?.update(dt);
+    if (this._armorBreakAudioDelay < 0) return;
+    this._armorBreakAudioDelay -= dt;
+    if (this._armorBreakAudioDelay > 0) return;
+    this._armorBreakAudioDelay = -1;
+    this.audio?.playArmorBreak?.(this._armorBreakAudioFinal);
   }
 
   // Pre-boss hit test. The guardian is unkillable until its bugtong armor is
   // gone, so bolts land as flares — the controller calls this every frame before
   // the boss phase so shooting the guardian early always answers with something.
-  testArmoredHits() {
+  testArmoredHits(dt = 0) {
     if (this.active || this.defeated) return;
-    const shot = this._findBoltOnChest();
+    if (!this.player.controls.isLocked) return;
+    this._updateVfx(dt);
+    const shot = this._findBoltOnShield();
     if (!shot) return;
     this.combat.bolts.deactivate(shot);
-    this.pingArmored(this._center);
+    this.pingArmored(shot.mesh.position);
+  }
+
+  // The visible ellipsoid is also the protected hit volume. Falling back to
+  // the chest keeps the shared contract safe if a future guardian has no shield.
+  _findBoltOnShield() {
+    if (!this.shieldVfx) return this._findBoltOnChest();
+    for (const shot of this.combat.bolts.slots) {
+      if (!shot.active) continue;
+      if (this.shieldVfx.hitTest(shot.mesh.position, COMBAT.BOLT.RADIUS)) return shot;
+    }
+    return null;
   }
 
   // First live player bolt overlapping the chest sphere, or null.
@@ -112,16 +164,21 @@ export class ArenaBoss {
     const shot = this._findBoltOnChest();
     if (!shot) return;
     this.combat.bolts.deactivate(shot);
-    if (this._invuln > 0) { this.pingArmored(this._center); return; }
-    this.damage(COMBAT.BOLT.DAMAGE);
+    if (this._invuln > 0) { this.pingArmored(shot.mesh.position); return; }
+    this.damage(this.combat.boltDamage, shot.mesh.position);
+    this.combat.registerPlayerBoltHit(false);
   }
 
-  damage(amount) {
+  damage(amount, position = null) {
     if (this.defeated || amount <= 0) return;
     this.hp = Math.max(0, this.hp - amount);
     this.audio?.playHit?.();
     this.combat.hud.hitMarker();
-    this.combat.vfx.keeperPulse(this.center(), 'hit');
+    const impact = position || this.center();
+    if (this.shieldVfx) this.shieldVfx.hit(impact);
+    else if (this._vfxStyle) this.combat.vfx.bossHit(impact, this._vfxStyle);
+    else this.combat.vfx.keeperPulse(impact, 'hit');
+    this._onDamaged(impact);
     if (this.hp <= 0) this._defeat();
     else this._checkPhase();
   }
@@ -137,8 +194,23 @@ export class ArenaBoss {
 
     this.phase = next;
     this._invuln = this.tuning.ENRAGE_INVULN;
-    this.combat.vfx.keeperPulse(this.center(), 'defeat');
-    this.audio?.playTeleport?.();
+    if (this.shieldVfx) {
+      this.shieldVfx.phaseShift(this.phase);
+      if (this.audio?.playBossPhase) this.audio.playBossPhase(this.phase);
+      else this.audio?.playTeleport?.();
+    } else if (this._vfxStyle) {
+      this.combat.vfx.bossPhase(
+        this.center(),
+        this._vfxStyle,
+        this.phase,
+        this._phaseSurfaceY(),
+      );
+      if (this.audio?.playBossPhase) this.audio.playBossPhase(this.phase);
+      else this.audio?.playTeleport?.();
+    } else {
+      this.combat.vfx.keeperPulse(this.center(), 'defeat');
+      this.audio?.playTeleport?.();
+    }
     this._onPhaseChanged(this.phase);
   }
 
@@ -160,6 +232,7 @@ export class ArenaBoss {
     // CombatManager's own pause guard so a pause menu can't get the player hit.
     if (!this.player.controls.isLocked) return;
 
+    this._updateVfx(dt);
     if (this._invuln > 0) this._invuln = Math.max(0, this._invuln - dt);
     this._act(dt, playerPos);
     this._testPlayerBolts();
@@ -179,6 +252,13 @@ export class ArenaBoss {
   /** @param {number} _phase */
   _onPhaseChanged(_phase) {}
 
+  // Optional body-side reaction after shared hit sparks have been emitted.
+  /** @param {THREE.Vector3} _position */
+  _onDamaged(_position) {}
+
+  // Optional arena surface for horizontal phase shockwaves.
+  _phaseSurfaceY() { return undefined; }
+
   // Called once when hp hits zero, after the death pulse. The controller drives
   // the actual guardian poof and arena collapse.
   _onDefeated() {}
@@ -187,6 +267,8 @@ export class ArenaBoss {
   // the method exists so controllers can dispose every boss uniformly.
   dispose() {
     this.active = false;
+    this.shieldVfx?.dispose();
+    this.shieldVfx = null;
     this.guardian = null;
     this.combat = null;
   }

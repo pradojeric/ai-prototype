@@ -81,8 +81,12 @@ export const arenaFlowMethods = {
     this._ePressed = false;
     this._proximity = null;
     this._spawnAtArenaCenter();
-    this.arena.begin(this.combat, this.guardian);
     this._startArenaPhase();
+    if (definition.controller === 'tower') {
+      this.arena.begin(this.combat, this.guardian);
+    } else {
+      this._runGuardianIntroduction(arenaId);
+    }
   },
 
   _spawnAtArenaCenter(override = null) {
@@ -102,6 +106,39 @@ export const arenaFlowMethods = {
     this._loadingZone = false;
     this.elCross.classList.add('active');
     this.elPrompt.classList.remove('active');
+    this._syncJourneyGuide();
+    this.journeyGuide.showControl('cast');
+  },
+
+  async _runGuardianIntroduction(arenaId) {
+    if (this.busy || this.guardianIntro.active) return;
+    this.busy = true;
+    this.elCross.classList.remove('active');
+    this.elPrompt.classList.remove('active');
+    this.journeyGuide.setObjective({ mode: 'hidden' }, false);
+    const target = this.arena?.guardianIntroCenter?.()
+      || this.guardian?.center().clone()
+      || new THREE.Vector3();
+    const playerPosition = this.player.controls.getObject().position.clone();
+    // Guardian body builders normally turn toward the position supplied to their
+    // update. Keep that target fixed on the player's staged position throughout
+    // the cinematic so orbiting camera shots do not make the Guardian follow the
+    // lens.
+    this._guardianIntroFacingTarget = playerPosition.clone();
+    this.arena?.prepareGuardianIntroduction?.();
+    this.audio.playGuardianIntro(arenaId, this.guardianIntro.durationFor(arenaId));
+    this.renderPass.camera = this.guardianIntro.camera;
+    await this.guardianIntro.play(arenaId, target, playerPosition);
+    this.renderPass.camera = this.camera;
+    this._guardianIntroFacingTarget = null;
+    this._levelCamera();
+    if (this.arena?.completeGuardianIntroduction) {
+      this.arena.completeGuardianIntroduction();
+    } else {
+      this.arena.begin(this.combat, this.guardian);
+    }
+    this.busy = false;
+    this.elCross.classList.add('active');
     this._syncJourneyGuide();
     this.journeyGuide.showControl('cast');
   },

@@ -24,6 +24,7 @@ import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
 import { JourneyGuide } from '../ui/JourneyGuide.js';
 import { Museum } from '../museum/Museum.js';
 import { IntroCutscene } from '../cutscene/IntroCutscene.js';
+import { GuardianIntroCutscene } from '../cutscene/GuardianIntroCutscene.js';
 import { FaintCutscene } from '../cutscene/FaintCutscene.js';
 import { FinalPortal, chooseFinalPortalPosition } from '../cutscene/FinalPortal.js';
 import { PortalPullCutscene, MuseumEndingCutscene } from '../cutscene/EndingCutscenes.js';
@@ -69,6 +70,7 @@ export class Game {
     // the intro cutscene still shows zones 2/3 barricaded.)
     this.cutscene = null;
     this.faintCutscene = new FaintCutscene();         // scripted black-out on an arena defeat
+    this.guardianIntro = new GuardianIntroCutscene();
 
     const postProcessing = createPostProcessing(this.renderer, this.world.scene, this.camera);
     this.composer = postProcessing.composer;
@@ -758,6 +760,17 @@ export class Game {
     // return to the main zone. Firing is via the mousedown → combat.requestFire.
     if (this.phase === 'arena') {
       const playerPos = this.player.controls.getObject().position;
+      if (this.guardianIntro.active) {
+        this.world.update(dt, t, this.guardianIntro.camera.position);
+        const facingTarget = this._guardianIntroFacingTarget || playerPos;
+        if (this.guardian) this.guardian.update(dt, t, facingTarget);
+        this.arena?.updateGuardianIntro?.(dt, t, facingTarget);
+        this.guardianIntro.update(dt);
+        this.audio.updateListener(this.guardianIntro.camera);
+        this._ePressed = false;
+        this.composer.render();
+        return;
+      }
       this.world.update(dt, t, playerPos);
       if (!this.busy) this.player.update(dt);
       this.viewmodel.update(dt, !this.busy && this.player.moving);
@@ -770,6 +783,11 @@ export class Game {
         this.arena.update(dt, t, playerPos);
         if (this.arena.consumeFailure?.()) {
           this._arenaFaint(); this.composer.render(); return;
+        }
+        if (this.arena.consumeGuardianIntroRequest?.()) {
+          this._runGuardianIntroduction(this.currentZone);
+          this.composer.render();
+          return;
         }
         if (this.arena.won) this._returnFromArena();
       }

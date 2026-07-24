@@ -76,6 +76,7 @@
 
 /* ---- Stamina and health ---- */
 #stamina,
+#alab,
 #health {
   position: fixed;
   left: 26px;
@@ -87,13 +88,16 @@
 }
 
 #stamina { bottom: 26px; }
-#health { bottom: 68px; }
+#alab { bottom: 68px; }
+#health { bottom: 110px; }
 #stamina.active,
+#alab.active,
 #health.active { opacity: 1; }
 
 #stamina.rail-hidden { opacity: 0 !important; }
 
 #stamina .label,
+#alab .label,
 #health .label {
   font-size: 10px;
   letter-spacing: 3px;
@@ -103,9 +107,12 @@
 }
 
 #stamina .label { color: var(--teal); }
+#alab .label { color: #ffb347; }
+#alab .label span { float: right; opacity: .65; }
 #health .label { color: #e8907a; }
 
 #stamina .track,
+#alab .track,
 #health .track {
   height: 8px;
   border-radius: 6px;
@@ -127,9 +134,11 @@
 #health .fill { position: relative; }
 
 #stamina .track { border: 1px solid rgba(111, 216, 208, .25); }
+#alab .track { border: 1px solid rgba(255, 179, 71, .3); }
 #health .track { border: 1px solid rgba(232, 144, 122, .3); }
 
 #stamina .fill,
+#alab .fill,
 #health .fill {
   height: 100%;
   width: 100%;
@@ -139,6 +148,21 @@
 #stamina .fill {
   background: var(--teal);
   box-shadow: 0 0 8px rgba(111, 216, 208, .7);
+}
+
+#alab .fill {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #e06a2d, #ffcf54);
+  box-shadow: 0 0 10px rgba(255, 179, 71, .55);
+  transition: width .12s linear;
+}
+
+#alab.firing .fill { animation: alab-pulse .35s ease-in-out infinite alternate; }
+#alab.ready .label { text-shadow: 0 0 8px rgba(255, 207, 84, .9); }
+
+@keyframes alab-pulse {
+  to { filter: brightness(1.45); box-shadow: 0 0 16px rgba(255, 207, 84, .9); }
 }
 
 #stamina.low .fill {
@@ -523,6 +547,7 @@
 
 @media (max-width: 640px) {
   #stamina,
+  #alab,
   #health {
     left: 16px;
     width: 160px;

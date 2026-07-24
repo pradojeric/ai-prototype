@@ -52,6 +52,7 @@ export class RailArenaController {
     this._encounterTime = 0;
     this._spawnTimer = 0;
     this._phaseTimer = 0;
+    this._shieldBreakQueuedThisFrame = false;
     this._center = new THREE.Vector3(RAIL_ARENA.CENTER.x, 0, RAIL_ARENA.CENTER.z);
     this._boatTarget = new THREE.Vector3(
       RAIL_ARENA.CENTER.x,
@@ -61,6 +62,7 @@ export class RailArenaController {
   }
 
   begin(combat, guardian) {
+    combat.resetAlab();
     this._clearLanterns();
     this._disposeBoss();
     if (this.combat && this.combat !== combat) this.combat.setEnemyDefeatedHandler(null);
@@ -128,6 +130,7 @@ export class RailArenaController {
     const paused = !this.player.controls.isLocked;
     this.lumina.update(dt, t, playerPos, paused);
     if (this.won || paused) return;
+    this._shieldBreakQueuedThisFrame = false;
 
     this._updateLanterns(dt, t);
     if (this._phase === 'idle') {
@@ -157,7 +160,9 @@ export class RailArenaController {
     }
 
     this._checkLanternShots();
-    if (this._phase !== 'boss' && this._phase !== 'won') this.boss?.testArmoredHits();
+    if (this._phase !== 'boss' && this._phase !== 'won') {
+      this.boss?.testArmoredHits(this._shieldBreakQueuedThisFrame ? 0 : dt);
+    }
   }
 
   _isRiddleDue() {
@@ -281,6 +286,9 @@ export class RailArenaController {
     lantern.deflect();
     for (const other of this._lanterns) if (other !== lantern) other.dismiss();
     this.wards = Math.max(0, this.wards - 1);
+    // Match the crack to the reflected lantern's 0.55-second return flight.
+    this.boss?.breakArmor(this.wards, 0.55);
+    this._shieldBreakQueuedThisFrame = true;
     this.audio.playLanternDeflect();
     this.combat.setRiddlePressure(false);
     this.elBanner.classList.remove('active');
@@ -288,7 +296,11 @@ export class RailArenaController {
 
     if (this.wards <= 0) {
       this._phase = 'boss-intro';
-      this._phaseTimer = 0.6;
+      // Clear pressure now, then let the 0.55-second return and 0.78-second
+      // shield shatter finish before the Reveler starts attacking.
+      this.combat.clearEnemies();
+      this.combat.spits.clear();
+      this._phaseTimer = 1.4;
       this._updateRiddleTimeline(true);
       return;
     }
@@ -312,6 +324,7 @@ export class RailArenaController {
     this.combat.setRiddlePressure(false);
     this.combat.clearEnemies();
     this.combat.spits.clear();
+    this.combat.bolts.clear();
     this._phase = 'boss';
     this.combat.hud.hideRiddleTimeline();
     this.boss.begin();
@@ -353,7 +366,7 @@ export class RailArenaController {
     this.elBanner.classList.remove('active');
     this.combat.hud.hideBoss();
     this.resetLumina();
-    this.combat.stop();
+    this.combat.stop({ preserveVfx: true });
     this.guardian.defeat();
   }
 

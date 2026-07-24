@@ -23,6 +23,7 @@ export class TowerArenaController {
     this.gates = null;
     this._attempt = 0;
     this._eventRemaining = 0;
+    this._guardianIntroRequested = false;
     this.lumina = new LuminaManager(scene, player, audio, {
       preserveDropHeight: true,
       walkVerticalRadius: TOWER_ARENA.VERTICAL_LUMINA_BAND,
@@ -81,6 +82,7 @@ export class TowerArenaController {
         bounds: this.world.towerSummitBounds,
         seed: keeperSeed,
         onEvent: (text, tone) => this.showEvent(text, tone),
+        onPowerUpDrop: (position) => this.lumina.drop(position),
       },
     );
   }
@@ -92,6 +94,7 @@ export class TowerArenaController {
   }
 
   begin(combat) {
+    combat.resetAlab();
     this._attempt++;
     this._bindCombat(combat);
     this.won = false;
@@ -99,6 +102,7 @@ export class TowerArenaController {
     this.phase = 'ascent';
     this.elapsed = 0;
     this._eventRemaining = 0;
+    this._guardianIntroRequested = false;
     this.waterHeight = TOWER_ARENA.BASE_WATER_HEIGHT;
     this.world.setWaterLevel(this.waterHeight);
     this._resetPlayerState();
@@ -118,7 +122,7 @@ export class TowerArenaController {
   }
 
   _beginBossPhase() {
-    if (this.phase !== 'ascent') return;
+    if (this.phase !== 'ascent' && this.phase !== 'guardian-intro') return;
     this.phase = 'boss';
     this.waterHeight = TOWER_ARENA.BOSS_WATER_HEIGHT;
     this.world.setWaterLevel(this.waterHeight);
@@ -200,9 +204,12 @@ export class TowerArenaController {
     this.world.setWaterLevel(this.waterHeight);
     this.gates.update(dt, t, playerPos);
 
-    const atSummit = this.player.eyeBase >= TOWER_ARENA.SUMMIT_HEIGHT - 0.8;
-    if (this.gates.allOpen() && atSummit) {
-      this._beginBossPhase();
+    const atSummitHeight = this.player.eyeBase >= TOWER_ARENA.SUMMIT_HEIGHT - 0.8;
+    const summitRadius = Math.max(1, (this.world.towerSummitBounds?.radius || 9) - 0.35);
+    const insideSummitPerimeter = Math.hypot(playerPos.x, playerPos.z) <= summitRadius;
+    if (this.gates.allOpen() && atSummitHeight && insideSummitPerimeter) {
+      this.phase = 'guardian-intro';
+      this._guardianIntroRequested = true;
       return;
     }
 
@@ -228,7 +235,7 @@ export class TowerArenaController {
     this.won = true;
     this.phase = 'won';
     this.showEvent('The Keeper releases the memory', 'success');
-    this.combat.stop();
+    this.combat.stop({ preserveVfx: true });
   }
 
   showEvent(text, tone = 'success') {
@@ -294,6 +301,31 @@ export class TowerArenaController {
     if (!this.failed) return false;
     this.failed = false;
     return true;
+  }
+
+  consumeGuardianIntroRequest() {
+    if (!this._guardianIntroRequested) return false;
+    this._guardianIntroRequested = false;
+    return true;
+  }
+
+  guardianIntroCenter() {
+    return this.keeper.center().clone();
+  }
+
+  prepareGuardianIntroduction() {
+    this.keeper.body.show();
+    this.combat.hud.hideBoss();
+    this.elHud?.classList.remove('active', 'warning', 'critical');
+    this.elEvent?.classList.remove('active', 'warning', 'success');
+  }
+
+  updateGuardianIntro(dt, t, facingTarget) {
+    this.keeper.body.update(dt, t, facingTarget);
+  }
+
+  completeGuardianIntroduction() {
+    this._beginBossPhase();
   }
 
   getRetryPoint() {

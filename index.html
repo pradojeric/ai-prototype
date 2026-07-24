@@ -29,6 +29,14 @@
     </div>
   </div>
 
+  <div id="alab" role="progressbar" aria-label="Alab rapid fire charge"
+       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div class="label">Alab <span>R</span></div>
+    <div class="track">
+      <div class="fill" id="alab-fill"></div>
+    </div>
+  </div>
+
   <div id="health">
     <div class="label" id="health-label">Liwanag</div>
     <div class="track">
@@ -116,6 +124,13 @@
       </div>
       <div id="journey-progress-count"></div>
     </div>
+    <div id="journey-soul-progress" role="progressbar" aria-label="Guardian Soul collection progress">
+      <div class="progress-label">Guardian Soul</div>
+      <div class="track" aria-hidden="true">
+        <div id="journey-soul-progress-fill"></div>
+      </div>
+      <div id="journey-soul-progress-count"></div>
+    </div>
   </aside>
   <div id="journey-collapsed" role="status" aria-live="polite">Challenge in progress</div>
   <div id="guidance-toast" role="status" aria-live="polite">
@@ -128,6 +143,16 @@
     <div class="fil" id="ar-fil"></div>
     <div class="eng" id="ar-eng"></div>
     <div class="hint" id="ar-hint">Shoot the correct answer to break the Feastkeeper's armor.</div>
+  </div>
+
+  <div id="guardian-intro" aria-live="polite">
+    <div class="guardian-intro-vignette"></div>
+    <div class="guardian-intro-card">
+      <div class="guardian-intro-kicker">Guardian of the Memory Rift</div>
+      <div id="guardian-intro-name"></div>
+      <div id="guardian-intro-title"></div>
+    </div>
+    <div id="guardian-intro-dialogue"></div>
   </div>
 
   <div id="title" style="display:none">
