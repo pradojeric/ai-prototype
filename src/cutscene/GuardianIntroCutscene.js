@@ -238,6 +238,13 @@ export class GuardianIntroCutscene {
     if (this._time >= this._total) this._finish();
   }
 
+  // Presenter skip: wind the timeline to its end so the next update() resolves
+  // the play() promise through the normal _finish (camera restore + arena.begin
+  // still run in _runGuardianIntroduction).
+  skip() {
+    if (this.active) this._time = Math.max(this._time, this._total);
+  }
+
   _sample(time) {
     while (
       this._shotIndex < this._shots.length - 1 &&

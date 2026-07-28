@@ -32,6 +32,20 @@ export const CONFIG = {
   DEBUG_GUARDIAN_ZONE_BUTTON: true, // true → show the title shortcut to the Guardian showroom
 };
 
+// PRESENTER SKIP — the hidden "magic key" for live demos in front of a crowd.
+// One context-aware press fast-forwards whatever long beat is on screen (a boss
+// fight, a riddle round, a cutscene, the artifact/Soul collection pass) while
+// still awarding everything the honest playthrough would have: the guardian's
+// implode, the recovered memories, the Soul, the zone-complete card, the next
+// museum portal. See src/core/_partials/PresenterSkip.js.
+// ENABLED is read at press time, so it can be flipped from the console mid-demo.
+export const PRESENTER = {
+  ENABLED: true,
+  KEY: 'KeyP',      // KeyboardEvent.code
+  SHIFT: true,      // require Shift so a stray P during play does nothing
+  COOLDOWN: 0.5,    // seconds between accepted presses (a held key can't chain)
+};
+
 // Gameplay (in-zone) bloom. The zones' own glow is all additive emissive geometry —
 // string beads, lantern cores, god-ray shafts, the parul star — and those sit well
 // above this threshold, so raising it clips the bloom off ordinary lit surfaces

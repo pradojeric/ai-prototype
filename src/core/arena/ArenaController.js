@@ -337,6 +337,32 @@ export class ArenaController {
     this.boss = null;
   }
 
+  // Presenter skip, first press: shatter the remaining armor and hand the fight
+  // straight to the Feastkeeper. The wave run and the bugtong rounds are the long
+  // part; the boss itself is the part a crowd is there to watch, so it is left
+  // fully playable. Returns false once the boss is already up, letting the caller
+  // fall through to presenterWin.
+  presenterSkipToBoss() {
+    if (this._phase === 'boss' || this._phase === 'boss-intro' || this._phase === 'won') {
+      return false;
+    }
+    this._clearRound();
+    this.armor = 0;
+    this.boss?.breakArmor(0);      // one final crack + "SHIELD SHATTERED" callout
+    this._showBoss();
+    this._startBossIntro();        // clears the field, then _beginBossPhase
+    return true;
+  }
+
+  // Presenter skip: hand a demo the same victory the fight would have produced.
+  // _win already breaks the answer nodes, clears the banner, stops combat and
+  // plays the guardian's implode, so the return sequence is indistinguishable.
+  presenterWin() {
+    if (this.won) return;
+    this.combat?.hud?.hideBoss?.();
+    this._win();
+  }
+
   _win() {
     this._phase = 'won';
     this.won = true;

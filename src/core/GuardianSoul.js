@@ -65,6 +65,15 @@ export class GuardianSoul {
     return false;
   }
 
+  // Presenter skip: the walk-over pickup without the radius test, so the Soul is
+  // banked through the same callback the honest pickup uses.
+  forceCollect() {
+    if (this.collected) return;
+    this.collected = true;
+    this.onCollect?.(this.zone);
+    this.dispose();
+  }
+
   dispose() {
     this.scene.remove(this.group);
     this.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });

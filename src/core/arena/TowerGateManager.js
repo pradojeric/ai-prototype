@@ -105,6 +105,14 @@ export class TowerGateManager {
     this.elPrompt.classList.add('active');
   }
 
+  // Presenter skip: tear down a live seal card and its HUD without opening the
+  // gate — the arena is being won outright, so the gates no longer matter.
+  presenterAbort() {
+    this.screen.dismiss();
+    this.elBanner?.classList.remove('active');
+    this.elPrompt?.classList.remove('active');
+  }
+
   _updateVeil(gate, dt, t) {
     if (gate.open) {
       gate.veilFade = Math.max(0, gate.veilFade - dt * 1.9);

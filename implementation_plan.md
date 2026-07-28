@@ -40,6 +40,8 @@ Prior task:
 - `_partials/implementation_plan_museum_assets.md` — museum hub CC0 texture/HDRI pass
 - `_partials/implementation_plan_strings_gdd.md` — rewrite `STRINGS_GDD.md`
   (awaiting user review)
+- `_partials/implementation_plan_presenter_skip.md` — hidden Shift+P presenter
+  key that fast-forwards fights, riddles, cutscenes and collection for live demos
 
 Prior plans:
 

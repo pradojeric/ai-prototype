@@ -19,6 +19,7 @@ import { GamePauseController } from './_partials/GamePause.js';
 import { arenaFlowMethods } from './_partials/ArenaFlow.js';
 import { debugZoneFlowMethods } from './_partials/DebugZoneFlow.js';
 import { gameGuidanceMethods } from './_partials/GameGuidance.js';
+import { presenterSkipMethods } from './_partials/PresenterSkip.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
 import { JourneyGuide } from '../ui/JourneyGuide.js';
@@ -883,3 +884,4 @@ export class Game {
 Object.assign(Game.prototype, arenaFlowMethods);
 Object.assign(Game.prototype, debugZoneFlowMethods);
 Object.assign(Game.prototype, gameGuidanceMethods);
+Object.assign(Game.prototype, presenterSkipMethods);

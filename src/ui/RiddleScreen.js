@@ -90,6 +90,12 @@ export class RiddleScreen {
     return new Promise((res) => { this._resolve = res; });
   }
 
+  // Presenter skip: resolve a live card as if the right choice had been picked.
+  autoSolve() {
+    if (!this.active) return;
+    this._finish(true);
+  }
+
   // Tear the card down without an answer (a mid-riddle death or arena reset).
   dismiss() {
     if (!this.active) return;

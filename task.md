@@ -691,6 +691,31 @@ Plan: [_partials/implementation_plan_reveler_patterns.md](_partials/implementati
   boss-owned spit would need changes to shared combat code. Live adds already
   supply the pressure.
 
+## Presenter skip (Shift + P) — live-demo fast-forward
+
+Plan: [_partials/implementation_plan_presenter_skip.md](_partials/implementation_plan_presenter_skip.md)
+
+- [x] `CONFIG`/`PRESENTER` block in `src/config.js` (`ENABLED`, `KEY`, `SHIFT`, `COOLDOWN`)
+- [x] `src/core/_partials/PresenterSkip.js` — keybind wiring + context-aware dispatch
+      installed onto `Game.prototype`
+- [x] Intro cutscene skip (reuses the existing `IntroCutscene.skip`)
+- [x] `GuardianIntroCutscene.skip()` — winds the timeline out so `play()` resolves
+      normally (camera restore + `arena.begin` still run)
+- [x] `presenterSkipToBoss()` on all three arena controllers — a press inside an
+      arena cuts the armor phase (waves, bugtong rounds, tower ascent) and hands
+      over to the boss, still fully playable; only once the boss is up does a
+      press end the encounter
+- [x] `presenterWin()` on `ArenaController`, `RailArenaController`,
+      `TowerArenaController` — real teardown + `arena.won`, so the loop plays the
+      usual collapse and `_returnFromArena()` scatter
+- [x] `TowerGateManager.presenterAbort()` — dismiss a live seal-console riddle card
+- [x] `GuardianSoul.forceCollect()` — bank the Soul through its normal callback
+- [x] `RiddleScreen.autoSolve()` — resolve a live card as correct
+- [x] `_presenterClearZone()` — bank every memory + the Soul, then `_zoneComplete()`
+      (works either side of the arena; unlocks the next museum portal as usual)
+- [x] Completion card: Shift+P walks on into the hub
+- [ ] **Needs in-browser verification** (no automated harness in this repo)
+
 ---
 
 Older task history: [_partials/task_archive.md](_partials/task_archive.md)

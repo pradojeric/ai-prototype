@@ -2,6 +2,7 @@
 // GAME UI — DOM references + browser input wiring
 // ============================================================
 import { CONFIG } from '../../config.js';
+import { wirePresenterSkip } from './PresenterSkip.js';
 
 // Keep DOM ownership outside the orchestration class without changing Game's
 // existing element fields. The fields remain on Game because its state-machine
@@ -62,6 +63,7 @@ export function wireGameEvents(game) {
     if (CONFIG.DEBUG_GUARDIAN_ZONE_BUTTON) game._enterGuardianDebugZone();
   });
   wireSettings(game);
+  wirePresenterSkip(game);   // hidden Shift+P demo fast-forward
   // A click during the cutscene skips to the white fade.
   addEventListener('click', () => {
     if (!game.pause.isPaused && game.phase === 'cutscene') game.cutscene.skip();

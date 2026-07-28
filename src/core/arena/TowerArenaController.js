@@ -243,6 +243,31 @@ export class TowerArenaController {
     this.combat.stop({ preserveVfx: true });
   }
 
+  // Presenter skip, first press: skip the timed ascent and its three memory seals
+  // and go straight to the Keeper, fully playable. This is the same handoff a
+  // mid-boss death uses, so the seals finish settled and the tide is already at
+  // its boss height. Game repositions the player afterwards via getRetryPoint().
+  presenterSkipToBoss() {
+    if (this.phase !== 'ascent' || !this.combat) return false;
+    this._beginBossRetry(this.combat);
+    return true;
+  }
+
+  // Presenter skip: mirror the win block in _updateBoss so a demo can leave the
+  // ascent at any point. The seal-console riddle card is torn down explicitly —
+  // unlike the other arenas the tower's riddles run inside a live simulation, so
+  // one may still be on screen when the key lands.
+  presenterWin() {
+    if (this.won) return;
+    this.gates?.presenterAbort();
+    this.won = true;
+    this.phase = 'won';
+    this.showEvent('The Keeper releases the memory', 'success');
+    this.player.clearExternalMotion();
+    this.combat?.stop({ preserveVfx: true });
+    this.combat?.hud?.hideBoss?.();
+  }
+
   showEvent(text, tone = 'success') {
     if (!this.elEvent) return;
     this.elEvent.textContent = text;

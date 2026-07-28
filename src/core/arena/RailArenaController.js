@@ -363,6 +363,34 @@ export class RailArenaController {
     });
   }
 
+  // Presenter skip, first press: drop every remaining ward and hand the fight to
+  // the Reveler. Mirrors the tail of _correctLantern's final-ward branch so the
+  // shield shatter, the cleared deck and the boss-intro beat all still play; only
+  // the Lantern Volleys are cut. See ArenaController.presenterSkipToBoss.
+  presenterSkipToBoss() {
+    if (this._phase === 'boss' || this._phase === 'boss-intro' || this._phase === 'won') {
+      return false;
+    }
+    this._clearLanterns();
+    this.wards = 0;
+    this.boss?.breakArmor(0);
+    this.combat.setRiddlePressure(false);
+    this.combat.clearEnemies();
+    this.combat.spits.clear();
+    this.elBanner.classList.remove('active');
+    this._syncBossHud();
+    this._phase = 'boss-intro';
+    this._phaseTimer = 1.4;        // let the shatter land before the Reveler acts
+    this._updateRiddleTimeline(true);
+    return true;
+  }
+
+  // Presenter skip: see ArenaController.presenterWin.
+  presenterWin() {
+    if (this.won) return;
+    this._win();
+  }
+
   _win() {
     this.won = true;
     this._phase = 'won';
