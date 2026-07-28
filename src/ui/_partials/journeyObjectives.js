@@ -70,7 +70,7 @@ export function resolveJourneyObjective(state) {
       mode: 'expanded',
       archive: state.zoneLabel,
       story: 'The Guardian has fallen. Its memories are scattered.',
-      objective: 'Recover the scattered artifacts to restore your memory',
+      objective: 'Find the artifacts',
       progress: progress(state.memoriesFound, state.memoriesTotal),
       soulProgress: progress(state.soulFound ? 1 : 0, 1),
     };
