@@ -85,6 +85,36 @@ Install the **Live Server** extension, then right-click `index.html` → **Open 
 - **Three.js 0.160.0** (loaded from unpkg via import map)
 - Vanilla JavaScript (ES modules), HTML, CSS — no build step required
 
+## GameOn Portal API
+
+The browser-managed GameOn authorization flow is configured through
+`PLATFORM_API` in `src/config.js`. Replace `YOUR_GAME_ID` with the platform-assigned
+Game ID before deployment; while the placeholder remains, the account controls are
+disabled and the game performs no platform popup or network work.
+
+The client uses the guide's exact contract:
+
+- `POST https://gameonportal.ph/api/session` with `{ "gameId": "<GAME_ID>" }`;
+- open the returned `signinUrl` for platform-managed authorization;
+- poll `GET https://gameonportal.ph/api/session` every three seconds with the
+  returned Session Token as a bearer token;
+- after a legitimate three-zone campaign begins its ending, send a bodyless
+  `POST https://gameonportal.ph/api/artifacts/unlock` with the same bearer token.
+
+Only the Session Token and a pending-reward flag use `sessionStorage`; account
+credentials stay on GameOn Portal. Platform failures do not roll back local
+campaign progress. Debug and presenter progression shortcuts cannot award the
+platform artifact.
+
+This static project does not include the guide's Next.js development proxy.
+Externally hosted releases and localhost need GameOn Portal CORS support or a
+separately configured proxy. Run the mocked contract tests with:
+
+```bash
+node --experimental-default-type=module --test \
+  tests/APIManager.test.mjs tests/PlatformProgress.test.mjs
+```
+
 ## Optional Ending Narration
 
 Place the approximately 31-second recording at `assets/audio/ending-voiceover.mp3`, then set `ENDING.VOICEOVER_URL` in `src/config.js` to that path. The ending remains fully timed and uses bilingual subtitles when no recording is configured.

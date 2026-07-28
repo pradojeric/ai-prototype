@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import {
   CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
-  ENDING, ARTIFACT_API,
+  ENDING, PLATFORM_API, CUTSCENE,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { createWorld, ZONES } from './zones/index.js';
@@ -20,6 +20,7 @@ import { arenaFlowMethods } from './_partials/ArenaFlow.js';
 import { debugZoneFlowMethods } from './_partials/DebugZoneFlow.js';
 import { gameGuidanceMethods } from './_partials/GameGuidance.js';
 import { presenterSkipMethods } from './_partials/PresenterSkip.js';
+import { queuePlatformArtifactForCampaign } from './_partials/PlatformProgress.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
 import { JourneyGuide } from '../ui/JourneyGuide.js';
@@ -53,7 +54,7 @@ export class Game {
     // browser reload restarts progress).
     this.collectedByZone = { zone1: new Set(), zone2: new Set(), zone3: new Set() };
     this.artifacts = new ArtifactManager(this.world.scene, this.world, this.collectedByZone.zone1);
-    this.api = new APIManager(ARTIFACT_API.COLLECTION_URL);
+    this.api = new APIManager(PLATFORM_API);
     this.viewmodel = new ViewModel(this.camera);   // first-person hand
     this.audio = new AudioManager();
     // Strings v2.0: the main zone hosts a Memory Rift gateway; the Guardian
@@ -89,6 +90,7 @@ export class Game {
     // Zone progression: the hub unlocks the next zone in order on completion.
     this.zoneOrder = ['zone1', 'zone2', 'zone3'];
     this.completed = new Set();   // zone ids the player has finished
+    this.platformRewardEligible = true; // invalidated by progress-fabricating shortcuts
     this.endingPlayed = false;    // session guard: global completion can only end once
     this.currentZone = 'zone1';   // the active gameplay zone (built above)
     this.holdKey = false;     // E currently held
@@ -116,8 +118,26 @@ export class Game {
     this.animate();
   }
 
+  // Leave the ordinary front menu without beginning the story cinematic. The
+  // dedicated Awaken action owns the later museum handoff and eyelid reveal.
+  _enterPreAwaken() {
+    if (this.phase !== 'title') return;
+    this.audio.init();
+    this.phase = 'preAwaken';
+    this.elMenuStart.disabled = true;
+    this.elAwaken.disabled = false;
+    this.elPreAwaken.style.setProperty('--awaken-open-time', `${CUTSCENE.WAKE}s`);
+    this.elPreAwaken.classList.remove('opening');
+    this.elTitle.classList.add('is-leaving');
+    this.elPreAwaken.classList.add('active');
+    this.elPreAwaken.setAttribute('aria-hidden', 'false');
+  }
+
   // Play the intro cutscene over the museum, then reveal the Descend screen.
   async _runIntro() {
+    if (this.phase !== 'preAwaken') return;
+    this.elAwaken.disabled = true;
+    this.elAwaken.blur();
     this.elTitle.style.display = 'none';
     this.audio.init();
     this.phase = 'cutscene';
@@ -125,7 +145,13 @@ export class Game {
     this.renderPass.scene = this.museum.scene;
     this.renderPass.camera = this.cutscene.camera;
 
-    await this.cutscene.play();
+    // Arm the intro's opaque wake overlay and camera sample synchronously before
+    // opening the higher eyelids. No frame of the Zone 1 renderer can enter the slit.
+    const introFinished = this.cutscene.play();
+    this.elPreAwaken.classList.add('opening');
+    this.elPreAwaken.setAttribute('aria-hidden', 'true');
+
+    await introFinished;
 
     // Restore gameplay rendering; reveal the Descend screen as the white fades.
     this.renderPass.scene = this.world.scene;
@@ -143,7 +169,6 @@ export class Game {
     this.pause.releasePointerLock();
     await this.discovery.show(nearest.data, this.world.zone.name, () => {
       this.artifacts.collect(nearest);
-      void this.api.recordArtifactCollection(nearest.data, this.world.zone.name);
       this.audio.removeEcho(nearest);   // silence this artifact's echo on pickup
     });
     this.busy = false;
@@ -343,6 +368,9 @@ export class Game {
   // in animate() so the normal renderer/composer owns every frame.
   async _runEnding() {
     if (this.endingPlayed || !this.museum.allSoulsPlaced) return;
+    queuePlatformArtifactForCampaign(
+      this.api, this.zoneOrder, this.completed, this.platformRewardEligible,
+    );
     this._endingFromMuseum = this.phase === 'museum';
     this.endingPlayed = true;
     this.busy = true;
@@ -504,6 +532,7 @@ export class Game {
   // enter the real hub so the 3/3 pedestal hold remains part of the test path.
   _testEnding() {
     if (this.endingPlayed) return;
+    this.platformRewardEligible = false;
     for (const data of ARTIFACT_DATA) {
       const zoneId = `zone${data.zone}`;
       (this.collectedByZone[zoneId] ||= new Set()).add(data.id);

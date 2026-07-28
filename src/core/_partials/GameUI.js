@@ -2,6 +2,7 @@
 // GAME UI — DOM references + browser input wiring
 // ============================================================
 import { CONFIG } from '../../config.js';
+import { PlatformAccountUI } from '../../ui/PlatformAccountUI.js';
 import { wirePresenterSkip } from './PresenterSkip.js';
 
 // Keep DOM ownership outside the orchestration class without changing Game's
@@ -28,6 +29,8 @@ export function bindGameUi(game) {
   game.elSkipMuseum = document.getElementById('skipmuseum');
   game.elTestEnding = document.getElementById('test-ending');
   game.elGuardianDebugZone = document.getElementById('guardian-debug-zone');
+  game.elMenuStart = document.getElementById('btn-start');
+  game.elPreAwaken = document.getElementById('pre-awaken');
   game.elAwaken = document.getElementById('btn-awaken');
   game.elSettings = document.getElementById('settings');
   game.elRingWrap = document.getElementById('holdring');
@@ -41,16 +44,35 @@ export function bindGameUi(game) {
 }
 
 export function wireGameEvents(game) {
-  // Title menu -> play the intro cutscene -> reveal the Descend screen.
-  // stopPropagation so these clicks don't reach the cutscene-skip handler below.
+  // The player-facing Start action ends on the black pre-Awaken stage; it does
+  // not begin the story cinematic until the separate Awaken action below.
+  game.elMenuStart.addEventListener('click', (e) => {
+    e.stopPropagation();
+    game._enterPreAwaken();
+  });
+  // This click begins the intro, so it must not bubble into the global
+  // cutscene-click listener below and immediately skip the same cinematic.
   game.elAwaken.addEventListener('click', (e) => {
     e.stopPropagation();
-    game._runIntro();
+    if (game.phase === 'preAwaken') game._runIntro();
+  });
+  // Move keyboard focus only once the Start-to-black fade has completed.
+  game.elPreAwaken.addEventListener('transitionend', (e) => {
+    if (e.target !== game.elPreAwaken || e.propertyName !== 'opacity') return;
+    if (game.phase === 'preAwaken' && game.elPreAwaken.classList.contains('active')) {
+      game.elAwaken.focus();
+    }
+  });
+  game.elPreAwaken.addEventListener('keydown', (e) => {
+    if (game.phase !== 'preAwaken' || e.code !== 'Tab') return;
+    e.preventDefault();
+    game.elAwaken.focus();
   });
   // Skip the intro + gameplay and drop straight into the walkable museum hub.
+  game.elSkipMuseum.style.display = CONFIG.DEBUG_SKIP_MUSEUM_BUTTON ? '' : 'none';
   game.elSkipMuseum.addEventListener('click', (e) => {
     e.stopPropagation();
-    game._skipToMuseum();
+    if (CONFIG.DEBUG_SKIP_MUSEUM_BUTTON) game._skipToMuseum();
   });
   game.elTestEnding.style.display = CONFIG.DEBUG_TEST_ENDING_BUTTON ? '' : 'none';
   game.elTestEnding.addEventListener('click', (e) => {
@@ -63,6 +85,11 @@ export function wireGameEvents(game) {
     if (CONFIG.DEBUG_GUARDIAN_ZONE_BUTTON) game._enterGuardianDebugZone();
   });
   wireSettings(game);
+  game.platformAccountUi = new PlatformAccountUI(game.api);
+  addEventListener('beforeunload', () => {
+    game.platformAccountUi.dispose();
+    game.api.dispose();
+  }, { once: true });
   wirePresenterSkip(game);   // hidden Shift+P demo fast-forward
   // A click during the cutscene skips to the white fade.
   addEventListener('click', () => {

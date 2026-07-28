@@ -4,8 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>STRINGS (Prototype)</title>
+  <title>STRINGS</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./_partials/main-menu.css" />
   <link rel="stylesheet" href="./_partials/arena-hud.css" />
   <link rel="stylesheet" href="./_partials/rail-arena-hud.css" />
   <link rel="stylesheet" href="./_partials/tower-arena-hud.css" />
@@ -156,17 +157,51 @@
   </div>
 
   <div id="title" style="display:none">
-    <h1>STRINGS</h1>
-    <div class="rule"></div>
-    <div class="sub">"You wake where the art has not yet arrived."</div>
-    <div class="menu">
-      <button class="menu-btn primary" id="btn-awaken">Awaken</button>
-      <button class="menu-btn" id="skipmuseum">Skip to Museum</button>
-      <button class="menu-btn" id="test-ending">Test Final Cutscene</button>
-      <button class="menu-btn" id="guardian-debug-zone">Guardian Debug Zone</button>
-      <button class="menu-btn" id="btn-settings">Settings</button>
+    <div class="main-menu-art" aria-hidden="true">
+      <img class="main-menu-bg" src="./assets/UI/menu/background.png" alt=""
+           draggable="false" fetchpriority="high" />
+      <img class="main-menu-city" src="./assets/UI/menu/city.png" alt=""
+           draggable="false" />
+      <div class="main-menu-glow"></div>
+      <img class="main-menu-guardians" src="./assets/UI/menu/guardians.png" alt=""
+           draggable="false" />
+      <div class="main-menu-threads"></div>
     </div>
-    <div class="ver">A drowned-city prototype — Dagupan, Pangasinan</div>
+
+    <main class="main-menu-shell">
+      <section class="main-menu-copy" aria-labelledby="main-menu-heading">
+        <p class="main-menu-kicker">A Cultural Preservation Experience</p>
+        <h1 id="main-menu-heading" class="visually-hidden">
+          Strings — Follow the Path. Restore the Forgotten
+        </h1>
+        <img class="main-menu-logo" src="./assets/UI/menu/logo.png"
+             alt="" aria-hidden="true" draggable="false" />
+        <div class="main-menu-rule" aria-hidden="true"><span></span></div>
+
+        <nav class="menu" aria-label="Main menu">
+          <button class="menu-btn primary" id="btn-start">
+            <span>Start</span><span class="menu-btn-mark" aria-hidden="true">›</span>
+          </button>
+          <button class="menu-btn" id="btn-settings">Settings</button>
+          <button class="menu-btn" data-platform-action>Connect GameOn Account</button>
+          <button class="menu-btn debug-action" id="skipmuseum">Skip to Museum</button>
+          <button class="menu-btn debug-action" id="test-ending">Test Final Cutscene</button>
+          <button class="menu-btn debug-action" id="guardian-debug-zone">Guardian Debug Zone</button>
+        </nav>
+
+        <div class="platform-status" data-platform-status role="status" aria-live="polite"></div>
+        <div class="main-menu-location">
+          <span>Dagupan</span>
+          <i aria-hidden="true"></i>
+          <span>Pangasinan</span>
+        </div>
+      </section>
+    </main>
+
+    <div class="main-menu-edition" aria-hidden="true">
+      <span>Memory Archive</span>
+      <strong>01</strong>
+    </div>
   </div>
 
   <div id="settings">
@@ -182,6 +217,11 @@
         <input type="range" id="sfx-slider" min="0" max="100" value="90" />
         <span class="s-val" id="sfx-val">90%</span>
       </div>
+      <div class="platform-account">
+        <div class="s-section-label">GameOn Portal</div>
+        <button class="menu-btn" data-platform-action>Connect GameOn Account</button>
+        <div class="platform-status" data-platform-status role="status" aria-live="polite"></div>
+      </div>
       <button class="menu-btn primary" id="settings-close">Done</button>
     </div>
   </div>
@@ -196,6 +236,19 @@
     </div>
   </div>
 
+  <div id="pre-awaken" role="dialog" aria-modal="true"
+       aria-labelledby="awaken-cue" aria-hidden="true">
+    <div class="awaken-lid awaken-lid-upper" aria-hidden="true"></div>
+    <div class="awaken-lid awaken-lid-lower" aria-hidden="true"></div>
+    <div class="awaken-prompt">
+      <div class="awaken-cue" id="awaken-cue">Open your eyes</div>
+      <button class="awaken-button" id="btn-awaken" disabled>
+        <span aria-hidden="true">〈</span>
+        <strong>Awaken</strong>
+        <span aria-hidden="true">〉</span>
+      </button>
+    </div>
+  </div>
   <div id="wake"></div>
   <div id="faint"></div>
   <div id="gspeak"></div>

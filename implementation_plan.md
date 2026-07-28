@@ -1,10 +1,32 @@
 # Implementation Plan Index
 
+Current UI phase:
+
+- `_partials/implementation_plan_awaken_transition.md` — black Awaken prompt
+  between Start and `IntroCutscene`, followed by curved eyelids opening over the
+  museum cinematic
+
+Current UI bug fix:
+
+- `_partials/implementation_plan_main_menu_flash_fix.md` — prevent the live
+  Zone 1 canvas from showing through the Start-to-black crossfade
+
+Current UI task:
+
+- `_partials/implementation_plan_main_menu.md` — layered desktop main-menu
+  redesign, optimized authored UI assets, `Start` action, debug-gated museum
+  shortcut, and temporary black pre-Awaken handoff
+
+Current content task:
+
+- `_partials/implementation_plan_hil_zone_dialogue.md` — replace all three
+  zone-entry placeholders with Hil's concise inner-voice dialogue
+
 Current task:
 
-- `_partials/implementation_plan_merge_auth.md` — normal local merge of
-  `feat/auth` into `main`, preserving current gameplay and documentation while
-  integrating the platform-session and artifact-unlock additions
+- `_partials/implementation_plan_gameon_api.md` — direct `main` implementation of
+  GameOn Portal session authorization and a legitimate full-campaign artifact
+  unlock; `feat/auth` remains untouched and unmerged
 
 Prior task:
 

@@ -76,6 +76,7 @@ export const presenterSkipMethods = {
     // busy here means the return sequence already started.
     if (this.busy || !this.arena || this.arena.won) return null;
     if (this.arena.presenterSkipToBoss?.()) {
+      this.platformRewardEligible = false;
       // Arena 3's handoff expects the player staged on the summit landing; the
       // other two fight from the arena floor and report no retry point.
       const retryPoint = this.arena.getRetryPoint?.();
@@ -84,6 +85,7 @@ export const presenterSkipMethods = {
     }
     // Each controller tears down its own remaining riddle presentation (banner,
     // answer nodes, seal-console card) inside presenterWin.
+    this.platformRewardEligible = false;
     this.arena.presenterWin();
     return 'arena-fight';
   },
@@ -94,6 +96,7 @@ export const presenterSkipMethods = {
   // meshes, strings and spatial echoes are torn down rather than orphaned.
   _presenterClearZone() {
     if (this.busy) return null;
+    this.platformRewardEligible = false;
     const zone = this.currentZone;
 
     if (!this.bossDefeated) {

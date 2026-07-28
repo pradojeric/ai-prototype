@@ -603,19 +603,32 @@ HTTP, and its first load requires network access for the Three.js CDN import.
 - Artifact and riddle content ships locally as JavaScript data.
 - Campaign collections and Souls are in-memory `Set` objects.
 - Settings persist locally in the browser.
-- There is no production save/load system, account system, database, or cloud
-  museum in this repository.
+- GameOn Portal authorization stores only its Session Token and pending reward
+  flag in `sessionStorage`; credentials remain on the platform sign-in page.
+- There is no production campaign save/load system, database, or cloud museum in
+  this repository.
 
-### Optional artifact API
+### GameOn Portal artifact unlock
 
-After local collection, `APIManager` attempts a `POST` to the configured
-collection URL with an in-memory session UUID and artifact metadata. The checked-in
-URL is the reserved `api.example.com` placeholder. Failure logs a warning and
-does not roll back local collection.
+`APIManager` owns the guide's browser-authorized session boundary. A player starts
+connection from the title or Settings UI; the game sends `{ gameId }` to
+`POST https://gameonportal.ph/api/session`, opens the returned `signinUrl`, and
+polls `GET /api/session` every three seconds with the Session Token as a bearer
+token. `pending` continues polling, `authorized` stops it, and `expired` creates a
+replacement session.
 
-The current repository does **not** implement platform authentication, session
-polling, artifact-unlock retrieval, or a permanent shareable archive. Those
-capabilities require a real external contract and are future integration work.
+The platform artifact is a full-campaign reward, not a per-memory notification.
+When all three zones are recorded complete and the player begins the real ending,
+the game queues one bodyless `POST /api/artifacts/unlock`. The request waits for
+authorization, coalesces concurrent attempts, and remains retryable after failure.
+The final-cutscene and presenter progression shortcuts explicitly invalidate
+reward eligibility. Platform failures never roll back local collection, museum
+progress, or ending playback.
+
+`PLATFORM_API.GAME_ID` remains `YOUR_GAME_ID`, which keeps all popup and network
+activity disabled until the assigned value is supplied. The static game has no
+Next.js proxy; external hosts and localhost require platform CORS support or a
+separately configured proxy.
 
 ### Performance principles
 
@@ -668,23 +681,23 @@ Release builds should deliberately review those flags.
 
 ### Known content and integration limitations
 
-- zone-entry dialogue contains explicit placeholder lines;
-- the artifact API endpoint is a nonfunctional example URL;
+- the GameOn Portal Game ID is still an inert placeholder;
 - ending narration is optional and has no configured asset;
 - campaign progress is not persisted across refreshes;
 - mobile/touch controls are not implemented;
-- no live API schema, CORS behavior, or deployment environment is verified here.
+- no live API response, CORS behavior, or deployment environment is verified here.
 - `src/audio/AudioManager.js` is currently 1006 lines and therefore exceeds the
   repository’s 1000-line source-file rule; correcting that pre-existing structural
-  issue is outside this documentation-only rewrite.
+  issue is outside this API integration.
 
 ### Verification status
 
 Static inspection confirms the architecture, data counts, state transitions,
 controls, and tuning recorded above. Focused Node tests cover riddle-label layout,
-global pause behavior, and Journey Guide state rendering. This document does not
-claim browser, WebGL, visual, audio, timing, pointer-lock, responsive, CORS, or
-live-network verification.
+global pause behavior, Journey Guide state rendering, the mocked GameOn lifecycle,
+and platform campaign eligibility. This document does not claim browser, WebGL,
+visual, audio, timing, pointer-lock, responsive, CORS, popup, or live-network
+verification.
 
 Before release, manually smoke-test:
 

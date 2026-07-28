@@ -25,11 +25,12 @@ export const CONFIG = {
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
   DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
-  DEBUG_UNLOCK_ALL_ZONES: true, // true → all 3 museum portals start unlocked (walk the hub into
+  DEBUG_UNLOCK_ALL_ZONES: false, // true → all 3 museum portals start unlocked (walk the hub into
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
-  DEBUG_TEST_ENDING_BUTTON: true, // true → show a title-menu shortcut for the full final cutscene
-  DEBUG_GUARDIAN_ZONE_BUTTON: true, // true → show the title shortcut to the Guardian showroom
+  DEBUG_SKIP_MUSEUM_BUTTON: false, // true → show the title shortcut into the walkable museum hub
+  DEBUG_TEST_ENDING_BUTTON: false, // true → show a title-menu shortcut for the full final cutscene
+  DEBUG_GUARDIAN_ZONE_BUTTON: false, // true → show the title shortcut to the Guardian showroom
 };
 
 // PRESENTER SKIP — the hidden "magic key" for live demos in front of a crowd.
@@ -65,10 +66,17 @@ export const BLOOM = {
   THRESHOLD: 0.45,         // was 0.2 — the main fix for the over-bright zones
 };
 
-// Replace this reserved example URL with the deployed City-Wide Portal endpoint.
-// Artifact collection remains local when this placeholder cannot be reached.
-export const ARTIFACT_API = {
-  COLLECTION_URL: 'https://api.example.com/artifacts/collect',
+// Browser-authorized GameOn Portal session. The real portal origin is safe to
+// check in; the assigned Game ID is not yet available, so its placeholder keeps
+// the account UI inert and prevents popup/network activity until deployment.
+export const PLATFORM_API = {
+  BASE_URL: 'https://gameonportal.ph',
+  GAME_ID: '6cccca09-093a-428e-885b-12b01110422e',
+  POLL_INTERVAL_MS: 3000,
+  STORAGE_KEYS: {
+    sessionToken: 'strings.platformSessionToken',
+    pendingUnlock: 'strings.platformPendingUnlock',
+  },
 };
 
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).

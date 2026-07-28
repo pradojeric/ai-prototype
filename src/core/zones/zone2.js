@@ -361,10 +361,11 @@ export const zone2 = {
   guardianStart: { x: 0, z: 16 },   // waits ahead of the dock on the entry avenue
   guardianRebuke: 'Not yet. The tide keeps its festival for those who have not proven themselves.',
   guardianName: { fil: 'The Reveler', eng: 'The Reveler' },
-  // Spoken (as a subtitle) one line at a time right after the player descends. PLACEHOLDER.
+  // Hil's inner voice, spoken one line at a time right after the player descends.
   introDialogue: [
-    '[Zone 2 — LIKET] The current here still hums with old music.',
-    '[Zone 2 placeholder] Somewhere below, the festival never stopped playing.',
+    'The current carries a rhythm I almost remember.',
+    'LIKET was joy shared aloud—not a celebration meant for silence.',
+    'I will bring those scattered voices home.',
   ],
   background: 0x10222b,
   fog: { color: 0x1c3a3e, density: CONFIG.FOG_DENSITY },

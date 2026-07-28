@@ -1,19 +1,130 @@
-# Task — Merge `feat/auth` into local `main`
+# Task — Awaken Stage and Eyes-Opening Transition (2026-07-28)
 
-Plan: [_partials/implementation_plan_merge_auth.md](_partials/implementation_plan_merge_auth.md)
+Plan: [_partials/implementation_plan_awaken_transition.md](_partials/implementation_plan_awaken_transition.md)
+
+## Confirmed direction
+
+- [x] Start initializes the music and reaches a fully black stage
+- [x] Show a dedicated Awaken button before `IntroCutscene` begins
+- [x] Open curved upper and lower eyelids over the museum intro
+- [x] Keep the phase desktop-only
+- [x] Use fully opaque pure-black eyelids with no teal edge or seam glow
+- [x] Keep the Awaken prompt's existing teal treatment
+- [x] Blink twice before the final full opening
+- [x] User review and approve the implementation plan
+- [x] Build the accessible Awaken stage and button states
+- [x] Coordinate the eyelid reveal with the intro camera and existing wake fade
+- [x] Verify event propagation, phase guards, syntax, DOM contracts, and file limits
+- [x] Apply the approved dark-lid treatment and two-blink waking motion
+- [ ] User manually verify music, Awaken timing, eyes opening, and intro continuity
+
+## Verification record
+
+- 18/18 Node regression tests passed
+- Touched JavaScript modules pass `node --check`
+- DOM ids, CSS brace balance, event propagation guard, phase guard, and file limits pass
+- The hidden Awaken control is disabled at boot and focus stays inside its modal phase
+- Eyelids are pure `#000`, the teal seam/edge rules are absent, and two full
+  open-close beats precede the final open keyframe
+- Browser animation, audio timing, and the absence of visual flashes remain the user gate
+
+---
+
+# Task — Main Menu Zone-Flash Fix (2026-07-28)
+
+Plan: [_partials/implementation_plan_main_menu_flash_fix.md](_partials/implementation_plan_main_menu_flash_fix.md)
+
+## Checklist
+
+- [x] Trace the Start transition and identify the compositing gap
+- [x] Confirm the live Zone 1 canvas is beneath two simultaneously translucent layers
+- [x] Keep the title opaque while the black pre-Awaken overlay fades over it
+- [x] Verify syntax, CSS balance, file limits, whitespace, and transition ownership
+- [ ] User manually verify Start reaches black without a Zone 1 glimpse
+
+---
+
+# Task — Main Menu Visual Redesign (2026-07-28)
+
+Plan: [_partials/implementation_plan_main_menu.md](_partials/implementation_plan_main_menu.md)
+
+## Approved direction
+
+- [x] Use a layered composition from the authored `assets/UI/` artwork
+- [x] Replace the plain heading with an optimized derivative of `LOGO.png`
+- [x] Rename the primary action from `Awaken` to `Start`
+- [x] Keep Settings and GameOn account access on the player-facing menu
+- [x] Gate Skip to Museum behind a disabled-by-default debug config flag
+- [x] Use “Follow the Path. Restore the Forgotten” as the menu tagline
+- [x] On Start, initialize music and transition to a temporary black pre-Awaken state
+- [x] Defer the Awaken button and eyelid-opening animation to the next phase
+- [x] Target desktop only
+- [x] User review and approve the implementation plan
+- [x] Prepare optimized, non-destructive menu derivatives of the authored artwork
+- [x] Implement the layered desktop menu and black pre-Awaken transition
+- [x] Verify syntax, DOM/config contracts, file limits, whitespace, and desktop layout constraints
+- [ ] User manually verify menu composition, controls, music start, and transition
+
+## Verification record
+
+- 18/18 Node regression tests passed
+- Touched JavaScript modules pass `node --check`
+- DOM ids, menu asset paths, CSS brace balance, and stale Awaken bindings pass
+- All touched files remain below 1000 lines; `git diff --check` passes
+- Authored source artwork remains unchanged; menu derivatives total about 2.4 MB
+- Browser screenshots remain pending because local serving and headless Chrome
+  required permissions that were not granted
+
+---
+
+# Task — Hil Zone-Entry Dialogue (2026-07-28)
+
+Plan: [_partials/implementation_plan_hil_zone_dialogue.md](_partials/implementation_plan_hil_zone_dialogue.md)
+
+## Checklist
+
+- [x] Trace the zone-entry subtitle lifecycle and its fixed timing
+- [x] Read the current campaign, Hil/player, zone, Guardian, and ending context
+- [x] Draft a three-zone emotional arc without pre-arena spoilers
+- [x] Replace the PONSIA, LIKET, and PANANISIA dialogue
+- [x] Remove the resolved placeholder limitation from `STRINGS_GDD.md`
+- [x] Verify syntax, placeholder removal, file limits, and whitespace
+- [ ] Manually verify subtitle timing, overlap, and tone in all three zones
+
+---
+
+# Prior Task — GameOn Portal API Integration (2026-07-28)
+
+Plan: [_partials/implementation_plan_gameon_api.md](_partials/implementation_plan_gameon_api.md)
 
 ## Approved decisions
 
-- [x] Preserve current `main` behavior and documentation during conflict resolution
-- [x] Use a normal merge commit
-- [x] Keep the completed merge local; do not push
-- [x] Confirm the user's prior Arena 3 work is committed and the worktree is clean
-- [x] User review and approve the recorded merge plan
-- [ ] Merge `feat/auth` into `main`
-- [ ] Resolve conflicts by retaining current `main` plus compatible auth additions
-- [ ] Verify JavaScript syntax, mocked API tests, imports, DOM IDs, file limits,
-      whitespace, merge-parent history, clean worktree, and local-only branch state
-- [ ] Report remaining browser/live-platform verification
+- [x] Implement directly on `main`; do not merge, cherry-pick, rebase, or copy
+      commits from `feat/auth`
+- [x] Keep `feat/auth` untouched
+- [x] Use `https://gameonportal.ph` with inert `YOUR_GAME_ID` configuration
+- [x] Unlock only when a legitimate three-zone campaign begins the ending
+- [x] Exclude the final-cutscene and presenter progression shortcuts
+- [x] Preserve local collection/progression when the platform is unavailable
+- [x] User review and approve the implementation plan
+- [x] Implement the session lifecycle, account UI, and campaign reward gate
+- [x] Add mocked API and campaign-eligibility tests
+- [x] Reconcile README and GDD platform documentation
+- [x] Verify syntax, tests, imports, DOM IDs, file limits, whitespace, and branch state
+- [x] Report remaining Game ID, browser, CORS, popup, and live-platform verification
+
+## Verification record
+
+- 21/21 Node tests passed, including the mocked GameOn lifecycle and campaign gate
+- Every `src/**/*.js` module passed `node --check`
+- All 100 relative module imports and 121 `getElementById` references resolve
+- All changed source/UI files remain below 1000 lines; the pre-existing
+  `src/audio/AudioManager.js` remains at 1006 lines
+- `git diff --check` and the stale endpoint/reference audit passed
+- `main` remains checked out at its original tip; `feat/auth` remains unchanged at
+  `d54ef95c2fd637fea0136a203c2902b203b52b2f` and unmerged
+- Live GameOn, browser popup, CORS, and both-host deployment checks remain pending
+  until `YOUR_GAME_ID` is replaced with the assigned value
 
 ---
 
