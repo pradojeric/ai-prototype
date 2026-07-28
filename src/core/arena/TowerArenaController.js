@@ -146,7 +146,10 @@ export class TowerArenaController {
       hp: this.keeper.hp,
       maxHp: this.keeper.maxHp,
     });
-    if (this.keeper.begin()) this.showEvent('The Keeper of Memories awakens', 'warning');
+    if (this.keeper.begin()) {
+      this.showEvent('The Keeper of Memories awakens', 'warning');
+      this.combat.hud.popupCallout(this.keeper.center(), 'SPACE TO LEAP');
+    }
   }
 
   _beginBossRetry(combat) {
@@ -177,6 +180,7 @@ export class TowerArenaController {
     this.elEvent?.classList.remove('active', 'warning', 'success');
     this.keeper.begin();
     this.showEvent('The Keeper reforms at the summit', 'warning');
+    this.combat.hud.popupCallout(this.keeper.center(), 'SPACE TO LEAP');
     this._renderSeals();
   }
 

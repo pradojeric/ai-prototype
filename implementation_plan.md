@@ -2,6 +2,12 @@
 
 Current task:
 
+- `_partials/implementation_plan_arena3_jump.md` — enable Arena 1's existing
+  Space-key combat jump for Arena 3, including fight lifecycle cleanup and the
+  Keeper-start control callout
+
+Prior task:
+
 - `_partials/implementation_plan_reveler_patterns.md` — Arena 2 boss: three attack
   patterns (Overload Channel, Scatter Hex, Shell Rotation) behind the same
   non-overlapping scheduler shape as the Feastkeeper (implemented; as-built tuning

@@ -56,6 +56,7 @@ export class TowerCombatManager extends CombatManager {
     this.active = true;
     this.hp = COMBAT.PLAYER_HP;
     this._playerDied = false;
+    this.player.setJumpEnabled(true);
     this._resetCombatFeel();
     this._mode = mode;
     this._attempt = attempt;
@@ -379,6 +380,7 @@ export class TowerCombatManager extends CombatManager {
     this.active = false;
     this.hp = COMBAT.PLAYER_HP;
     this._playerDied = false;
+    this.player.setJumpEnabled(false);
     this._resetCombatFeel();
     if (!preserveVfx) this.vfx.reset();
     this._hideHud();

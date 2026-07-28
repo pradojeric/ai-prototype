@@ -1,3 +1,22 @@
+# Task — Arena 3 Combat Jump (2026-07-28)
+
+## Objective
+
+Make Arena 3's controls consistent with Arena 1 by enabling the existing
+Space-key combat jump throughout the tower encounter.
+
+Plan: `_partials/implementation_plan_arena3_jump.md`
+
+## Checklist
+
+- [x] `TowerCombatManager` — arm jump on fight start; disarm/land on abort
+- [x] `TowerArenaController` — show `SPACE TO LEAP` at Keeper start and retry
+- [x] `CombatManager` — correct the ownership comment now that Arena 3 opts in
+- [x] Verify: syntax, relative imports, and 1000-line cap
+- [ ] Manually verify in browser: ascent jump, Keeper jump, stop/retry cleanup
+
+---
+
 # Task — Feastkeeper Attack Patterns + Combat Jump (2026-07-28)
 
 ## Objective

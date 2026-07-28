@@ -164,9 +164,9 @@ export class CombatManager {
     if (this._wavesHeld) this.hud.setWave(0, this._waveTotal());
     else this._spawnWave();
     // The hop is a combat verb, not a traversal one, so it only exists inside a
-    // fight. Zone 2's and Zone 3's managers override startFight without calling
-    // super, which scopes this to the Memory Arena — correct, since the rail boat
-    // is movement-locked and the tower's ascent reads altitude off `eyeBase`.
+    // fight. Zone 2's rail manager leaves it disabled because the boat locks
+    // movement; Zone 3's tower manager explicitly opts in through the same
+    // player-owned lifecycle.
     this.player.setJumpEnabled(true);
     this.hud.show();
     this._updateHealthUi();
