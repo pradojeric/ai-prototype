@@ -2,6 +2,12 @@
 
 Current task:
 
+- `_partials/implementation_plan_merge_auth.md` — normal local merge of
+  `feat/auth` into `main`, preserving current gameplay and documentation while
+  integrating the platform-session and artifact-unlock additions
+
+Prior task:
+
 - `_partials/implementation_plan_arena3_jump.md` — enable Arena 1's existing
   Space-key combat jump for Arena 3, including fight lifecycle cleanup and the
   Keeper-start control callout

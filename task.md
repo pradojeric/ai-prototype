@@ -1,3 +1,22 @@
+# Task — Merge `feat/auth` into local `main`
+
+Plan: [_partials/implementation_plan_merge_auth.md](_partials/implementation_plan_merge_auth.md)
+
+## Approved decisions
+
+- [x] Preserve current `main` behavior and documentation during conflict resolution
+- [x] Use a normal merge commit
+- [x] Keep the completed merge local; do not push
+- [x] Confirm the user's prior Arena 3 work is committed and the worktree is clean
+- [x] User review and approve the recorded merge plan
+- [ ] Merge `feat/auth` into `main`
+- [ ] Resolve conflicts by retaining current `main` plus compatible auth additions
+- [ ] Verify JavaScript syntax, mocked API tests, imports, DOM IDs, file limits,
+      whitespace, merge-parent history, clean worktree, and local-only branch state
+- [ ] Report remaining browser/live-platform verification
+
+---
+
 # Task — Arena 3 Combat Jump (2026-07-28)
 
 ## Objective
