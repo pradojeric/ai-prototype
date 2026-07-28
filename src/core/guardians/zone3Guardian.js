@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
 import { fadeMat, pulseEmissive, buildPot, spiralCore, angDelta } from './primitives.js';
+import { skin } from './_partials/GuardianTextureKit.js';
 
 // A stacked "building" segment: a stone box with a glowing seam and an optional
 // cone roof/spire — the raw unit of the keeper's architecture-as-limb body.
@@ -49,10 +50,25 @@ export function buildZone3Guardian(figure) {
     color: 0xffcf87, transparent: true, opacity: 0.5,
   });
   const matArc = fadeMat(0xffcf87, 0xffcf87, 1.4, 0.35, 0.4, 0.1);          // orbit thread arcs
+  // The torso pottery previously shared the dark stone material; split out so it can
+  // read as fired clay rather than as more masonry. Fades with the stone (0.92).
+  const matPot = fadeMat(0x8a6047, 0x4a3c20, 0.2, 0.92, 0.85, 0.05);        // fired clay
   const fadeMats = [
     [matStone, 0.92], [matStoneDark, 0.92], [matGlow, 0.96], [matCape, 0.3],
     [matCrystal, 0.75], [matSpectral, 0.4], [matThread, 0.5], [matArc, 0.35],
+    [matPot, 0.92],
   ];
+
+  // --- CC0 surface detail (see `_partials/GuardianTextureKit.js`) -----------
+  // This guardian is architecture, so it takes the same rock the zones' ruins use —
+  // the visual rhyme is the point. The dark stone takes moss relief WITHOUT its
+  // albedo: Moss002's green would read as overgrowth, but the Keeper is weathered
+  // masonry that has been under water, not a garden. Crystal crest, gold seams, cape,
+  // thread arcs and spectral figures stay flat by design.
+  skin(matStone, 'rock', { repeat: 2 });
+  skin(matStoneDark, 'moss', { repeat: 2, albedo: false });
+  skin(matPot, 'clay', { repeat: 1 });
+
   const sphereGeo = new THREE.SphereGeometry(0.16, 10, 8);   // pottery morsels
 
   const spectrals = [];
@@ -126,7 +142,7 @@ export function buildZone3Guardian(figure) {
     figure.add(book);
   }
   for (const side of [-1, 1]) {
-    const pot = buildPot(matStoneDark, matGlow, sphereGeo);
+    const pot = buildPot(matPot, matGlow, sphereGeo);
     pot.scale.setScalar(0.7);
     pot.position.set(side * 1.05, 3.15, 0.55);
     figure.add(pot);

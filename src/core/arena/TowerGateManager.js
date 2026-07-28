@@ -1,10 +1,26 @@
+// ============================================================
+// TOWER GATE MANAGER — Arena 3's three memory seals. Each gate pairs a veil
+// (the barrier) with a console (the interactable). The player walks to a console,
+// taps E, and answers that gate's bugtong on the shared #riddle card using the
+// number keys.
+//
+// The pointer stays locked for the whole exchange on purpose: the tower's tide
+// never stops rising, so the player must keep the ability to move and shoot while
+// reading. That is also why a wrong answer surges the tide rather than burdening
+// movement — clearance is the only currency this arena trades in.
+// ============================================================
 import * as THREE from 'three';
-import { COMBAT, TOWER_ARENA, mulberry32 } from '../../config.js';
-import { drawRiddles } from '../../data.js';
-import { AnswerNode } from './AnswerNode.js';
+import { TOWER_ARENA } from '../../config.js';
+import { riddlesForZone } from '../../data.js';
+import { RiddleScreen } from '../../ui/RiddleScreen.js';
+import { TowerGateConsole } from './_partials/TowerGateConsole.js';
 
 const VEIL_WIDTH = 2.75;
 const VEIL_HEIGHT = 2.4;
+const SEAL_NAME = {
+  fil: 'Tagapag-ingat ng mga Alaala',
+  eng: 'The Keeper of Memories',
+};
 
 export class TowerGateManager {
   constructor(scene, world, combat, player, hooks = {}) {
@@ -13,8 +29,12 @@ export class TowerGateManager {
     this.combat = combat;
     this.player = player;
     this.hooks = hooks;
-    this.riddles = drawRiddles(3, mulberry32(world.zone.seed));
-    this.slowRemaining = 0;
+    // Draw from this arena's own riddle block (disjoint from other zones, so no
+    // bugtong repeats across zones); each rebuild/retry rotates to a fresh set.
+    // (arena3.seed stays random for keeper/combat timing.)
+    this.riddles = riddlesForZone(world.zone.id, 3);
+    this.screen = new RiddleScreen();
+    this.elPrompt = document.getElementById('prompt');
     this.elBanner = document.getElementById('arena-riddle');
     this.elHint = document.getElementById('ar-hint');
     this.elFil = document.getElementById('ar-fil');
@@ -41,39 +61,48 @@ export class TowerGateManager {
         index,
         open: false,
         active: false,
-        nodes: [],
         veil,
         veilMaterial,
         veilFade: 1,
+        console: new TowerGateConsole(scene, world, frame),
         center: new THREE.Vector3(frame.x, frame.height + 1.2, frame.z),
       };
     });
   }
 
-  update(dt, t, playerPos) {
-    this._updateSlow(dt);
+  get riddleOpen() { return this.screen.active; }
+
+  update(dt, t, playerPos, ePressed = false) {
+    let promptGate = null;
     for (const gate of this.gates) {
       this._updateVeil(gate, dt, t);
-      for (let i = gate.nodes.length - 1; i >= 0; i--) {
-        const node = gate.nodes[i];
-        node.update(dt, t);
-        if (!node.dead) continue;
-        node.dispose();
-        gate.nodes.splice(i, 1);
-      }
-      if (gate.open) continue;
-      const nearHeight = Math.abs(playerPos.y - gate.height) < 1.4;
-      const nearGate = Math.hypot(playerPos.x - gate.x, playerPos.z - gate.z) < 5;
-      if (!gate.active && nearHeight && nearGate) this._start(gate);
-      if (gate.active) this._test(gate);
+      gate.console.update(dt, t);
+      if (gate.open || this.screen.active) continue;
+      // Height band first: a console on the flight above should not be offered to
+      // a player still climbing toward it.
+      if (Math.abs(playerPos.y - gate.height) > 1.6) continue;
+      if (gate.console.distanceTo(playerPos) > TOWER_ARENA.CONSOLE_RANGE) continue;
+      promptGate = gate;
     }
+
+    if (promptGate && ePressed) {
+      this._beginRiddle(promptGate);
+      return;
+    }
+    this._setPrompt(promptGate ? 'Press <b>E</b> to read the seal\'s bugtong' : null);
   }
 
-  _updateSlow(dt) {
-    if (this.slowRemaining <= 0) return;
-    this.slowRemaining = Math.max(0, this.slowRemaining - dt);
-    if (this.slowRemaining <= 0) this.player.setMovementSlow(1);
-    this.hooks.onSlow?.(this.slowRemaining);
+  _setPrompt(html) {
+    if (!this.elPrompt) return;
+    if (!html) {
+      this.elPrompt.classList.remove('active');
+      return;
+    }
+    if (this._promptHtml !== html) {
+      this._promptHtml = html;
+      this.elPrompt.innerHTML = html;
+    }
+    this.elPrompt.classList.add('active');
   }
 
   _updateVeil(gate, dt, t) {
@@ -87,55 +116,49 @@ export class TowerGateManager {
     gate.veilMaterial.opacity = pulse * gate.veilFade;
   }
 
-  _start(gate) {
+  async _beginRiddle(gate) {
     gate.active = true;
+    gate.console.setState('busy');
+    this._setPrompt(null);
     const riddle = this.riddles[gate.index];
+
+    // The banner echoes which seal is being worked so the HUD still reads while
+    // the card is up.
     this.elBanner?.classList.add('active');
     if (this.elStep) this.elStep.textContent = `Seal ${gate.index + 1} / 3`;
     if (this.elFil) this.elFil.textContent = riddle.prompt;
     if (this.elEng) this.elEng.textContent = riddle.promptEng || '';
-    if (this.elHint) this.elHint.textContent = 'Shoot the correct seal mechanism.';
-    riddle.choices.forEach((choice, index) => {
-      const position = new THREE.Vector3(
-        gate.x + (index - 1) * TOWER_ARENA.GATE_CHOICE_GAP,
-        gate.height + 1.4,
-        gate.z - 1.5,
-      );
-      gate.nodes.push(new AnswerNode(this.scene, choice, position));
+    if (this.elHint) this.elHint.textContent = 'Answer with 1, 2, or 3.';
+
+    const correct = await this.screen.show(riddle, gate.index + 1, 3, SEAL_NAME, {
+      keys: true,
+      retryOnWrong: true,
+      onWrong: () => this._wrongAnswer(gate),
     });
-  }
 
-  _test(gate) {
-    for (const shot of this.combat.bolts.slots) {
-      if (!shot.active) continue;
-      for (const node of gate.nodes) {
-        if (!node.hitTest(shot.mesh.position, COMBAT.BOLT.RADIUS)) continue;
-        this.combat.bolts.deactivate(shot);
-        if (node.correct) {
-          this._open(gate);
-        } else {
-          this._wrongAnswer(gate, node);
-        }
-        return;
-      }
+    // dispose() can land between the await and here (a death mid-riddle tears the
+    // card down, then frees the consoles), so bail before touching gate state.
+    if (this._disposed) return;
+    this.elBanner?.classList.remove('active');
+    if (correct) {
+      this._open(gate);
+      return;
     }
+    // Only reachable via dismiss() (a death or reset tore the card down).
+    gate.active = false;
+    if (!gate.open) gate.console.setState('ready');
   }
 
-  _wrongAnswer(gate, node) {
-    node.break();
-    this.player.setMovementSlow(TOWER_ARENA.WRONG_SLOW);
-    this.slowRemaining = TOWER_ARENA.WRONG_SLOW_TIME;
-    this.hooks.onSlow?.(this.slowRemaining);
-    this.hooks.onEvent?.('Incorrect seal · movement burdened', 'warning');
+  _wrongAnswer(gate) {
+    this.hooks.onTideSurge?.();
+    this.hooks.onEvent?.('Incorrect seal · the tide surges', 'warning');
     this.combat.vfx.gatePulse(gate.center, false);
-    this.combat.spawnPenaltyGargoyle(gate.height);
   }
 
   _open(gate) {
     gate.open = true;
     gate.active = false;
-    gate.nodes.forEach((node) => node.break());
-    this.elBanner?.classList.remove('active');
+    gate.console.setState('solved');
     this.combat.vfx.gatePulse(gate.center, true);
     const opened = this.gates.filter((candidate) => candidate.open).length;
     this.hooks.onSeal?.(opened, this.gates.length);
@@ -151,42 +174,40 @@ export class TowerGateManager {
   allOpen() { return this.gates.every((gate) => gate.open); }
 
   openAll() {
+    this.screen.dismiss();
     for (const gate of this.gates) {
       gate.open = true;
       gate.active = false;
       gate.veilFade = 0;
       gate.veil.visible = false;
-      gate.nodes.forEach((node) => node.dispose());
-      gate.nodes.length = 0;
+      gate.console.setState('solved');
     }
-    this.slowRemaining = 0;
-    this.player.setMovementSlow(1);
+    this._setPrompt(null);
     this.elBanner?.classList.remove('active');
-    this.hooks.onSlow?.(0);
     this.hooks.onSeal?.(this.gates.length, this.gates.length);
   }
 
   reset() {
+    this.screen.dismiss();
     for (const gate of this.gates) {
       gate.open = false;
       gate.active = false;
       gate.veilFade = 1;
       gate.veil.visible = true;
-      gate.nodes.forEach((node) => node.dispose());
-      gate.nodes.length = 0;
+      gate.console.setState('ready');
     }
-    this.slowRemaining = 0;
-    this.player.setMovementSlow(1);
+    this._setPrompt(null);
     this.elBanner?.classList.remove('active');
-    this.hooks.onSlow?.(0);
     this.hooks.onSeal?.(0, this.gates.length);
   }
 
   dispose() {
     this.reset();
+    this._disposed = true;
     for (const gate of this.gates) {
       this.scene.remove(gate.veil);
       gate.veilMaterial.dispose();
+      gate.console.dispose();
     }
     this._veilGeometry.dispose();
   }

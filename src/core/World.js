@@ -11,14 +11,23 @@
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG, mulberry32 } from '../config.js';
+import {
+  applyTextureSet, tileBoxUVs, tilePlaneUVs, tileCylinderUVs, tileUniformUVs,
+} from './_partials/TextureKit.js';
+import {
+  sagLine, lantern, lanternString, lanternCluster, bunting, parulMast,
+} from './_partials/FestivalDressing.js';
+import { buildZoneLighting } from './_partials/ZoneLighting.js';
 
 const W = CONFIG.WATER_LEVEL;
 const SUPPORT_SNAP = 1.25;
 
 export class World {
   // `zone` is a zone definition: { id, name, seed, background, fog:{color,density},
-  // palette, build(world) }. The build hook constructs the districts in a fixed
-  // order (it drives the seeded RNG, so order is layout-significant).
+  // palette, waterColor?, build(world) }. The build hook constructs the districts in
+  // a fixed order (it drives the seeded RNG, so order is layout-significant).
+  // `waterColor` is optional — see _water() for how the surface derives the rest of
+  // its look from the zone's fog.
   constructor(zone) {
     this.zone = zone;
     this.scene = new THREE.Scene();
@@ -137,15 +146,38 @@ export class World {
     for (const [key, color] of Object.entries(palette)) {
       if (this.mat[key]) this.mat[key].color.set(color);
     }
+
+    // Bind the committed CC0 PBR sets on top of the (now tinted) materials. Runs
+    // AFTER the palette merge because applyTextureSet deliberately preserves
+    // `.color` — the zone tint stays the mood driver and the albedo map only adds
+    // surface detail. `tile` is world-units-per-repeat; the primitives bake it
+    // into their UVs via the tile*UVs helpers.
+    const textured = [
+      ['building',    'plaster', 4],
+      ['buildingAlt', 'plaster', 4],
+      ['concrete',    'paving',  4],
+      ['wood',        'wood',    2],
+      ['plank',       'wood',    2],
+      ['rubble',      'rock',    3],
+      ['seabed',      'silt',    8],
+      ['rust',        'rust',    2.5],
+      ['metal',       'rust',    2.5],
+      ['foliage',     'moss',    2],
+      ['bark',        'wood',    1.5],
+    ];
+    for (const [key, set, tile] of textured) applyTextureSet(this.mat[key], set, tile);
   }
 
+  // Moonlight key + fill + hemisphere + ambient, plus the gradient environment
+  // the PBR normal/roughness maps need in order to read at all. The rig itself
+  // lives in _partials/ZoneLighting.js; a zone may reshape it via its `light`
+  // block. Runs after _materials() because it writes envMapIntensity onto them.
   _lights() {
-    // Warm amber key from above, cool teal ambient (golden hour through water)
-    const amber = new THREE.DirectionalLight(0xffd9a0, 1.15);
-    amber.position.set(8, 22, -6);
-    this.scene.add(amber);
-    this.scene.add(new THREE.HemisphereLight(0x9fe6df, 0x07201f, 0.72));
-    this.scene.add(new THREE.AmbientLight(0x2a5a58, 0.46));
+    const cfg = buildZoneLighting(this, this.zone.light);
+    // Kept for _water(): the surface sheen has to come from the same direction
+    // and be the same colour as the key, or it reads as a second light source.
+    this.moonDir = new THREE.Vector3(...cfg.moonDir).normalize();
+    this.moonColor = new THREE.Color(cfg.moonColor);
   }
 
   _floor() {
@@ -158,6 +190,7 @@ export class World {
       p.setZ(i, h);
     }
     geo.computeVertexNormals();
+    tilePlaneUVs(geo, 220, 220, this.mat.seabed);   // silt repeats across the seabed
     const floor = new THREE.Mesh(geo, this.mat.seabed);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.3;
@@ -165,28 +198,111 @@ export class World {
   }
 
   _water() {
-    // Lightweight translucent surface with sine vertex ripple.
+    // Lightweight translucent surface. The fine ripple detail is computed
+    // ANALYTICALLY rather than from a normal map: two scrolling sine fields give a
+    // per-pixel surface normal that drives a fresnel rim and a soft sun sheen. That
+    // is deliberately cheaper than sampling a water normal texture (no extra GPU
+    // upload, no extra texture fetch per pixel) — this surface covers most of the
+    // screen in every zone, so it is the one place the low-end budget is tightest.
     const geo = new THREE.PlaneGeometry(240, 240, 80, 80);
     this.waterMat = new THREE.ShaderMaterial({
       transparent: true,
-      uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0x3fa39a) } },
+      uniforms: {
+        uTime: { value: 0 },
+        // Body colour seen looking straight down. A zone may override it via
+        // `waterColor` in its definition — zone 3's drowned-limestone palette wants
+        // colder water than zone 1's warm market teal.
+        uColor: { value: new THREE.Color(this.zone.waterColor ?? 0x3fa39a) },
+        // The colour the surface REFLECTS at grazing angles. Feeding it the zone's
+        // own fog colour is what makes this read as water rather than a tinted
+        // plane: the far surface dissolves into the same fog as the ruins, so there
+        // is no hard horizon line, and each zone gets its own water for free (zone 3
+        // reflects near-black, matching its "edges fall into darkness" intent).
+        uHorizon: { value: new THREE.Color(this.zone.fog.color) },
+        // Matches the moon key set up in _lights() so the sheen agrees with the
+        // scene — direction AND colour, since a warm sheen under a cool key
+        // would read as a second, contradictory light source.
+        uSunDir: { value: this.moonDir.clone() },
+        uSunColor: { value: this.moonColor.clone() },
+      },
       vertexShader: `
         uniform float uTime;
         varying float vRipple;
+        varying vec2 vSurf;
+        varying vec3 vWorld;
         void main() {
           vec3 p = position;
-          float r = sin(p.x * 0.25 + uTime) * 0.06 + cos(p.y * 0.2 + uTime * 0.8) * 0.05;
+          // Slow, long swell. Deliberately ~2x slower than a "nice water" default:
+          // a fast chop reads as a cheerful sea, and this is standing floodwater.
+          float t = uTime * 0.45;
+          float r = sin(p.x * 0.25 + t) * 0.06 + cos(p.y * 0.20 + t * 0.8) * 0.05;
           p.z += r;
           vRipple = r;
+          vSurf = p.xy;                                  // plane-local = world XZ
+          vWorld = (modelMatrix * vec4(p, 1.0)).xyz;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
         }`,
       fragmentShader: `
         uniform vec3 uColor;
+        uniform vec3 uHorizon;
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform float uTime;
         varying float vRipple;
+        varying vec2 vSurf;
+        varying vec3 vWorld;
+
+        // Analytic derivatives of the same wave sum the vertex stage displaces by,
+        // plus finer octaves the 3m vertex grid is far too coarse to carry. All
+        // sines, no normal map — this surface covers most of the screen, so it is
+        // where the low-end budget is tightest.
+        vec3 rippleNormal(vec2 p, float t) {
+          float dx = 0.25 * cos(p.x * 0.25 + t) * 0.06
+                   + 0.90 * cos(p.x * 0.90 - t * 1.7) * 0.014
+                   + 1.70 * cos((p.x + p.y) * 1.70 + t * 2.3) * 0.008
+                   + 3.10 * cos((p.x * 0.8 - p.y) * 3.10 - t * 3.1) * 0.0035;
+          float dy = -0.20 * sin(p.y * 0.20 + t * 0.8) * 0.05
+                   + 0.80 * cos(p.y * 0.80 + t * 1.3) * 0.012
+                   + 1.70 * cos((p.x + p.y) * 1.70 + t * 2.3) * 0.008
+                   - 3.10 * cos((p.x * 0.8 - p.y) * 3.10 - t * 3.1) * 0.0035;
+          return normalize(vec3(-dx, 1.0, -dy));
+        }
+
+        // A slow drifting surface film — the dust, ash and scum that collects on
+        // water nothing has disturbed in a long time. Low contrast on purpose: it
+        // should register as "this water is still", not as a visible pattern.
+        float surfaceFilm(vec2 p, float t) {
+          float a = sin(p.x * 0.075 + sin(p.y * 0.041 + t * 0.05) * 2.0 + t * 0.031);
+          float b = sin(p.y * 0.052 - sin(p.x * 0.033 - t * 0.04) * 1.7 - t * 0.024);
+          return smoothstep(0.25, 1.0, a * b);
+        }
+
         void main() {
+          float t = uTime * 0.45;
+          vec3 n = rippleNormal(vSurf, t);
+          vec3 viewDir = normalize(cameraPosition - vWorld);
+          float fresnel = pow(1.0 - clamp(dot(n, viewDir), 0.0, 1.0), 3.0);
+
+          // Looking DOWN: murky body colour, darker than before so the flood reads
+          // as deep and silted rather than like a lit swimming pool.
           float caustic = 0.5 + vRipple * 3.0;
-          vec3 c = uColor * (0.7 + caustic * 0.3);
-          gl_FragColor = vec4(c, 0.62);
+          vec3 deep = uColor * (0.46 + caustic * 0.26);
+
+          // Looking ALONG the surface: the fog it reflects. This mix, not a
+          // brightness ramp, is what sells it as a reflective liquid.
+          vec3 c = mix(deep, uHorizon * 1.12, fresnel);
+
+          // Scum film, strongest at glancing angles where you'd actually see it.
+          c = mix(c, c * 1.16 + uHorizon * 0.05, surfaceFilm(vSurf, uTime) * (0.25 + fresnel * 0.5));
+
+          // One dull, broad band of moonlight — wide and weak, so it reads as a
+          // cold sheen rather than sparkle (and never trips the bloom pass).
+          float sheen = pow(max(dot(reflect(-viewDir, n), uSunDir), 0.0), 6.0);
+          c += uSunColor * sheen * 0.075;
+
+          // Denser at grazing angles, clearer looking straight down so the player
+          // can still read submerged artifacts and the seabed.
+          gl_FragColor = vec4(c, 0.55 + fresnel * 0.26);
         }`,
     });
     this.water = new THREE.Mesh(geo, this.waterMat);
@@ -205,8 +321,8 @@ export class World {
   _building(x, z, w, d, h, rot = 0, opts = {}) {
     const { windows = true, solid = true } = opts;
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
-      this.rng() > 0.5 ? this.mat.building : this.mat.buildingAlt);
+    const bodyMat = this.rng() > 0.5 ? this.mat.building : this.mat.buildingAlt;
+    const body = new THREE.Mesh(tileBoxUVs(new THREE.BoxGeometry(w, h, d), w, h, d, bodyMat), bodyMat);
     body.position.y = h / 2;
     g.add(body);
     if (windows) {
@@ -366,34 +482,237 @@ export class World {
   // ---- Mangroves: solid boundary marking the edge of the level -------------
   // A stylized mangrove: a tapered trunk, arching stilt roots splaying to the
   // waterline, and a few sparse dark canopy clumps. Each registers a collider.
-  _mangrove(x, z) {
-    const g = new THREE.Group();
+  //
+  // PERFORMANCE: the ring is ~100 trees of ~9 parts each. As individual meshes
+  // that was ~900 draw calls per zone — by far the heaviest thing in the game and
+  // the main blocker for low-end hardware. `_mangroveRing` therefore accumulates
+  // every tree's part transforms and emits exactly THREE InstancedMeshes (trunks,
+  // roots, canopy clumps), following the same dummy-Object3D pattern as
+  // arena3.js. `_mangrove` stays available for one-off trees.
+
+  // Append one tree's part transforms to `out` and register its collider.
+  // Shares the RNG draw order with the old per-mesh version so layouts are stable.
+  _mangroveParts(x, z, out) {
     const h = 4 + this.rng() * 3;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.32, h, 6), this.mat.bark);
-    trunk.position.y = h / 2;
-    g.add(trunk);
-    // arching stilt roots fanned around the base
+    const yaw = this.rng() * Math.PI * 2;
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    // Rotate a tree-local offset into world space (the tree's own Y rotation).
+    const place = (lx, ly, lz) => [x + lx * cos + lz * sin, ly, z - lx * sin + lz * cos];
+
+    out.trunks.push({ pos: place(0, h / 2, 0), scale: [1, h, 1], yaw });
+
     const roots = 4 + Math.floor(this.rng() * 2);
     for (let i = 0; i < roots; i++) {
       const a = (i / roots) * Math.PI * 2 + this.rng() * 0.4;
-      const root = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.11, 1.7, 5), this.mat.bark);
-      root.position.set(Math.cos(a) * 0.55, 0.55, Math.sin(a) * 0.55);
-      root.rotation.z = Math.cos(a) * 0.7;
-      root.rotation.x = -Math.sin(a) * 0.7;
-      g.add(root);
+      out.roots.push({
+        pos: place(Math.cos(a) * 0.55, 0.55, Math.sin(a) * 0.55),
+        // Local arch tilt, kept separate from the tree's yaw: the instance matrix
+        // must compose them as yaw * tilt (what the old parent Group did), which is
+        // not what a single XYZ Euler would produce.
+        tilt: [-Math.sin(a) * 0.7, Math.cos(a) * 0.7],
+        yaw,
+      });
     }
-    // sparse canopy clumps near the crown
+
     const clumps = 2 + Math.floor(this.rng() * 2);
     for (let i = 0; i < clumps; i++) {
-      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0 + this.rng() * 0.6, 0), this.mat.foliage);
-      leaf.position.set((this.rng() - 0.5) * 1.5, h + (this.rng() - 0.5) * 0.8, (this.rng() - 0.5) * 1.5);
-      leaf.scale.y = 0.7;
-      g.add(leaf);
+      const r = 1.0 + this.rng() * 0.6;
+      out.canopy.push({
+        pos: place((this.rng() - 0.5) * 1.5, h + (this.rng() - 0.5) * 0.8, (this.rng() - 0.5) * 1.5),
+        scale: [r, r * 0.7, r],
+        yaw,
+      });
     }
-    g.position.set(x, 0, z);
-    g.rotation.y = this.rng() * Math.PI * 2;
-    this.scene.add(g);
+
     this.addCollider(x, z, 1.5, 1.5);   // dense footprints → a solid wall
+  }
+
+  // ---- Batched decor: one InstancedMesh from a list of part transforms -------
+  // The shared back-end for every batched primitive below. Each item is
+  // `{ pos:[x,y,z], scale?:[x,y,z], yaw?, rot?:[x,y,z], tilt?:[x,z] }`:
+  //   · `rot`  — a full local Euler (rubble tumble)
+  //   · `tilt` + `yaw` — a local X/Z tilt composed UNDER a Y yaw, i.e. yaw * tilt,
+  //     reproducing what a rotated parent Group used to do (mangrove roots)
+  //   · `yaw`  — plain Y rotation
+  // Returns the mesh (null for an empty list) so callers can tag it if needed.
+  _instanced(geo, mat, items) {
+    if (!items.length) return null;
+    const mesh = new THREE.InstancedMesh(geo, mat, items.length);
+    const dummy = this._instDummy ||= new THREE.Object3D();
+    const yawQuat = this._instYaw ||= new THREE.Quaternion();
+    const tiltQuat = this._instTilt ||= new THREE.Quaternion();
+    const tiltEuler = this._instEuler ||= new THREE.Euler();
+    const up = this._instUp ||= new THREE.Vector3(0, 1, 0);
+    items.forEach((it, i) => {
+      dummy.position.set(it.pos[0], it.pos[1], it.pos[2]);
+      if (it.tilt) {
+        tiltEuler.set(it.tilt[0], 0, it.tilt[1]);
+        tiltQuat.setFromEuler(tiltEuler);
+        yawQuat.setFromAxisAngle(up, it.yaw ?? 0);
+        dummy.quaternion.multiplyQuaternions(yawQuat, tiltQuat);
+      } else if (it.rot) {
+        dummy.rotation.set(it.rot[0], it.rot[1], it.rot[2]);
+      } else {
+        dummy.rotation.set(0, it.yaw ?? 0, 0);
+      }
+      dummy.scale.set(...(it.scale ?? [1, 1, 1]));
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    this.scene.add(mesh);
+    return mesh;
+  }
+
+  // Emit the accumulated mangrove parts as three InstancedMeshes.
+  _mangroveInstances(parts) {
+    // Trunk is a unit-height cylinder scaled per instance, so one geometry covers
+    // every tree height. Roots and clumps are fixed-size.
+    this._instanced(
+      tileCylinderUVs(new THREE.CylinderGeometry(0.16, 0.32, 1, 6), 0.16, 0.32, 1, this.mat.bark),
+      this.mat.bark, parts.trunks);
+    this._instanced(
+      tileCylinderUVs(new THREE.CylinderGeometry(0.06, 0.11, 1.7, 5), 0.06, 0.11, 1.7, this.mat.bark),
+      this.mat.bark, parts.roots);
+    this._instanced(
+      tileUniformUVs(new THREE.IcosahedronGeometry(1, 0), 2, this.mat.foliage),
+      this.mat.foliage, parts.canopy);
+  }
+
+  // ---- Rubble mounds: low tumbled debris piles (decor) ----------------------
+  // Each spot becomes a loose cluster of tumbled cubes and is registered in
+  // `moundSpots` as an `elevated_rubble` artifact anchor. Kept low and
+  // NON-COLLIDING on purpose so artifacts resting on a mound stay reachable.
+  // All mounds across the zone share one InstancedMesh (was ~50 draw calls).
+  _rubbleField(spots, opts = {}) {
+    const { min = 4, extra = 3 } = opts;
+    const items = [];
+    for (const [mx, mz] of spots) {
+      this.moundSpots.push([mx, mz]);
+      const n = min + Math.floor(this.rng() * extra);
+      for (let i = 0; i < n; i++) {
+        const s = 0.4 + this.rng() * 0.7;
+        items.push({
+          pos: [
+            mx + (this.rng() - 0.5) * 2.5,
+            W - 0.3 + s / 2 + this.rng() * 0.2,
+            mz + (this.rng() - 0.5) * 2.5,
+          ],
+          scale: [s, s, s],
+          rot: [this.rng(), this.rng(), this.rng()],
+        });
+      }
+    }
+    return this._instanced(
+      tileBoxUVs(new THREE.BoxGeometry(1, 1, 1), 1, 1, 1, this.mat.rubble),
+      this.mat.rubble, items);
+  }
+
+  // ---- Stall rows: many stalls, batched ------------------------------------
+  // `_stall` builds ~11 meshes, so a 14-stall market row cost ~150 draw calls.
+  // This builds a whole row at once: the parts that repeat identically (legs,
+  // wares, counters, canopies, signs) become one InstancedMesh each, while the
+  // per-stall variation (`broken`, `tilt`, `scale`, rotation) survives as
+  // per-instance transforms. Prefer this over looping `_stall` for any row.
+  //
+  // `specs`: [{ x, z, rot, scale?, broken?, tilt? }, ...]
+  _stallRow(specs) {
+    const legs = [], wares = [], counters = [], canopies = [], signs = [];
+    const legOffsets = [[-1.1, -0.8], [1.1, -0.8], [-1.1, 0.8], [1.1, 0.8]];
+
+    for (const spec of specs) {
+      const { x, z, rot = 0, scale = 1, broken = false, tilt = 0 } = spec;
+      // Stall-local → world, honouring the stall's own yaw, scale and Z tilt.
+      const cos = Math.cos(rot), sin = Math.sin(rot);
+      const place = (lx, ly, lz) => [
+        x + (lx * cos + lz * sin) * scale,
+        ly * scale,
+        z + (-lx * sin + lz * cos) * scale,
+      ];
+      const body = { yaw: rot, tilt: [0, tilt], scale: [scale, scale, scale] };
+
+      legOffsets.forEach(([px, pz], idx) => {
+        if (broken && idx === 3) return;                 // a missing leg
+        legs.push({ ...body, pos: place(px, 1.2, pz) });
+      });
+      if (!broken) canopies.push({ ...body, pos: place(0, 2.4, 0) });
+      counters.push({ ...body, pos: place(0, 0.9, -0.5) });
+      for (let i = 0; i < 4; i++) {
+        // Matches `_stall`: the ware sits at stall-local y (so the stall's own
+        // scale lifts it) and its radius scales with the stall too.
+        const r = ((0.12 + this.rng() * 0.08) / 0.16) * scale;   // unit ware geo has r = 0.16
+        wares.push({
+          ...body,
+          pos: place(-0.9 + i * 0.6, W + 0.05 + this.rng() * 0.1, -0.4),
+          scale: [r, r, r],
+        });
+      }
+      if (!broken) signs.push({ ...body, pos: place(0, 1.8, 0.95) });
+
+      const [hw, hd] = this._footprint(1.3 * scale, 1.0 * scale, rot);
+      this.addCollider(x, z, hw, hd);
+    }
+
+    const box = (w, h, d, mat) => tileBoxUVs(new THREE.BoxGeometry(w, h, d), w, h, d, mat);
+    this._instanced(box(0.14, 2.4, 0.14, this.mat.wood), this.mat.wood, legs);
+    this._instanced(box(2.6, 0.08, 2.0, this.mat.cloth), this.mat.cloth, canopies);
+    this._instanced(box(2.3, 0.5, 0.8, this.mat.wood), this.mat.wood, counters);
+    this._instanced(box(1.2, 0.5, 0.04, this.mat.sign), this.mat.sign, signs);
+    this._instanced(new THREE.SphereGeometry(0.16, 8, 6), this.mat.ware, wares);
+  }
+
+  // ---- Tower fields: many stumpy towers, batched ---------------------------
+  // A colonnade or apse ring of `_tower`s costs ~10 meshes each. This emits the
+  // whole field as two InstancedMeshes by scaling one unit drum and one shard
+  // geometry per instance. The per-drum taper ratio barely varies across a stack
+  // (~0.88), so a single pre-tapered drum reads identically at fog distance —
+  // use `_tower` for hero landmarks where the exact silhouette matters.
+  //
+  // `specs`: [{ x, z, height, baseR }, ...]. Returns the per-spec top heights.
+  _towerField(specs, opts = {}) {
+    const { mat = this.mat.concrete } = opts;
+    const drumsOut = [], shardsOut = [], tops = [];
+    for (const { x, z, height = 8, baseR = 1.2 } of specs) {
+      const drums = Math.max(3, Math.round(height / 3));
+      const dh = height / drums;
+      let y = 0;
+      for (let i = 0; i < drums; i++) {
+        const r = baseR * (1 - (i / drums) * 0.55);
+        drumsOut.push({
+          pos: [x + (this.rng() - 0.5) * 0.25, y + dh / 2, z + (this.rng() - 0.5) * 0.25],
+          scale: [r, dh, r],
+          yaw: this.rng() * Math.PI,
+        });
+        y += dh;
+      }
+      const shards = 3 + Math.floor(this.rng() * 3);
+      const topR = baseR * 0.45;
+      for (let i = 0; i < shards; i++) {
+        const a = (i / shards) * Math.PI * 2 + this.rng();
+        const sh = 0.8 + this.rng() * 1.4;
+        shardsOut.push({
+          pos: [x + Math.cos(a) * topR, y + sh / 2 - 0.2, z + Math.sin(a) * topR],
+          scale: [1, sh, 1],
+          tilt: [0, (this.rng() - 0.5) * 0.5],
+        });
+      }
+      this.addCollider(x, z, baseR, baseR);
+      tops.push(height);
+    }
+    // Unit drum: radius 1 at the base, 0.88 at the top, height 1 → scaled per drum.
+    this._instanced(tileCylinderUVs(new THREE.CylinderGeometry(0.88, 1, 1, 8), 0.88, 1, 1, mat),
+      mat, drumsOut);
+    this._instanced(tileBoxUVs(new THREE.BoxGeometry(0.3, 1, 0.3), 0.3, 1, 0.3, mat),
+      mat, shardsOut);
+    return tops;
+  }
+
+  // A single standalone mangrove (three draw calls of one instance each). Prefer
+  // `_mangroveRing` for groups.
+  _mangrove(x, z) {
+    const parts = { trunks: [], roots: [], canopy: [] };
+    this._mangroveParts(x, z, parts);
+    this._mangroveInstances(parts);
   }
 
   // Square ring of mangroves walling off the level edge. Close spacing makes
@@ -401,13 +720,15 @@ export class World {
   _mangroveRing(opts = {}) {
     const { radius = 47, step = 3.6 } = opts;
     const E = radius;
+    const parts = { trunks: [], roots: [], canopy: [] };
     for (let v = -E; v <= E; v += step) {
       const j = () => (this.rng() - 0.5) * 1.1;
-      this._mangrove(v + j(), -E + j());   // north edge
-      this._mangrove(v + j(),  E + j());   // south edge
-      this._mangrove(-E + j(), v + j());   // west edge
-      this._mangrove( E + j(), v + j());   // east edge
+      this._mangroveParts(v + j(), -E + j(), parts);   // north edge
+      this._mangroveParts(v + j(),  E + j(), parts);   // south edge
+      this._mangroveParts(-E + j(), v + j(), parts);   // west edge
+      this._mangroveParts( E + j(), v + j(), parts);   // east edge
     }
+    this._mangroveInstances(parts);
   }
 
   // ---- Vertical landmark: a tall, tapering ruined tower --------------------
@@ -424,7 +745,8 @@ export class World {
       const r0 = baseR * (1 - t0 * 0.55);
       const r1 = baseR * (1 - t1 * 0.55);
       const dh = height / drums;
-      const drum = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, dh, 8), mat);
+      const drum = new THREE.Mesh(
+        tileCylinderUVs(new THREE.CylinderGeometry(r1, r0, dh, 8), r1, r0, dh, mat), mat);
       // jitter each drum so the stack looks weathered / settled
       drum.position.set((this.rng() - 0.5) * 0.25, y + dh / 2, (this.rng() - 0.5) * 0.25);
       drum.rotation.y = this.rng() * Math.PI;
@@ -457,13 +779,15 @@ export class World {
     const pierW = 0.9, half = span / 2;
     for (const s of [-1, 1]) {
       const ph = height * (0.85 + this.rng() * 0.25);
-      const pier = new THREE.Mesh(new THREE.BoxGeometry(pierW, ph, pierW), mat);
+      const pier = new THREE.Mesh(
+        tileBoxUVs(new THREE.BoxGeometry(pierW, ph, pierW), pierW, ph, pierW, mat), mat);
       pier.position.set(s * half, ph / 2, 0);
       pier.rotation.z = -s * (0.04 + this.rng() * 0.06);   // lean inward, ruined
       g.add(pier);
     }
     // sagging lintel across the top (decor, non-colliding so it never blocks)
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(span + pierW, 0.7, pierW * 1.1), mat);
+    const lintel = new THREE.Mesh(
+      tileBoxUVs(new THREE.BoxGeometry(span + pierW, 0.7, pierW * 1.1), span + pierW, 0.7, pierW * 1.1, mat), mat);
     lintel.position.set(0, height + 0.1, 0);
     lintel.rotation.z = (this.rng() - 0.5) * 0.08;
     g.add(lintel);
@@ -479,160 +803,25 @@ export class World {
   }
 
   // ---- Festival dressing: lanterns + banners (GDD Zone 2 "LIKET") -----------
-  // None of these use a THREE.Light (many small point lights tank the forward
-  // renderer — see Museum's per-slot-SpotLight perf fix); glow is additive
-  // emissive geometry lit by the existing bloom pass. Motion reuses the two
-  // generic per-frame loops World already runs (`debris`: bob+spin, `shafts`:
-  // breathing opacity) instead of adding a third animation loop.
+  // The implementations live in _partials/FestivalDressing.js (this file is at
+  // the 1000-line cap). These wrappers keep the primitive API on `world` so zone
+  // modules go on calling `world._lantern(...)`, `world._bunting(...)` etc.
+  // Read that partial before changing any of them: it documents the two standing
+  // constraints (no THREE.Light, no new animation loop).
 
-  // Internal helper: a segmented rope/cable tracing a sagging line between two
-  // points (`y1`/`y2` may differ for a sloped span). Decor only, never solid.
-  _sagLine(x1, z1, x2, z2, y1, y2, sag, opts = {}) {
-    const { segs = 8, thickness = 0.035, mat = this.mat.wood } = opts;
-    const pts = [];
-    for (let i = 0; i <= segs; i++) {
-      const t = i / segs;
-      pts.push(new THREE.Vector3(
-        x1 + (x2 - x1) * t,
-        y1 + (y2 - y1) * t - sag * Math.sin(Math.PI * t),
-        z1 + (z2 - z1) * t,
-      ));
-    }
-    const g = new THREE.Group();
-    for (let i = 0; i < segs; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const seg = new THREE.Mesh(new THREE.CylinderGeometry(thickness, thickness, a.distanceTo(b), 5), mat);
-      seg.position.copy(a).lerp(b, 0.5);
-      seg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-      g.add(seg);
-    }
-    this.scene.add(g);
-    return g;
+  _sagLine(x1, z1, x2, z2, y1, y2, sag, opts) {
+    return sagLine(this, x1, z1, x2, z2, y1, y2, sag, opts);
   }
 
-  // A single glowing paper lantern: faceted shell + additive glow core. Pure
-  // decor — drifts via `this.debris`, flickers via `this.shafts`, never solid.
-  _lantern(x, y, z, opts = {}) {
-    const { color = 0xffb35c, scale = 1, bodyMat = this.mat.sign } = opts;
-    const body = new THREE.Mesh(new THREE.OctahedronGeometry(0.22 * scale, 0), bodyMat);
-    body.position.set(x, y, z);
-    body.rotation.y = this.rng() * Math.PI;
-    this.scene.add(body);
+  _lantern(x, y, z, opts) { return lantern(this, x, y, z, opts); }
 
-    const glowMat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.5,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.3 * scale, 8, 6), glowMat);
-    glow.position.set(x, y, z);
-    this.scene.add(glow);
+  _lanternString(x1, z1, x2, z2, opts) { return lanternString(this, x1, z1, x2, z2, opts); }
 
-    const phase = this.rng() * Math.PI * 2;
-    const spin = (this.rng() - 0.5) * 0.4, amp = 0.08 + this.rng() * 0.06;
-    this.debris.push({ mesh: body, baseY: y, phase, spin, amp });
-    this.debris.push({ mesh: glow, baseY: y, phase, spin: 0, amp });
-    this.shafts.push({ mat: glowMat, base: 0.5, phase });
-  }
+  _lanternCluster(x, z, opts) { return lanternCluster(this, x, z, opts); }
 
-  // A garland of lanterns strung along a sagging line between two points. `y`/
-  // `y2` let the ends sit at different heights (e.g. masthead -> ground anchor).
-  _lanternString(x1, z1, x2, z2, opts = {}) {
-    const { y = 3.2, y2 = y, sag = 0.6, count = 6, color = 0xffb35c, drop = 0.18 } = opts;
-    this._sagLine(x1, z1, x2, z2, y, y2, sag);
-    for (let i = 0; i < count; i++) {
-      const t = (i + 0.5) / count;
-      const px = x1 + (x2 - x1) * t, pz = z1 + (z2 - z1) * t;
-      const py = y + (y2 - y) * t - sag * Math.sin(Math.PI * t) - drop;
-      this._lantern(px, py, pz, { color });
-    }
-  }
+  _bunting(x1, z1, x2, z2, opts) { return bunting(this, x1, z1, x2, z2, opts); }
 
-  // A hanging bunch of lanterns with no visible line (a "frozen chandelier"),
-  // optionally hung from a collidable support post.
-  _lanternCluster(x, z, opts = {}) {
-    const { count = 5, y = 3.0, radius = 0.6, color = 0xffb35c, withPost = false, postHeight = y } = opts;
-    if (withPost) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, postHeight, 6), this.mat.wood);
-      post.position.set(x, postHeight / 2, z);
-      this.scene.add(post);
-      this.addCollider(x, z, 0.12, 0.12);
-    }
-    for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + this.rng() * 0.3;
-      const px = x + Math.cos(a) * radius, pz = z + Math.sin(a) * radius;
-      const py = y + (this.rng() - 0.5) * 0.4;
-      this._lantern(px, py, pz, { color, scale: 0.85 + this.rng() * 0.3 });
-    }
-  }
-
-  // A sagging pennant garland between two posts (banners drift; they never
-  // glow — lanterns own the glow budget). `posts:false` for a loose scrap still
-  // clinging to a wreck with no real anchors.
-  _bunting(x1, z1, x2, z2, opts = {}) {
-    const {
-      y = 3.4, y2 = y, sag = 0.9, pennants = 7,
-      colors = [0xc0453f, 0xe8a23a, 0xdccb3f, 0x3f8f7a, 0x3f6fae],
-      posts = true, postHeight = y,
-    } = opts;
-    if (posts) {
-      for (const [px, pz] of [[x1, z1], [x2, z2]]) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, postHeight, 6), this.mat.wood);
-        post.position.set(px, postHeight / 2, pz);
-        this.scene.add(post);
-        this.addCollider(px, pz, 0.14, 0.14);
-      }
-    }
-    this._sagLine(x1, z1, x2, z2, y, y2, sag, { thickness: 0.03, mat: this.mat.rust });
-    for (let i = 0; i < pennants; i++) {
-      const t = (i + 1) / (pennants + 1);
-      const px = x1 + (x2 - x1) * t, pz = z1 + (z2 - z1) * t;
-      const py = y + (y2 - y) * t - sag * Math.sin(Math.PI * t) - 0.22;
-      const flagMat = new THREE.MeshStandardMaterial({
-        color: colors[i % colors.length], roughness: 1, side: THREE.DoubleSide,
-      });
-      const flag = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.34, 3), flagMat);
-      flag.rotation.set(Math.PI, this.rng() * Math.PI, 0);   // point-down triangular pennant
-      flag.position.set(px, py, pz);
-      this.scene.add(flag);
-      this.debris.push({
-        mesh: flag, baseY: py, phase: this.rng() * Math.PI * 2,
-        spin: (this.rng() - 0.5) * 0.6, amp: 0.05 + this.rng() * 0.05,
-      });
-    }
-  }
-
-  // Zone-2 landmark: a slender mast topped by a giant glowing star lantern (a
-  // parul) with lantern-strung guy-lines radiating down to ground anchors. Reads
-  // through fog via glow + a warm light shaft, not bulk silhouette — only the
-  // mast pole is solid.
-  _parulMast(x, z, opts = {}) {
-    const { height = 13, starRadius = 1.7, spokes = 6, mat = this.mat.metal, glowColor = 0xffd25c } = opts;
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.26, height, 8), mat);
-    mast.position.set(x, height / 2, z);
-    this.scene.add(mast);
-    this.addCollider(x, z, 0.3, 0.3);
-
-    // Giant parol: two flattened octahedra crossed at 45° reads as an 8-point star.
-    const starMat = new THREE.MeshBasicMaterial({
-      color: glowColor, transparent: true, opacity: 0.85,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    for (let i = 0; i < 2; i++) {
-      const lobe = new THREE.Mesh(new THREE.OctahedronGeometry(starRadius, 0), starMat);
-      lobe.scale.set(1, 0.35, 1);
-      lobe.rotation.y = i * Math.PI / 4;
-      lobe.position.set(x, height + starRadius * 0.5, z);
-      this.scene.add(lobe);
-    }
-    this.shafts.push({ mat: starMat, base: 0.85, phase: this.rng() * Math.PI * 2 });
-
-    // Radiating guy-lines of lanterns from the masthead down to ground anchors.
-    for (let i = 0; i < spokes; i++) {
-      const a = (i / spokes) * Math.PI * 2;
-      const ax = x + Math.cos(a) * 5.5, az = z + Math.sin(a) * 5.5;
-      this._lanternString(x, z, ax, az, { y: height * 0.55, y2: 0.3, sag: 0.3, count: 3, color: glowColor });
-    }
-  }
+  _parulMast(x, z, opts) { return parulMast(this, x, z, opts); }
 
   // ---- Atmosphere: a volumetric god-ray cone descending through the water ---
   // Additive, non-colliding; framed over landmarks to add depth through fog and

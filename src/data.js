@@ -3,7 +3,7 @@
 // ============================================================
 // The riddle pool lives in data/riddles.js (split for file-length limits);
 // re-exported here so call sites keep importing from './data.js'.
-export { RIDDLE_POOL, drawRiddles } from './data/riddles.js';
+export { RIDDLE_POOL, drawRiddles, riddlesForZone } from './data/riddles.js';
 
 // Zone-1 provenance label. Per-zone discovery cards read the active zone's
 // name (world.zone.name) instead; this remains the fallback / Zone-1 default.

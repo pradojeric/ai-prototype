@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
 import { fadeMat, pulseEmissive, stackedLimb, buildPot, angDelta } from './primitives.js';
+import { skin } from './_partials/GuardianTextureKit.js';
 
 export function buildZone1Golem(figure) {
   // Reference palette: mossy sea-green armor, tan-olive bamboo, terracotta
@@ -38,6 +39,19 @@ export function buildZone1Golem(figure) {
   const foodColors = [0xd94f3a, 0x7ab648, 0xe8c86a, 0xc47ab0]; // shared food-morsel mats
   const foodMats = foodColors.map((c) => fadeMat(c, c, 0, 0.95, 0.6, 0.05));
   for (const m of foodMats) fadeMats.push([m, 0.95]);
+
+  // --- CC0 surface detail (see `_partials/GuardianTextureKit.js`) -----------
+  // Repeat tiers are picked against each material's DOMINANT part, not its
+  // smallest: matBody's tier suits the 1.35-radius torso, matLimb's the 2.3m leg
+  // columns. Slivers that share the material (the 0.05-radius spears, the chest
+  // lattice bars) stretch a little, which is invisible at encounter distance.
+  // matFrond and the food/rune accents stay flat — fronds are too thin to show a
+  // map, and the emissive accents are the readability anchor through fog.
+  skin(matBody, 'rock', { repeat: 2 });
+  skin(matHorn, 'rock', { repeat: 3 });     // horns, brow, rune tablets, spear tips
+  skin(matLimb, 'bamboo', { repeat: 3, albedo: false });  // yellow-green would fight the tan-olive
+  skin(matRope, 'wicker', { repeat: 2 });   // rope wraps, rattan hands, fish-trap fringe
+  skin(matPot, 'clay', { repeat: 1 });      // shoulder pots read as fired terracotta
 
   // A small serving plate heaped with colored food morsels (used inside the
   // chest cavity and as the orbiting items in the reference).
@@ -264,34 +278,59 @@ export function buildZone1Golem(figure) {
     });
   }
 
+  // --- attack poses ----------------------------------------------------------
+  // The Feastkeeper's fight layer (arena/FeastkeeperBoss.js) calls `gesture()` at
+  // each attack's telegraph. A pose is just an intensity that decays: `animate`
+  // blends it over the idle sway rather than taking the body over, so a gesture
+  // can never fight the fade lifecycle or leave a limb stranded.
+  let pose = null;      // 'throw' | 'charge' | 'slam'
+  let poseAmt = 0;      // 1 → 0 over POSE_DECAY seconds
+  const POSE_DECAY = 1.1;
+
   return {
     fadeMats,
     chestY: 3.55,           // local chest height (halo + encounter anchor)
     glowColor: gold,
+    gesture(kind) { pose = kind; poseAmt = 1; },
     animate(dt, t, f, playerPos, groupPos) {
       // Bob, turn to face the player, sway arms/fronds, orbit plates.
       figure.position.y = CONFIG.WATER_LEVEL + Math.sin(t * 1.2) * 0.12;
       const yaw = Math.atan2(playerPos.x - groupPos.x, playerPos.z - groupPos.z);
       figure.rotation.y += angDelta(figure.rotation.y, yaw) * Math.min(1, dt * 2.5);
 
-      pulseEmissive(matWarm, t, 0.32, 0.14, 1.35, 0, f);
+      if (poseAmt > 0) {
+        poseAmt = Math.max(0, poseAmt - dt / POSE_DECAY);
+        if (poseAmt === 0) pose = null;
+      }
+      // Ease-out so the pose snaps in on the telegraph and relaxes back slowly.
+      const hit = poseAmt * poseAmt;
+
+      // A charging chest cavity burns hotter; the other poses leave it alone.
+      const warmBoost = pose === 'charge' ? hit * 1.5 : 0;
+      pulseEmissive(matWarm, t, 0.32 + warmBoost, 0.14, 1.35, 0, f);
       pulseEmissive(matGlow, t, 0.24, 0.12, 1.15, 0.7, f);
 
+      // Arms: 'throw' hauls them up and back, 'slam' drives them down hard.
+      const armLift = pose === 'throw' ? -0.9 * hit : pose === 'slam' ? 0.7 * hit : 0;
       const sway = Math.sin(t * 1.1) * 0.08;
       for (const a of arms) {
-        a.group.rotation.x = 0.1 + sway * a.side;
+        a.group.rotation.x = 0.1 + sway * a.side + armLift;
         a.group.rotation.z = a.baseZ + Math.sin(t * 0.8 + a.side) * 0.05;
       }
       head.rotation.z = Math.sin(t * 0.9) * 0.06;
       for (const fr of fronds) {
         fr.mesh.rotation.x = fr.baseX + Math.sin(t * 1.6 + fr.phase) * 0.12;
       }
+      // Orbiting plates draw inward and speed up while the chest charges, so the
+      // Spiral Feast visibly gathers before it fires.
+      const pull = pose === 'charge' ? 1 - hit * 0.45 : 1;
+      const rush = pose === 'charge' ? 1 + hit * 2.5 : 1;
       for (const o of orbits) {
-        o.ang += dt * o.speed;
+        o.ang += dt * o.speed * rush;
         o.mesh.position.set(
-          Math.cos(o.ang) * o.r,
+          Math.cos(o.ang) * o.r * pull,
           o.y + Math.sin(t * 1.4 + o.wobble) * 0.25,
-          Math.sin(o.ang) * o.r,
+          Math.sin(o.ang) * o.r * pull,
         );
         o.mesh.rotation.y = o.ang;
       }

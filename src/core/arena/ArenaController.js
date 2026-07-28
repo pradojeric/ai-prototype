@@ -16,8 +16,8 @@
 // owns the phase state machine, armor, the answer nodes, and the boss handoff.
 // ============================================================
 import * as THREE from 'three';
-import { ARENA, COMBAT, LUMINA, mulberry32 } from '../../config.js';
-import { drawRiddles } from '../../data.js';
+import { ARENA, COMBAT, LUMINA } from '../../config.js';
+import { riddlesForZone } from '../../data.js';
 import { AnswerNode } from './AnswerNode.js';
 import { FeastkeeperBoss } from './FeastkeeperBoss.js';
 import { LuminaManager } from './LuminaManager.js';
@@ -26,11 +26,12 @@ const LOCKOUT_HINT = 'The feast answers first — clear the echoes before you ch
 const RIDDLE_HINT = "Shoot the correct answer to break the Feastkeeper's armor.";
 
 export class ArenaController {
-  constructor(scene, audio, player, seed = LUMINA.SEED) {
+  constructor(scene, audio, player, seed = LUMINA.SEED, world = null) {
     this.scene = scene;
     this.audio = audio;
     this.player = player;
     this.seed = seed;
+    this.world = world;
     this._attempt = 0;
     this.lumina = new LuminaManager(scene, player, audio);
     this._handleEnemyDefeated = (_type, position, dropMultiplier) => {
@@ -80,10 +81,11 @@ export class ArenaController {
     this._bossIntroTimer = 0;
     if (this.elHint) this.elHint.textContent = RIDDLE_HINT;
 
-    // Draw one distinct riddle per armor layer (extra +2 as spares in case a
-    // round needs re-issuing; only ROUNDS are used in the happy path).
-    const rng = mulberry32((Date.now() & 0xffff) ^ 0x21e5);
-    this._riddles = drawRiddles(ARENA.ROUNDS + 2, rng);
+    // Draw from this zone's own riddle block (disjoint from every other zone,
+    // so no bugtong repeats across zones); each retry rotates to a fresh set.
+    // Extra +2 as spares in case a round needs re-issuing (only ROUNDS used in
+    // the happy path).
+    this._riddles = riddlesForZone(this.world?.zone?.id, ARENA.ROUNDS + 2);
 
     this._beginAttempt();
 
@@ -315,6 +317,9 @@ export class ArenaController {
     this.elBanner.classList.remove('active');
     this.combat?.bolts.clear();
     this.boss?.begin();
+    // The hop only exists in combat, so this is the one moment it's worth
+    // teaching — the Offering Slam that needs it is seconds away.
+    if (this.guardian) this.combat?.hud.popupCallout(this.guardian.center(), 'SPACE TO LEAP');
     this._showBoss();
   }
 

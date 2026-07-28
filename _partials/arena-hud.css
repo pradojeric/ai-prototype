@@ -405,6 +405,66 @@
   filter: drop-shadow(0 0 6px rgba(255, 154, 90, .85));
 }
 
+/* ---- floating combat text ---- */
+
+/* Pooled labels projected from the impact point in the world. CombatPopups
+   writes transform/opacity only; everything static lives here. */
+#combat-popups {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.combat-popup {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  opacity: 0;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: .5px;
+  white-space: nowrap;
+  /* The label is anchored at its own centre so it sits on the hit point. */
+  transform-origin: 50% 50%;
+  margin: -.6em 0 0 0;
+  translate: -50% 0;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .85);
+  will-change: transform, opacity;
+}
+
+/* Damage the player deals — memory-cyan, matching the bolt. */
+.combat-popup.damage {
+  color: #cdf4ff;
+  text-shadow: 0 0 10px rgba(127, 232, 255, .75), 0 2px 6px rgba(0, 0, 0, .9);
+}
+
+/* Damage the player takes — heavier and coral, to read as a warning. */
+.combat-popup.player {
+  color: #ffb3a4;
+  font-size: 28px;
+  text-shadow: 0 0 12px rgba(227, 91, 79, .8), 0 2px 6px rgba(0, 0, 0, .9);
+}
+
+/* A bolt absorbed by the guardian's shield. Deliberately quieter than damage. */
+.combat-popup.blocked {
+  color: #ffe6a3;
+  font-size: 19px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(255, 208, 130, .7), 0 2px 6px rgba(0, 0, 0, .9);
+}
+
+/* Armor breaks and phase turns — the loudest text in the fight. */
+.combat-popup.callout {
+  color: #fff2d6;
+  font-size: 30px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px rgba(255, 176, 96, .85), 0 2px 8px rgba(0, 0, 0, .9);
+}
+
 /* ---- Lumina timers ---- */
 #lumina-status {
   position: fixed;

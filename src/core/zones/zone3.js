@@ -5,7 +5,7 @@
 // dock (+Z) — the ruined narthex — looking north (-Z) straight down the
 // flooded nave: two colonnades of snapped-off stone pillars bridged by
 // broken half-torus vault ribs, glowing pale "memory strings" woven between
-// them, diagonal god-rays raking the aisle, and fragmented stone slabs
+// them, cold moonlight raking down the aisle, and fragmented stone slabs
 // drifting weightlessly toward the ruined altar. The Guardian (the Keeper
 // of Memories) waits at the center of the nave just before the altar dais;
 // beyond the apse, the surviving bell-tower marks the zone's far terminus.
@@ -17,6 +17,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
+import { plazaDais, hallShell } from './_partials/zoneKit.js';
 
 const W = CONFIG.WATER_LEVEL;
 
@@ -48,23 +49,31 @@ function narthex(world) {
 // Most read as snapped-off column stumps; a few taller survivors carry the
 // vault ribs. Heights come from the seeded RNG but the tall ones are pinned
 // so ribs always have believable supports.
-const PILLAR_ROWS = [22, 16, 10, 4, -2, -8];   // z stations, S → N
-// Tall rows carry the vault ribs. Note z=16 must stay short: the Guardian
-// waits at (0, 15) and a rib there cuts across it in the encounter framing.
-const TALL_ROWS = new Set([22, 4, -8]);        // rows that keep tall pairs
+//
+// Station spacing TIGHTENS toward the altar (7 · 6 · 5 · 4 · 4 · 3 metres) rather
+// than running evenly as it used to. That forced perspective makes the sanctuary
+// read as further away and pulls the eye north down the aisle — the cheapest way
+// to give a corridor of identical pillars a sense of depth.
+const PILLAR_ROWS = [24, 17, 11, 6, 2, -2, -5];   // z stations, S → N
+// Tall rows carry the vault ribs. Note the row nearest z=16 must stay short: the
+// Guardian waits at (0, 15) and a rib there cuts across the encounter framing.
+const TALL_ROWS = new Set([24, 6, -5]);           // rows that keep tall pairs
 
 function naveColonnade(world) {
   world._pillarTops = {};   // z → [leftTopY, rightTopY], read by vaultRibs()
+  const specs = [];
   for (const z of PILLAR_ROWS) {
     const tops = [];
     for (const s of [-1, 1]) {
       const tall = TALL_ROWS.has(z);
       const height = tall ? 11 + world.rng() * 3 : 3 + world.rng() * 4;
-      world._tower(s * 6, z, { height, baseR: 1.15 + world.rng() * 0.3 });
+      specs.push({ x: s * 6, z, height, baseR: 1.15 + world.rng() * 0.3 });
       tops.push(height);
     }
     world._pillarTops[z] = tops;
   }
+  // 14 pillars as individual meshes cost ~140 draw calls; batched they cost 2.
+  world._towerField(specs);
 }
 
 // ---- Vault ribs: half-torus archways spanning the nave ----------------------
@@ -82,12 +91,40 @@ function vaultRibs(world) {
 }
 
 // ---- Transepts: ruined side wings east + west of the crossing ---------------
-// Broken chapel shells whose dark inset windows stand in for rose windows;
-// they give the ArtifactManager interiors and the player mid-zone cover.
+// Broken chapel shells with a dark rose window set into the outer wall; they give
+// the ArtifactManager interiors and the player mid-zone cover.
+//
+// These are now real SHELLS (hallShell), not solid `_building` blocks. They were
+// solid before, which quietly meant the zone's four `submerged_interior` spawn
+// nodes — all of them addressed at transept centres — sat inside collision and
+// could never be used. The two outer chapels stay solid; they are silhouette.
 function transepts(world) {
-  world._building(-20, 1, 10, 7, 7 + world.rng() * 2, Math.PI / 2);
+  for (const side of [-1, 1]) {
+    hallShell(world, side * 20, 1, {
+      halfW: 3.5, halfD: 5, wallHeight: 7 + world.rng() * 2,
+      entrance: side < 0 ? 'east' : 'west',      // opens back toward the nave
+      beams: true,
+      interior(w, cx, cz) {
+        // The rose window: a dark glazed disc recessed into the outer wall, ringed
+        // by pale stone tracery. Cold and unlit, like everything else here.
+        const outer = cx + side * 3.4;
+        const glass = new THREE.Mesh(new THREE.CircleGeometry(1.5, 20), w.mat.window);
+        glass.position.set(outer, 4.2, cz);
+        glass.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+        w.scene.add(glass);
+        const tracery = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.14, 6, 18), w.mat.concrete);
+        tracery.position.set(outer, 4.2, cz);
+        tracery.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+        w.scene.add(tracery);
+        // a toppled chapel altar stone on the flooded floor
+        const stone = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.8), w.mat.concrete);
+        stone.position.set(cx - side * 1.4, W + 0.25, cz - 2.2);
+        stone.rotation.y = (w.rng() - 0.5) * 0.4;
+        w.scene.add(stone);
+      },
+    });
+  }
   world._building(-27, -4, 6, 5, 4.5 + world.rng() * 2, Math.PI / 2, { windows: false });
-  world._building(20, 1, 10, 7, 7 + world.rng() * 2, -Math.PI / 2);
   world._building(27, 5, 6, 5, 4.5 + world.rng() * 2, -Math.PI / 2, { windows: false });
   // side-chapel gateways off the crossing
   world._ruinArch(-11, -1, Math.PI / 2, { span: 5, height: 4.5 });
@@ -101,24 +138,94 @@ function transepts(world) {
 // engine's glow budget.
 function altarApse(world) {
   const cx = 0, cz = -18;
-  const dais = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 4.1, 0.5, 10), world.mat.concrete);
-  dais.position.set(cx, W - 0.1, cz);
-  world.scene.add(dais);
+  plazaDais(world, cx, cz, { radius: 3.6, segments: 10 });
   const altar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.1, 1.1), world.mat.concrete);
   altar.position.set(cx, W + 0.5, cz - 0.5);
   altar.rotation.y = (world.rng() - 0.5) * 0.15;
   world.scene.add(altar);
   world.addCollider(cx, cz - 0.5, 1.2, 0.6);
-  // apse: semicircle of stumps behind the altar
+  // apse: semicircle of stumps behind the altar (batched)
   const stumps = 7;
+  const ring = [];
   for (let i = 0; i < stumps; i++) {
     const a = Math.PI * (0.15 + 0.7 * (i / (stumps - 1)));   // opens toward the nave
-    const px = cx + Math.cos(a) * 8, pz = cz - 2 - Math.sin(a) * 6;
-    world._tower(px, pz, { height: 2.5 + world.rng() * 5, baseR: 0.9 });
+    ring.push({
+      x: cx + Math.cos(a) * 8,
+      z: cz - 2 - Math.sin(a) * 6,
+      height: 2.5 + world.rng() * 5,
+      baseR: 0.9,
+    });
   }
+  world._towerField(ring);
   // cold votive light around the sanctuary
   world._lanternCluster(cx - 2.4, cz + 1.5, { count: 5, y: 2.4, radius: 0.9, color: GLOW_COLOR });
   world._lanternCluster(cx + 2.6, cz - 0.5, { count: 4, y: 3.0, radius: 0.7, color: GLOW_COLOR });
+}
+
+// ---- Collapsed vault: a climbable slab pile in the west aisle ----------------
+// Where a bay of the stone vault came down, its slabs stacked into a ramp. This
+// is the zone's one piece of real verticality: from the top the player looks
+// straight down the length of the nave to the altar, which is the shot the whole
+// colonnade was composed for. Walkable via authored support surfaces (see
+// World.addSupportSurface) rather than colliders, so it can actually be climbed.
+function collapsedVault(world) {
+  const cx = -12, cz = 8;
+  const topY = 3.3;
+
+  // Three stacked slabs stepping up, each its own landing.
+  const steps = [
+    { y: topY * 0.34, halfW: 2.4, halfD: 1.6, z: cz + 3.4 },
+    { y: topY * 0.67, halfW: 2.2, halfD: 1.5, z: cz + 0.6 },
+    { y: topY,        halfW: 2.6, halfD: 1.9, z: cz - 2.2 },
+  ];
+  for (const s of steps) {
+    const slab = new THREE.Mesh(
+      new THREE.BoxGeometry(s.halfW * 2, 0.36, s.halfD * 2), world.mat.rubble);
+    slab.position.set(cx, s.y - 0.18, s.z);
+    slab.rotation.y = (world.rng() - 0.5) * 0.12;
+    world.scene.add(slab);
+    world.addSupportSurface(cx, s.z, s.halfW, s.halfD, 0, s.y);
+    // Solid only BELOW its own deck, so the player is stopped by the step face
+    // when wading past but never blocked once standing on it.
+    world.addCollider(cx, s.z, s.halfW, s.halfD, { maxY: s.y - 0.35 });
+  }
+
+  // A snapped rib leaning against the pile + loose fragments, so it reads as
+  // fallen vaulting rather than a staircase someone built.
+  const rib = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.4, 6, 8, Math.PI * 0.6), world.mat.concrete);
+  rib.position.set(cx - 2.6, 1.6, cz - 1);
+  rib.rotation.set(0.4, 0.9, 1.25);
+  world.scene.add(rib);
+  for (let i = 0; i < 5; i++) {
+    const s = 0.5 + world.rng() * 0.8;
+    const frag = new THREE.Mesh(new THREE.BoxGeometry(s, s * 0.4, s), world.mat.rubble);
+    frag.position.set(cx + (world.rng() - 0.5) * 6, W - 0.2 + s * 0.2, cz + (world.rng() - 0.5) * 9);
+    frag.rotation.set(world.rng(), world.rng(), world.rng());
+    world.scene.add(frag);
+  }
+
+  world._lanternCluster(cx, cz - 2.2, { count: 3, y: topY + 2.2, radius: 0.6, color: GLOW_COLOR });
+  world.spawnNodes.elevated_rubble.push([cx, cz - 2.2]);
+}
+
+// ---- Nave inlay: a faint glowing line down the centre of the aisle -----------
+// Zone 3 is deliberately the darkest zone (near-black background, 1.5× fog), and
+// in playtesting the aisle itself can dissolve into that darkness. A dim additive
+// strip set into the floor traces the centreline from the narthex to the altar:
+// it gives the player a continuous thing to follow without adding a light, and it
+// reads diegetically as one more memory string, laid into the stone.
+function naveInlay(world) {
+  const zStart = 26, zEnd = -17;
+  const mat = new THREE.MeshBasicMaterial({
+    color: GLOW_COLOR, transparent: true, opacity: 0.16,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.5, zStart - zEnd), mat);
+  strip.rotation.x = -Math.PI / 2;
+  strip.position.set(0, W - 0.28, (zStart + zEnd) / 2);
+  world.scene.add(strip);
+  // Registered with the shafts so it breathes with the rest of the zone's glow.
+  world.shafts.push({ mat, base: 0.16, phase: world.rng() * Math.PI * 2 });
 }
 
 // ---- Bell-tower: the surviving campanile, the zone's far terminus (N) -------
@@ -184,67 +291,30 @@ function memoryStrings(world) {
     const y = Math.min(...world._pillarTops[z]) - 2;
     world._sagLine(-6, z, 6, z, y, y, 0.5, { thickness: 0.03, mat });
   }
-  // threads converging on the sanctuary
-  world._sagLine(-6, -8, 0, -18, 5, 2.2, 0.6, { thickness: 0.03, mat });
-  world._sagLine(6, -8, 0, -18, 5, 2.2, 0.6, { thickness: 0.03, mat });
-}
-
-// ---- God rays: diagonal shafts raking the nave + sanctuary ------------------
-// _lightShaft builds vertical cones and returns the mesh; tilting them gives
-// the requested diagonal fall of light through the broken vault.
-function lightShafts(world) {
-  const shafts = [
-    [0, 15, { topR: 3.4, height: W + 15, opacity: 0.1 }],    // over the Keeper
-    [-2, -18, { topR: 3.8, height: W + 16, opacity: 0.11 }], // over the altar
-    [3, 5, { topR: 3.0, height: W + 14, opacity: 0.08 }],    // mid-nave
-    [-3, -5, { topR: 3.0, height: W + 14, opacity: 0.08 }],
-    [-4, -38, { topR: 3.0, height: W + 18, opacity: 0.09 }], // bell-tower
-    [20, 1, { topR: 2.6, height: W + 12, opacity: 0.07 }],   // E transept
-  ];
-  shafts.forEach(([x, z, opts], i) => {
-    const cone = world._lightShaft(x, z, { color: 0xcfe4ff, ...opts });
-    cone.rotation.z = 0.18 + (i % 3) * 0.03;   // shared diagonal slant
-    cone.rotation.x = (i % 2 ? 1 : -1) * 0.06;
-  });
-}
-
-// ---- Terrain props: rubble mounds in the side aisles (decor) ----------------
-function rubble(world) {
-  const spots = [[-13, 12], [14, -8], [-16, -22], [24, -20]];
-  for (const [mx, mz] of spots) {
-    world.moundSpots.push([mx, mz]);
-    const n = 4 + Math.floor(world.rng() * 3);
-    for (let i = 0; i < n; i++) {
-      const s = 0.4 + world.rng() * 0.7;
-      const box = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), world.mat.rubble);
-      box.position.set(
-        mx + (world.rng() - 0.5) * 2.5,
-        W - 0.3 + s / 2 + world.rng() * 0.2,
-        mz + (world.rng() - 0.5) * 2.5,
-      );
-      box.rotation.set(world.rng(), world.rng(), world.rng());
-      world.scene.add(box);
-    }
-  }
+  // threads converging on the sanctuary, from the northernmost colonnade row
+  const last = PILLAR_ROWS[PILLAR_ROWS.length - 1];
+  world._sagLine(-6, last, 0, -18, 5, 2.2, 0.6, { thickness: 0.03, mat });
+  world._sagLine(6, last, 0, -18, 5, 2.2, 0.6, { thickness: 0.03, mat });
 }
 
 // Spawn nodes anchored to the districts (consumed by ArtifactManager + Guardian).
+// NOTE: appends, because collapsedVault() already pushed its own.
 function setSpawnNodes(world) {
-  world.spawnNodes.near_wall = [
-    [-16, 1], [16, 5],       // transept fronts
-    [-9, 27], [9, 26],       // narthex stubs
+  world.spawnNodes.near_wall.push(
+    [-15, 1], [15, 1],       // transept entrances, facing the nave
+    [-9, 24], [9, 23],       // narthex stub fronts
     [-1, -35],               // bell-tower base
-    [-30, 16],               // cloister ruin
-  ];
-  world.spawnNodes.submerged_interior = [
-    [-20, 1], [20, 1], [-27, -4],   // inside the transept shells
-    [0, -18],                        // on the altar dais
-  ];
-  world.spawnNodes.elevated_rubble = world.moundSpots.slice();
-  world.spawnNodes.open_water = [
+    [-28, 13],               // cloister ruin
+  );
+  world.spawnNodes.submerged_interior.push(
+    [-20, 1], [20, 1], [-20, 4],     // inside the transept shells
+    [0, -16.5],                       // on the altar dais, south of the altar stone
+  );
+  world.spawnNodes.elevated_rubble.push(...world.moundSpots);
+  world.spawnNodes.open_water.push(
     [0, 19], [0, 7], [0, -5],        // down the nave centerline
-    [-12, -14], [12, 14], [-14, 24], // side aisles between clusters
-  ];
+    [-12, -14], [12, 14], [-12, 18], // side aisles between clusters
+  );
 }
 
 export const zone3 = {
@@ -264,6 +334,9 @@ export const zone3 = {
   ],
   background: 0x050b14,   // deep abyss blue — the edges of the map fall into it
   fog: { color: 0x08121f, density: CONFIG.FOG_DENSITY * 1.5 },   // denser: isolate the ruins
+  // Cold slate water instead of the engine's market teal — the cathedral's flood
+  // should feel like still, colourless meltwater, not a warm lagoon.
+  waterColor: 0x2a4a5c,
   // Cold drowned-limestone palette — pale blue-grey stone, verdigris metal,
   // deep-teal growth; deliberately colder than zones 1–2.
   palette: {
@@ -273,6 +346,24 @@ export const zone3 = {
     sign: 0x5a6a76, ware: 0x50626e, seabed: 0x101c26,
     bark: 0x22303a, foliage: 0x24424a, window: 0x070e15,
   },
+  // The darkest and coldest of the three, deliberately: the cathedral's whole
+  // read is that the map edges dissolve into the abyss. Everything is scaled
+  // DOWN from the shared rig rather than recoloured, so the zones still sit on
+  // one lighting scale — Pananisia is the bottom of it, not a different world.
+  light: {
+    moonColor: 0xc3d8f2,
+    moonIntensity: 1.15,
+    fillIntensity: 0.22,
+    hemiSky: 0x7d9fc4,
+    hemiGround: 0x080f18,
+    hemiIntensity: 0.62,
+    ambientColor: 0x28414f,
+    ambientIntensity: 0.42,
+    envSky: 0x53748f,
+    envHorizon: 0x22333f,
+    envGround: 0x070d12,
+    envIntensity: 0.45,
+  },
   // Build order is layout-significant (drives the seeded RNG); preserve it.
   build(world) {
     narthex(world);
@@ -280,15 +371,16 @@ export const zone3 = {
     vaultRibs(world);
     transepts(world);
     altarApse(world);
+    collapsedVault(world);
+    naveInlay(world);
     bellTower(world);
     cloisterRuins(world);
     floatingSlabs(world);
     memoryStrings(world);
     world._dock({ cx: 0, cz: 34 });
     world._mangroveRing({ radius: 47, step: 3.6 });
-    rubble(world);
+    world._rubbleField([[-16, -22], [14, -8], [24, -20], [20, 14]]);
     world._debris();
-    lightShafts(world);
     setSpawnNodes(world);
   },
 };

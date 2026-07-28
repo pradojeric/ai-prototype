@@ -117,7 +117,11 @@ export class RailCombatManager extends CombatManager {
   _playDamageSound() { this.audio.playHullImpact(); }
 
   _defeatThreat(threat, position, reflected = false) {
+    // A reflected shot always finishes the target, so the number it prints is
+    // whatever health was left rather than the bolt's rating.
+    const applied = Math.min(threat.hp, reflected ? threat.hp : this.boltDamage);
     const defeated = threat.hit(reflected ? threat.hp : this.boltDamage, reflected);
+    this.hud.popupDamage(position, applied);
     if (!reflected) this.registerPlayerBoltHit(defeated);
     if (!defeated) {
       this.audio.playHit();

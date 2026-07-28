@@ -1,338 +1,711 @@
 # STRINGS — Game Design Document
-### AI Game On! | "Giving Our History a New Heartbeat through the Intelligence of Tomorrow"
+
+**Implementation-aligned edition — 24 July 2026**
+**AI Game On! — “Giving Our History a New Heartbeat through the Intelligence of Tomorrow”**
 
 ---
 
-## 1. GAME OVERVIEW
+## 1. Document Status
 
-| Field | Details |
-|---|---|
-| **Title** | Strings |
-| **Engine** | Three.js (WebGL) |
-| **Genre** | First-Person Walking Simulator / Interactive Heritage Experience |
-| **Platform** | Web Browser |
-| **Setting** | Submerged City of Dagupan, Pangasinan, Philippines |
-| **Theme** | Cultural preservation, memory, loss, and the invisible threads that connect us to the past |
-| **Target Audience** | 15+ / Anyone interested in heritage, slow games, and Filipino culture |
-| **Playtime** | 30–60 minutes |
+This document is the design source of truth for the current browser build of
+**Strings**. It describes implemented player-facing behavior found in the
+repository, not the superseded five-zone prototype.
 
----
+Authority for resolving discrepancies is:
 
-## 2. CONCEPT STATEMENT
+1. executable source and cultural-content data;
+2. focused automated tests;
+3. current arena and game-loop documents;
+4. older concept prose.
 
-> *"Beneath the water, the city still breathes."*
+Unless explicitly marked otherwise, “current” means statically confirmed in the
+codebase. Browser feel, timing, rendering, audio balance, and live-network behavior
+still require manual playtesting.
 
-**Strings** is a melancholic, first-person walking simulator set in a version of Dagupan City that has been swallowed by water after an unnamed incident. The player — a lone survivor of ambiguous identity — wades through the shallow, flooded ruins of a once-vibrant city. Guided by translucent fishing line-like strings that drift through the submerged air, the player searches for cultural artifacts scattered across five zones of Dagupan.
+### Current build at a glance
 
-Each artifact found calls a City-Wide Portal API, unlocking a real-world historical fact about the object and Dagupan's heritage, which is archived in the player's **Digital Museum** — a personal gallery that gradually fills as the city's story is pieced together. When all artifacts are recovered, the full truth of the incident is revealed through the assembled collection.
-
-The title **"Strings"** carries dual meaning: the translucent fishing line strings that guide the player, and the invisible strings of memory, culture, and identity that tie every person to their homeland — even one buried underwater.
-
----
-
-## 3. SETTING & WORLD
-
-### The Submerged City of Dagupan
-
-Dagupan is a real city in Pangasinan, Philippines, historically significant as the **"Bangus (Milkfish) Capital of the Philippines."** In the game world, it has been submerged by an event never directly explained. The water level sits at roughly waist-height in most areas, giving every step a slow, wading resistance.
-
-The world is not apocalyptic — it is **quiet, preserved, almost peaceful**. Objects float gently. Light filters through murky blue-green water. The city looks like it was not destroyed but simply… lowered. Buildings stand intact. Market stalls are still set up. A bangkâ rests against a concrete wall. Life was interrupted, not erased.
-
-**Visual Palette:**
-- Muted teal, dusty blues, and faded greens dominate
-- Warm amber light from above (golden hour, filtered through water)
-- Soft particles float throughout like sediment or ash
-- Strings appear as faintly glowing translucent fishing lines, drifting gently with invisible currents
-
-### The Five Explorable Zones
-
-Each zone is a real location in Dagupan, reimagined submerged:
-
-| Zone | Real Location | Atmosphere | Artifacts |
-|---|---|---|---|
-| **Zone 1** | PONSIA | Ghostly stalls, floating wares, still-hanging signage | 3 |
-| **Zone 2** | Calle Arellano (Heritage Street) | Flooded colonial storefronts, cracked facades | 3 |
-| **Zone 3** | Bonuan Bangus Fishponds | Eerie submerged bamboo fish traps, vast open water | 3 |
-| **Zone 4** | Dagupan City Hall | Sunken civic grandeur, floating documents | 3 |
-| **Zone 5** | Dagupan Cathedral (St. John the Baptist) | Sacred silence, light through stained glass under water | 3 |
-
-**Total: 15 Artifacts** across 5 zones.
+| Item | Current design |
+| --- | --- |
+| Genre | First-person exploration, light-casting combat, cultural-memory collection |
+| Platform | Desktop web browser; keyboard and mouse |
+| Technology | Vanilla JavaScript ES modules, Three.js 0.160.0 via CDN |
+| Campaign | Museum hub plus three submerged memories and three Memory Arenas |
+| Cultural collection | 27 artifacts: 11 food, 9 festival, 7 landmark memories |
+| Knowledge challenge | 127 curated bugtong; three challenges are presented per arena |
+| Progression keys | 3 Guardian Souls, one from each completed arena |
+| Save model | Session-only local progress; settings persist in `localStorage` |
+| Network role | Optional artifact-collection notification; local progress remains authoritative |
 
 ---
 
-## 4. CHARACTER
+## 2. High Concept and Player Promise
 
-The player character has **no name, no face, and no spoken dialogue.** They are a vessel — a survivor whose identity the player projects themselves onto. Their presence is felt through:
+The player wakes in **Aking Museo**, an empty digital museum connected to three
+flooded memories of Pangasinan. Each memory has been bound by a Guardian and
+distorted into a combat trial. The player enters a Memory Rift, survives the
+Guardian’s arena, answers traditional bugtong through light-casting, and defeats
+the Guardian. Only then do the memory’s cultural artifacts return to the world as
+recoverable Echoes.
 
-- **First-person perspective** (no body visible below the screen)
-- **Breathing audio** — slow, measured, occasionally catching with emotion near artifacts
-- **Hands** — only visible when interacting with an artifact (reaching toward it)
+The player promise is:
 
-The character's relationship to Dagupan is intentionally left open. They could be a fisherman's child, a student, a returning OFW, or simply someone who loved this city. The player decides.
+> Follow the Hibla, survive the memory’s trial, and carry Pangasinan’s food,
+> festivals, and places home.
 
----
+### Design pillars
 
-## 5. CORE GAMEPLAY LOOP
+1. **Memory made navigable.** Cultural knowledge is expressed through places,
+   artifacts, sound, riddles, and the physical act of returning objects to a
+   museum.
+2. **Knowledge under pressure.** Bugtong are not detached quizzes; the player
+   must read, aim, and answer inside distinct combat structures.
+3. **Recovery, not extraction.** Defeating a Guardian does not finish a memory.
+   The player must peacefully recover every artifact and the Guardian Soul.
+4. **A coherent sensory language.** Teal Hibla, spatial Echo pings, warm artifact
+   light, woven spawn tears, and museum displays connect navigation, combat, and
+   collection.
+5. **Local progress first.** Optional network failure must never revoke a
+   discovery or prevent campaign completion.
 
-```
-Enter Zone
-    ↓
-Explore the flooded environment (slow, atmospheric walking)
-    ↓
-Strings appear in the distance — translucent, drifting fishing lines
-    ↓
-Follow the strings (they grow denser and more vivid as you approach)
-    ↓
-Locate the Hidden Heritage Artifact
-    ↓
-Interact (reach toward it — fade to white)
-    ↓
-[ARTIFACT DISCOVERY SCREEN]
-Real-world historical fact + cultural context unlocked via City-Wide Portal API
-    ↓
-Artifact saved to Digital Museum gallery
-    ↓
-Continue exploring until all 3 artifacts in zone are found
-    ↓
-Move to next zone
-    ↓
-[After all 15 artifacts — ENDING SEQUENCE]
-```
+### Target experience
+
+The intended emotional arc moves from isolation and uncertainty, through
+high-pressure confrontation, into attentive recovery, curation, and restoration.
+Combat supplies urgency; exploration and museum replay provide reflection.
 
 ---
 
-## 6. THE STRINGS MECHANIC (Discovery System)
+## 3. Audience, Platform, and Controls
 
-### Visual Design
-The **Strings** are the game's core navigational language — replacing the conventional HUD, minimap, or waypoint marker with something organic and culturally rooted in Dagupan's fishing heritage.
+### Audience
 
-They appear as **translucent monofilament-style fishing lines** — the same type used in bangus aquaculture. They do not point directly at the artifact. Instead, they drift and meander through the water like threads caught in a slow current, converging loosely in the direction of the hidden item.
+The game is designed for players interested in Philippine cultural heritage,
+atmospheric first-person games, accessible action, and knowledge-based challenges.
+Pangasinan, Filipino, and English are used together so local language remains
+central while meaning stays legible to a wider audience.
 
-### Behavioral States
+### Input contract
 
-| Distance to Artifact | String Behavior |
-|---|---|
-| **Far (>15m)** | 1–2 faint strings barely visible, nearly invisible |
-| **Medium (8–15m)** | 3–5 strings, slightly glowing, drifting slowly |
-| **Close (3–8m)** | 6–10 strings, brighter, converging more directly |
-| **Very Close (<3m)** | Dense web of strings, vibrating faintly, emitting a soft hum |
+| Input | Action |
+| --- | --- |
+| `W A S D` | Move |
+| Mouse | Look |
+| `Shift` | Sprint while moving and stamina remains |
+| Left click | Cast a Light bolt during combat |
+| `E` | Reach, enter a Memory Rift, recover an artifact, or awaken the Final Memory |
+| `R` | Release Alab when fully charged |
+| `Escape` | Release pointer lock and pause |
 
-### Technical Implementation (Three.js)
-- Each string is a `THREE.CatmullRomCurve3` — a smooth spline path that shifts over time
-- Strings use `THREE.Line` with custom `ShaderMaterial` for translucency and glow pulse
-- Animated using sine wave offsets on control points per frame (creates organic drifting)
-- Opacity and count driven by `distance = player.position.distanceTo(artifact.position)`
-- Strings spawn from a radius around the artifact and trail toward the player's view frustum
+The current build is desktop-first. No touch-control implementation is shipped.
 
-### AI Procedural Placement
-Following the game jam mechanic, each artifact's position within its zone is **randomized per session** using a weighted placement system:
-- Artifact positions are seeded from a pool of valid spawn nodes per zone
-- Spawn nodes are tagged by type: `near_wall`, `submerged_interior`, `open_water`, `elevated_rubble`
-- No artifact appears in the same exact spot in two different playthroughs
-- Strings always correctly recalculate from the procedurally selected position
+### Movement
 
----
+- Base wading speed is **2.6 m/s**.
+- Sprint multiplies speed by **1.8**.
+- A full stamina tank supports about **6 seconds** of continuous sprint and takes
+  about **9 seconds** to refill.
+- The controller supports collision sliding, authored ramps and landings,
+  knockback, movement slows, and temporary external motion.
+- The visible right hand and fishing lure react to movement, reaching, and Light
+  casting.
 
-## 7. ARTIFACT SYSTEM
+### Pause and settings
 
-### The 15 Cultural Heritage Artifacts
-
-#### Zone 1 — PONSIA
-| # | Artifact | Cultural Significance |
-|---|---|---|
-| 1 | **Kabilya (Fishing Scale)** | Traditional hand-held balance scale used in bangus trading at Pantal |
-| 2 | **Pigar-pigar Iron Grill** | The iconic grill used for Dagupan's famous late-night street food |
-| 3 | **Hand-Painted Tindera Sign** | Handwritten market signage in Pangasinan dialect |
-
-#### Zone 2 — Calle Arellano (Heritage Street)
-| # | Artifact | Cultural Significance |
-|---|---|---|
-| 4 | **Wooden Lampara (Oil Lamp)** | Pre-electric lighting used in old Dagupan storefronts |
-| 5 | **Spanish-Era Keystone Fragment** | Architectural remnant from Dagupan's colonial heritage buildings |
-| 6 | **Old Merchant Ledger** | A handwritten trade record from Dagupan's commercial history |
-
-#### Zone 3 — Bonuan Bangus Fishponds
-| # | Artifact | Cultural Significance |
-|---|---|---|
-| 7 | **Bubu (Bamboo Fish Trap)** | Traditional cylindrical trap used in Pangasinan aquaculture |
-| 8 | **Pukot (Throw Net)** | The signature cast net used in Dagupan's bangus harvest |
-| 9 | **Bangkâ Paddle (Sagwan)** | Carved wooden paddle from a traditional fishing canoe |
-
-#### Zone 4 — Dagupan City Hall
-| # | Artifact | Cultural Significance |
-|---|---|---|
-| 10 | **Municipal Seal Plaque** | Official seal of Dagupan City, inscribed with its founding |
-| 11 | **Framed Civic Portrait** | Portrait of a historical Dagupan local figure |
-| 12 | **Old Ballot Box** | Wooden ballot box from an early Philippine election in Dagupan |
-
-#### Zone 5 — Dagupan Cathedral
-| # | Artifact | Cultural Significance |
-|---|---|---|
-| 13 | **Carved Santo (Religious Figure)** | A handcrafted devotional statue from the parish's history |
-| 14 | **Handwritten Simbang Gabi Program** | A faded mass program from a Dagupan Christmas tradition |
-| 15 | **Church Bell Shard** | Fragment of the original cathedral bell, cast in Dagupan |
+Pointer unlock, focus loss, and visibility loss pause active gameplay and
+cinematics. Gameplay time, DOM animations, combat input, and audio pause together.
+Resume remains on screen until pointer lock succeeds. Music and SFX sliders are
+stored separately in `localStorage`.
 
 ---
 
-## 8. ARTIFACT DISCOVERY SCREEN (API Unlock Mechanic)
+## 4. World, Themes, and Narrative
 
-When the player interacts with an artifact, the following sequence plays:
+### Premise
 
-1. **Fade to white** — the world dissolves
-2. **Artifact Reveal** — the 3D object floats in a clean, lit space (white void)
-3. **Historical Panel appears** — formatted card showing:
-   - Artifact name (Filipino + English)
-   - Real historical context about this object and Dagupan
-   - A cultural note about its significance today
-   - Zone it was found in
-4. **"Saved to your Digital Museum"** confirmation
-5. **Fade back** to the submerged world
+The game takes place inside a digital archive where Pangasinan’s memories have
+become submerged, fragmented worlds. Water is both loss and suspension: culture
+has not vanished, but it cannot return without being remembered, understood, and
+carried home.
 
-The API call logs:
-```json
-{
-  "artifact_id": "bubu_001",
-  "artifact_name": "Bubu (Bamboo Fish Trap)",
-  "zone": "Bonuan Bangus Fishponds",
-  "discovered_at": "[timestamp]",
-  "player_session": "[session_id]",
-  "real_world_data": "Fetched from City-Wide Portal API"
-}
+The player’s identity is intentionally understated. Their function is more
+important than a fixed biography: they are a witness, defender, and keeper of
+memory.
+
+### Aking Museo
+
+The campaign begins in an empty version of **Aking Museo**. Its three portals
+lead to:
+
+| Portal | Memory | Cultural lens | Arena |
+| --- | --- | --- | --- |
+| Center | PONSIA | Food and market life | Memory Arena |
+| Left | LIKET | Festivals and communal joy | Memory River |
+| Right | PANANISIA | Landmarks, faith, and civic memory | Memory Tower |
+
+The authored production progression is one memory at a time, with the next portal
+opening when a zone is complete. The current configuration has
+`DEBUG_UNLOCK_ALL_ZONES` enabled, so all three portals are available in any order
+for testing. That flag is debug behavior, not a narrative rewrite.
+
+### Campaign arc
+
+1. Wake in the empty museum.
+2. Descend into a submerged memory.
+3. Locate and enter its Memory Rift.
+4. Complete the zone-specific arena and defeat its Guardian.
+5. Return to the memory as its artifacts scatter into the world.
+6. Recover every artifact and the Guardian Soul.
+7. Return to Aking Museo; the collection and Soul are placed on display.
+8. Repeat until all three Souls rest on the central altar.
+9. Hold `E` at the altar to awaken the Final Memory.
+10. Witness the completed museum, restored province, credits, and epilogue museum.
+
+---
+
+## 5. Core Loops
+
+### Moment-to-moment exploration
+
+```text
+Read the Journey objective
+→ navigate by landmarks, Hibla, and Echo audio
+→ approach an interaction
+→ hold E to reach
+→ view cultural discovery
+→ continue until the memory is complete
 ```
 
----
+### Arena loop
 
-## 9. DIGITAL MUSEUM
-
-Accessible from a pause menu button labeled **"Aking Museo" (My Museum)**.
-
-The Digital Museum is a **first-person gallery space** — the player walks through a dry, softly lit room that gradually fills with pedestals as artifacts are found. Each pedestal holds a rotating 3D model of the artifact with its historical card beside it.
-
-**Empty state:** The museum is bare and silent, with only ambient echo.
-**Full state (15/15):** The museum is warm, illuminated, filled with quiet music, and becomes the setting for the ending sequence.
-
----
-
-## 10. NARRATIVE STRUCTURE & THE INCIDENT
-
-The incident is never stated outright. Its truth is assembled through the artifacts themselves — each one carries a fragment of what happened, embedded in its historical context and in subtle environmental details around it.
-
-### Narrative Fragments Per Zone
-
-| Zone | Fragment Revealed |
-|---|---|
-| PONSIA | The last day of the Bangus Festival — people were gathered |
-| Calle Arellano | Old newspaper clipping reference to a flood warning ignored |
-| Bonuan Fishponds | Fishermen reported unusual tidal behavior days before |
-| City Hall | An emergency decree that was never filed |
-| Cathedral | A prayer service the night before — the last gathering |
-
-The incident is deliberately left to interpretation. Was it climate catastrophe? Government failure? Something beyond explanation? **The player decides.** The game trusts them.
-
----
-
-## 11. ENDING SEQUENCE
-
-When the 15th artifact is collected, the player is transported to their **completed Digital Museum.** All pedestals are filled. Soft, ambient music plays — a gentle rondalla melody referencing Pangasinan folk music.
-
-The player walks slowly through their completed gallery. At the far end of the museum is a single door — a plain wooden door, unremarkable. When opened, it reveals a flooded street of Dagupan bathed in golden light. Above the waterline for the first time. Bright. Warm. Quiet.
-
-The strings appear one final time — all of them, a thousand translucent threads rising upward from the water, catching the light.
-
-**Text fades in:**
-> *"Hindi natin malilimutan ang isang bagay na ating minahal."*
-> *(We cannot forget something we have loved.)*
-
-**Cut to black.**
-
-The Digital Museum link is presented — shareable, permanent, with all 15 artifacts documented. The player's heritage archive exists beyond the game.
-
----
-
-## 12. AUDIO DESIGN
-
-| Element | Description |
-|---|---|
-| **Ambient World** | Muffled silence, distant water drips, subtle pressure hum |
-| **Movement** | Soft splashing wade sounds, slow and deliberate |
-| **Strings Near** | Faint, resonant hum — like a fishing line pulled taut, or a single guitar string |
-| **Artifact Interact** | A clean tone — like a bell struck underwater |
-| **Discovery Screen** | Silence, then a single melodic note (kulintang-influenced) |
-| **Digital Museum** | Soft rondalla strings, slow and meditative |
-| **Ending** | Full rondalla melody, swelling gently |
-
-Sound design philosophy: **less is more.** The quiet of a submerged world is its own kind of presence.
-
----
-
-## 13. VISUAL STYLE
-
-**Inspirations:** *Dear Esther*, *Abzû*, *What Remains of Edith Finch*
-
-- **Water shader:** Custom Three.js ShaderMaterial — slight distortion, caustic light rippling on surfaces, murky attenuation with depth
-- **Color grading:** Post-processing via `THREE.EffectComposer` — desaturated warm tones, slight chromatic aberration at edges
-- **Fog:** `THREE.FogExp2` — dense near the ground, clears slightly at eye level
-- **Particles:** Sediment/ash particle system — slow, floating, catching light
-- **Strings:** `CatmullRomCurve3` lines with custom alpha + emissive shader, soft glow via `UnrealBloomPass`
-
----
-
-## 14. TECHNICAL ARCHITECTURE (Three.js)
-
-### Core Systems
-
-```
-/src
-  /core
-    SceneManager.js       — Zone loading, transitions
-    PlayerController.js   — First-person WASD + mouse, wade physics
-    StringSystem.js       — Procedural string generation, proximity logic
-    ArtifactManager.js    — Placement seeding, interaction detection
-    APIManager.js         — City-Wide Portal API calls, session tracking
-  /zones
-    PantalMarket.js
-    CalleArellano.js
-    BonuanFishponds.js
-    CityHall.js
-    Cathedral.js
-  /ui
-    DiscoveryScreen.js    — Artifact reveal modal
-    DigitalMuseum.js      — Gallery space logic
-    HUD.js               — Minimal (artifact count only)
-  /shaders
-    WaterShader.glsl
-    StringShader.glsl
-    PostProcessing.js
-  /audio
-    AudioManager.js
+```text
+Cast Light → evade threats → build Alab → collect Memory Lumina
+→ reach a riddle milestone → read three answers → shoot an answer
+→ break Guardian armor or open a seal → defeat the boss
 ```
 
-### Key Three.js Dependencies
-- `THREE.Water` (water surface)
-- `THREE.EffectComposer` + `UnrealBloomPass` (post-processing)
-- `THREE.GLTFLoader` (artifact 3D models)
-- `THREE.CatmullRomCurve3` (string paths)
-- `THREE.FogExp2` (atmospheric depth)
-- `PointerLockControls` (first-person look)
+Each arena changes the pacing and spatial problem while retaining shared rules:
+100 Liwanag, Light bolts, Alab, Lumina, readable telegraphs, three bugtong, a
+three-phase boss, and explicit retry behavior.
+
+### Zone completion rule
+
+A memory is complete only when both conditions are true:
+
+- every artifact assigned to that zone has been recovered; and
+- that zone’s Guardian Soul has been collected.
+
+Arena victory alone does not complete a zone.
 
 ---
 
-## 15. DEVELOPMENT MILESTONES
+## 6. Global Systems
 
-| Milestone | Deliverable |
-|---|---|
-| **M1** | Player controller + water shader in one zone (Pantal) |
-| **M2** | String system functional + proximity detection |
-| **M3** | Artifact placement (procedural seeding) + all 5 zones blocked out |
-| **M4** | Discovery Screen + API integration |
-| **M5** | Digital Museum gallery functional |
-| **M6** | All 15 artifacts modeled + placed |
-| **M7** | Audio integration + narrative text |
-| **M8** | Ending sequence + polish pass |
+### Liwanag and Light casting
+
+The player has **100 Liwanag**. Left click fires a pooled Light bolt at a maximum
+cadence of one shot every **0.22 seconds**. A normal bolt deals **1 damage**.
+Damage direction arcs, a hurt vignette, health-lag fills, hit markers, FOV punch,
+hitstop, impacts, and enemy markers communicate combat state.
+
+### Alab
+
+Successful combat builds the Alab meter:
+
+- normal hit: **+1%**;
+- kill: **+10%**.
+
+When full, pressing `R` releases a **3-second**, **8-shots-per-second** Light
+burst. Shots fired during Alab do not recharge it.
+
+### Common lesser enemies
+
+| Threat | Role | Core values |
+| --- | --- | --- |
+| Chaser / Starved Fisher | Pursues and strikes at close range | 2 HP, 15 damage |
+| Spitter | Maintains range and fires dodgeable projectiles | 3 HP, 10 damage |
+
+Enemy arrivals use a **1.4-second woven-thread tear** followed by a short emerge
+animation. Pending enemies count toward encounter capacity but cannot act before
+arrival.
+
+### Memory Lumina
+
+Defeated lesser threats have a seeded **30%** base chance to drop one temporary
+Lumina. Drops expire after **12 seconds**.
+
+| Lumina | Effect |
+| --- | --- |
+| Vitality | Restores 25 Liwanag |
+| Zephyr | 8 seconds of enhanced movement; slows threats in the stationary rail arena |
+| Overcharge | 10 seconds of double Light-bolt damage |
+
+Drop selection adapts to player health. Arena 2 auto-collects nearby Lumina;
+standard arena forms may be collected by proximity or shot.
+
+### Failure and retry
+
+Death triggers a faint/blackout return rather than permanent loss.
+
+- Arena 1 before the boss: restart the arena run.
+- Arena 1 during the boss: resume at the boss with a fresh fight state.
+- Arena 2 before the boss: restart the timed river trial.
+- Arena 2 during the boss: resume at the boss.
+- Arena 3 during ascent: restart the tower ascent.
+- Arena 3 during the summit boss: resume at the summit.
+
+No persistent database is used by gameplay or tests.
 
 ---
 
-*"Strings" — A love letter to Dagupan, written in fishing lines and rising water.*
+## 7. Museum Hub and Progression
+
+Aking Museo is a walkable first-person hub with a central gallery and two side
+wings. It provides:
+
+- three memory portals;
+- **36 prepared artifact frames**, 12 per zone section;
+- replayable discovery cards for recovered artifacts;
+- a three-slot Guardian Soul altar;
+- the threshold for the Final Memory;
+- an epilogue state after the ending.
+
+Recovered artifacts populate frames automatically. Aiming at a displayed artifact
+and pressing `E` reopens its cultural card. Guardian Souls are placed
+automatically on the central altar.
+
+The museum is not a separate online profile. Campaign progress lives only for the
+current page session. Refreshing the page starts a new run; music and SFX settings
+are the exception.
 
 ---
-**Document Version:** 1.0 | **Game Jam:** AI Game On!
+
+## 8. Zone 1 — PONSIA
+
+### Identity
+
+PONSIA is the food and market memory: a drowned commercial spine of stalls,
+warehouses, cooking spaces, rubble, a raised dock, mangroves, and a distant tower.
+Its cultural collection contains **11 Pangasinan foods and food traditions**.
+
+### Memory Arena
+
+PONSIA’s arena is a circular combat space built around a fixed **10-wave** run.
+Riddle rounds occur after waves **3, 6, and 10**. The wave clock stops while a
+riddle is active.
+
+For each bugtong:
+
+1. the bilingual prompt appears;
+2. three labeled coral answer nodes form in front of the player;
+3. the player shoots one node;
+4. a correct answer removes one Feastkeeper armor layer;
+5. a wrong answer locks that choice, spawns **2 Chasers and 1 Spitter**, and
+   leaves the remaining answers available.
+
+After the third correct answer, the armor shatters and the **Feastkeeper** becomes
+vulnerable.
+
+### Feastkeeper
+
+The Feastkeeper has **70 HP** and three health phases. It creates pressure on two
+independent clocks:
+
+- telegraphed projectiles become faster between phases;
+- mixed enemy groups are summoned more frequently, up to five live adds.
+
+Later phases bias summons toward larger groups. The encounter is an attrition and
+target-priority test: keep moving, manage adds, and find safe windows to damage
+the boss.
+
+---
+
+## 9. Zone 2 — LIKET
+
+### Identity
+
+LIKET is the festival memory: a submerged parade avenue with lantern strings,
+bunting, a gong circle, ballroom ruins, a float graveyard, bandstand, and glowing
+parul mast. Its collection contains **9 Pangasinan festivals**.
+
+### Memory River
+
+The player stands on a stationary boat while layered scenery scrolls past to
+create forward travel. Movement is locked to the boat, turning the challenge into
+aiming, target priority, reflection, and sustained pressure.
+
+River Snipers and Frenzied Boarders spawn every **3–5 seconds**, with a maximum of
+**8 threats**. Bugtong occur at **20, 55, and 90 seconds of active encounter
+time**. Pauses and riddle presentation do not consume that active clock.
+
+Each riddle follows a protected readability sequence:
+
+1. prompt reveal: **3 seconds**;
+2. three answer lanterns travel into formation: **1 second**;
+3. lanterns hold still for reading: **3 seconds**;
+4. all three fly toward the boat over **6 seconds**.
+
+The lanterns line up at `-4.5`, `0`, and `+4.5` metres. Shooting the correct
+lantern reflects it into the Reveler and removes one armor layer. Shooting a
+decoy deals **18 damage**; allowing the volley to reach the boat deals **25
+damage**. The riddle retries without erasing previously broken layers.
+
+### The Reveler
+
+The Reveler has **70 HP** and three phases. It:
+
+- shifts between three lateral river anchors;
+- charges projectile formations for **2 seconds**;
+- fires staggered boss orbs at the boat;
+- takes **5 damage** when an orb is reflected back;
+- summons mixed river threats with increasing frequency.
+
+The player must decide whether to clear pressure, shoot incoming attacks, or
+reflect an orb into the boss.
+
+---
+
+## 10. Zone 3 — PANANISIA
+
+### Identity
+
+PANANISIA is a drowned cathedral and memory archive inspired by Pangasinan’s
+religious, civic, and coastal landmarks. A flooded nave, broken vault ribs,
+transepts, altar ruins, memory strings, drifting fragments, and bell-tower
+silhouette create a solemn vertical approach. Its collection contains **7
+landmarks**.
+
+### Memory Tower ascent
+
+The player climbs a twelve-flight tower to a summit **18 metres** above the base.
+After an **8-second grace period**, water rises at **0.16 m/s**. The HUD reports
+height, water clearance, three seal states, slow effects, and warning/critical
+pressure.
+
+Ascent threats are:
+
+- **Gargoyles:** four authored sentries with 4 HP, a close-range telegraph,
+  18-damage strike, and knockback;
+- **Gale Whispers:** flying shooters with 2 HP that follow the player’s vertical
+  tier and deal 10 damage plus knockback.
+
+Three Memory Seals stand at heights **6, 12, and 18 metres**. Each presents one
+bugtong and three shootable answer mechanisms. A correct answer opens the seal.
+A wrong answer:
+
+- destroys that decoy;
+- slows movement to **55% for 4 seconds**;
+- summons a penalty Gargoyle.
+
+### Keeper of Memories
+
+After all seals open and the summit is reached, the Guardian introduction leads
+into the Keeper fight. The tide settles below the summit for the boss phase.
+
+The Keeper has **200 HP** and three phases. Its pattern set includes:
+
+- aimed, telegraphed projectiles;
+- a gold-lane charge that deals **24 damage** and heavy knockback;
+- a punish window of **2–3 seconds** when the charge misses;
+- warning-circle memory stones that fall in expanding volleys;
+- occasional Lumina from a designated falling stone;
+- rotating lighthouse beams;
+- summoned Gargoyles and Gales.
+
+Attack cadence, hazard count, beam coverage, and summon groups intensify at the
+66% and 33% health thresholds.
+
+---
+
+## 11. Artifacts, Hibla, Echoes, and Discovery
+
+### Cultural inventory
+
+| Zone | Theme | Count | Artifacts |
+| --- | --- | ---: | --- |
+| PONSIA | Food | 11 | Alaminos Longganisa, Dasol Sea Salt, Kaleskes, Pigar-pigar, Puto Calasiao, Patupat, Bagoong, Burong Isda, Binungey, Tupig, Bangus |
+| LIKET | Festivals | 9 | Bagoong Festival, Bangus Festival, Binungey Festival, Galicayo Festival, Mangunguna Festival, Patupat Festival, Pindang Festival, Pista’y Dayat, Talong Festival |
+| PANANISIA | Landmarks | 7 | Hundred Islands, St. James the Great Parish Church, Banáan Pangasinan Provincial Museum, Cape Bolinao Lighthouse, Pangasinan Provincial Capitol, Basilica of Our Lady of Manaoag, Sison Auditorium |
+
+Artifact prose distinguishes evidence-based origin from cultural lore. The
+research ledger avoids unsupported inventors, precise origin dates, and tourism
+superlatives. Stable IDs are retained independently of corrected display names.
+
+### Scatter and placement
+
+After arena victory, all still-uncollected artifacts for that zone burst from the
+Guardian’s return point in a **1.3-second** arc. Placement uses the zone’s authored
+spawn categories:
+
+- near wall;
+- submerged interior;
+- elevated rubble;
+- open water.
+
+Targets maintain a preferred minimum separation of **14 metres** and avoid solid
+geometry. Placement is procedural within authored spatial rules, not generated by
+an external AI service.
+
+### Hibla
+
+Each active artifact owns one thick, curved, fishing-line-like Hibla. It fades in
+at roughly **13 metres**, brightens and pulses with proximity, and fades out at
+very close range so it does not obscure the object. The Hibla indicates
+relationship and direction; it is not a literal trail of multiple lines.
+
+### Echo audio
+
+Every artifact also emits a distinct spatial bell ping every **2.6 seconds**.
+Echoes can be heard out to **28 metres**, with a fade across the final 8 metres,
+so sound guides the player before the shorter-range Hibla becomes visible. The
+nearby melodic layer swells within 24 metres.
+
+### Recovery and discovery
+
+The player holds `E` for **2.5 seconds** near an artifact. Reaching animates the
+hand and lure. On completion:
+
+1. the artifact is committed to local progress;
+2. its bilingual discovery card opens;
+3. origin and lore are presented separately;
+4. the corresponding museum frame becomes populated;
+5. an optional collection notification is attempted.
+
+Artifact recovery after an arena is peaceful. The older “contested artifact
+waves” loop is not active in the current game.
+
+---
+
+## 12. Bugtong and Cultural Knowledge
+
+The shipped riddle corpus contains **127 traditional Pangasinan bugtong**. Each
+entry includes:
+
+- a Pangasinan prompt;
+- a Filipino line;
+- an English gloss;
+- three answer choices;
+- one correct choice.
+
+Arena attempts select riddles using seeded randomness; the first two arena
+controllers pre-draw spare entries while presenting three challenges. Answer order
+may be shuffled, but the underlying content remains unchanged. Labels use a shared
+measured layout that supports up to three centered lines and expands before
+reducing font size; the test suite checks all **381 shipped answer choices** for
+preservation and fit.
+
+The data notes credit the Bayambang Culture Mapping Project and Dr. Perla Nelmida
+as source context. Cultural spelling, diacritics, and meaning must be preserved
+when editing content.
+
+---
+
+## 13. UI, Guidance, Accessibility, and Presentation
+
+### Journey guidance
+
+The Journey Guide derives its objective from live game state:
+
+- enter the Memory Rift;
+- recover scattered memories;
+- recover the Guardian Soul;
+- enter an open museum memory;
+- awaken the Final Memory.
+
+It collapses during arenas and hides during cinematics, debug flow, fainting, and
+the ending. One-time control and Lumina explanations are queued without repeating
+within a run.
+
+### Combat readability
+
+Combat surfaces include:
+
+- Liwanag and lagging damage fill;
+- Alab charge and ready/firing states;
+- wave or threat count;
+- boss name, health, and armor pips;
+- bilingual riddle banner;
+- Arena 2 segmented riddle timeline;
+- Arena 3 ascent, water, seal, slow, and event HUD;
+- hit marker, hurt vignette, directional damage arcs, and off-screen threats;
+- Lumina status.
+
+Responsive CSS reduces HUD footprints on narrow screens, but the interaction model
+remains keyboard-and-mouse. Reduced-motion media queries disable selected pulses
+and transitions; they do not currently remove all camera motion or gameplay VFX.
+
+### Visual direction
+
+The base world combines dark blue-green water, exponential fog, low warm/cool
+contrast, sediment, god rays, mangroves, authored ruins, and selective emissive
+geometry. The three memories then diverge:
+
+- PONSIA: weathered market materials, food warmth, bamboo, pots, and moss;
+- LIKET: festival cloth, lantern gold, parul light, coral, and movement;
+- PANANISIA: cathedral stone, pale memory light, gold seams, and vertical scale.
+
+Guardian silhouettes are bespoke procedural models built from Three.js primitives:
+the Feastkeeper is a food-and-market golem, the Reveler is a coral festival titan,
+and the Keeper is an architectural memory spirit. Reference images guide their art
+direction, but no external 3D model files are loaded.
+
+### Audio direction
+
+Audio is synthesized with Web Audio:
+
+- a composed 32-beat, 66 BPM kulintang-inspired loop;
+- low ambient drone and underwater delay;
+- spatial artifact Echo bells;
+- Light, impact, enemy, armor, portal, Soul, Lumina, and UI cues;
+- separate music and SFX buses.
+
+The restored-province ending is subtitle-led. An optional recorded voiceover path
+exists but is currently `null`, so no narration asset is required or played.
+
+---
+
+## 14. Final Memory and Ending
+
+When all three Guardian Souls are placed, the altar becomes active. Holding `E`
+for **2.5 seconds** begins the ending:
+
+1. a portal forms and pulls the camera forward;
+2. the game reveals the completed museum for **13.5 seconds**;
+3. a dry, restored Pangasinan tableau plays for **31 seconds**;
+4. bilingual subtitles connect food, festivals, landmarks, and returning memory;
+5. the Strings fade as the restored province remains;
+6. credits appear;
+7. the player may enter an epilogue museum with its exits sealed.
+
+The ending is a cinematic restoration of cultural continuity, not a permanent
+online museum publication. A title-menu debug shortcut currently exposes the full
+ending for testing.
+
+---
+
+## 15. Technical Architecture
+
+### Runtime
+
+- `index.html` defines the import map, canvas overlays, and DOM HUD.
+- `src/main.js` boots the `Game` composition root.
+- `Game` owns campaign state, scene transitions, and the animation loop.
+- `World` builds reusable atmosphere, collision, supports, primitives, and zone
+  geometry from registered zone definitions.
+- Arena controllers own encounter pacing; combat managers own shared firing,
+  health, enemies, projectiles, feedback, and HUD integration.
+- Museum, cutscene, UI, audio, data, and artifact systems remain separate modules.
+
+There is no package manager, bundler, or build step. The game must be served over
+HTTP, and its first load requires network access for the Three.js CDN import.
+
+### Data and persistence
+
+- Artifact and riddle content ships locally as JavaScript data.
+- Campaign collections and Souls are in-memory `Set` objects.
+- Settings persist locally in the browser.
+- There is no production save/load system, account system, database, or cloud
+  museum in this repository.
+
+### Optional artifact API
+
+After local collection, `APIManager` attempts a `POST` to the configured
+collection URL with an in-memory session UUID and artifact metadata. The checked-in
+URL is the reserved `api.example.com` placeholder. Failure logs a warning and
+does not roll back local collection.
+
+The current repository does **not** implement platform authentication, session
+polling, artifact-unlock retrieval, or a permanent shareable archive. Those
+capabilities require a real external contract and are future integration work.
+
+### Performance principles
+
+- reuse pooled Light bolts, hostile projectiles, VFX, spawn tears, HUD markers,
+  and damage arcs;
+- avoid per-frame allocation in hot paths;
+- use seeded randomness where repeatable encounter or placement behavior matters;
+- dispose geometry, materials, audio voices, and event ownership on scene changes;
+- use simplified primitives and collision footprints instead of heavy simulation;
+- split authored source files at cohesive boundaries before they exceed the
+  repository’s 1000-line limit.
+
+---
+
+## 16. Authoritative Tuning Summary
+
+| System | Current value |
+| --- | --- |
+| Main memories | 3 |
+| Artifacts | 27 total: 11 / 9 / 7 |
+| Guardian Souls | 3 |
+| Bugtong corpus | 127 riddles, 381 choices |
+| Player health | 100 Liwanag |
+| Base / sprint speed | 2.6 m/s / ×1.8 |
+| Light bolt | 1 damage, 0.22s cooldown |
+| Alab | 3s at 8 shots/s |
+| Lumina drop chance | 30% base |
+| Arena 1 | 10 waves; riddles after 3 / 6 / 10; boss 70 HP |
+| Arena 2 | riddles at 20 / 55 / 90s; boss 70 HP |
+| Arena 3 | 8s tide grace; 0.16 m/s rise; seals at 6 / 12 / 18m; boss 200 HP |
+| Artifact reach | Hold `E` for 2.5s |
+| Artifact scatter | 1.3s flight; preferred 14m separation |
+| Hibla / Echo ranges | about 13m / 28m |
+| Final Memory reach | Hold `E` for 2.5s |
+
+Exact balance values live in `src/config.js` and the relevant boss modules. If a
+value changes in code, this table must be updated in the same change.
+
+---
+
+## 17. Current Limitations and Validation Boundary
+
+### Implemented but configured for development
+
+- all museum portals are unlocked by `DEBUG_UNLOCK_ALL_ZONES`;
+- title shortcuts expose the ending and Guardian showroom;
+- the dedicated debug-zone flag is available but disabled.
+
+Release builds should deliberately review those flags.
+
+### Known content and integration limitations
+
+- zone-entry dialogue contains explicit placeholder lines;
+- the artifact API endpoint is a nonfunctional example URL;
+- ending narration is optional and has no configured asset;
+- campaign progress is not persisted across refreshes;
+- mobile/touch controls are not implemented;
+- no live API schema, CORS behavior, or deployment environment is verified here.
+- `src/audio/AudioManager.js` is currently 1006 lines and therefore exceeds the
+  repository’s 1000-line source-file rule; correcting that pre-existing structural
+  issue is outside this documentation-only rewrite.
+
+### Verification status
+
+Static inspection confirms the architecture, data counts, state transitions,
+controls, and tuning recorded above. Focused Node tests cover riddle-label layout,
+global pause behavior, and Journey Guide state rendering. This document does not
+claim browser, WebGL, visual, audio, timing, pointer-lock, responsive, CORS, or
+live-network verification.
+
+Before release, manually smoke-test:
+
+- title, intro, all three portal flows, and repeated pause/resume;
+- every arena, riddle presentation, boss, death, and retry checkpoint;
+- artifact scatter, Hibla/Echo navigation, all 27 discovery cards, and museum replay;
+- all three Souls, Final Memory, credits, and epilogue;
+- visual readability, audio balance, console errors, asset loading, and real API
+  behavior if a production endpoint is supplied.
+
+---
+
+## 18. Repository Design References
+
+- [`README.md`](README.md) — run instructions and project orientation
+- [`GAME_LOOP.md`](GAME_LOOP.md) — older loop summary; defer to this GDD where it conflicts
+- [`Strings_v2.md`](Strings_v2.md) — transition from prototype to arena-first structure
+- [`Arena1.md`](Arena1.md) — PONSIA encounter detail
+- [`Arena2.md`](Arena2.md) — LIKET encounter detail
+- [`Arena3.md`](Arena3.md) — PANANISIA encounter detail
+- [`reference/artifact-origin-research.md`](reference/artifact-origin-research.md) —
+  cultural-origin editorial ledger
+
+This GDD supersedes the former five-zone, 15-artifact walking-simulator design.

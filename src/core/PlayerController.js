@@ -3,7 +3,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import { CONFIG } from '../config.js';
+import { CONFIG, wrapAngle } from '../config.js';
 
 export class PlayerController {
   constructor(camera, domElement) {
@@ -19,8 +19,16 @@ export class PlayerController {
     this.zephyrSpeedMultiplier = 1;
     this.externalSpeedScale = 1;
     this.knockback = new THREE.Vector3();
+    // Combat hop. Purely a vertical OFFSET stacked on the ground-follow below —
+    // the player has no vertical velocity model otherwise, and collision keeps
+    // resolving against `eyeBase`, so a leap can never clear a wall or a ledge.
+    this.jumpEnabled = false;        // armed only while a fight is live
+    this.jumpOffset = 0;             // metres above the current support
+    this.jumpVel = 0;
+    this._jumpRequested = false;
     this.movementLocked = false;     // rail encounters keep aim but suppress WASD movement
     this.movementAnchor = new THREE.Vector3();
+    this.yawLimit = null;            // {center, range} aim cone; null = free look
     this.collide = null;             // (x, z) => boolean, injected by Game
     this.groundHeight = null;        // (x, z) => number, injected by Game
     this.eyeBase = CONFIG.DOCK_TOP;  // smoothed support height under the player
@@ -30,8 +38,26 @@ export class PlayerController {
     this.elStaminaWrap = document.getElementById('stamina');
     this.elStaminaFill = document.getElementById('stamina-fill');
 
-    document.addEventListener('keydown', (e) => this.keys[e.code] = true);
+    document.addEventListener('keydown', (e) => {
+      this.keys[e.code] = true;
+      // Edge-triggered: reading keys['Space'] each frame would let a held key
+      // bunny-hop the instant the previous landing registers.
+      if (e.code === 'Space' && !e.repeat) this._jumpRequested = true;
+    });
     document.addEventListener('keyup', (e) => this.keys[e.code] = false);
+  }
+
+  // True while the player is off the ground — read by attacks that a leap clears.
+  get airborne() { return this.jumpOffset > 0.001; }
+
+  // Fights arm the hop; everything else disarms it. Disarming mid-air also lands
+  // the player, so a fight ending on the way up can't strand them above the floor.
+  setJumpEnabled(flag) {
+    this.jumpEnabled = !!flag;
+    if (flag) return;
+    this.jumpOffset = 0;
+    this.jumpVel = 0;
+    this._jumpRequested = false;
   }
 
   // Game wires the world's collision test in after both exist.
@@ -44,9 +70,35 @@ export class PlayerController {
     this.movementLocked = locked;
     if (anchor) this.movementAnchor.copy(anchor);
     this.velocity.set(0, 0, 0);
+    this.jumpOffset = 0;             // a rail encounter must never leave them floating
+    this.jumpVel = 0;
+    this._jumpRequested = false;
     this.moving = false;
     this.sprinting = false;
     if (this.elStaminaWrap) this.elStaminaWrap.classList.toggle('rail-hidden', locked);
+  }
+
+  // Restrict yaw to an aim cone around `center` (radians, 0 = facing -Z), so a
+  // rail encounter can keep the gaze on the lane ahead. PointerLockControls only
+  // clamps pitch, so the cone is enforced here. Pass null to restore free look.
+  setYawLimit(center = 0, range = Math.PI) {
+    this.yawLimit = range >= Math.PI ? null : { center, range };
+    this._clampYaw();
+  }
+  clearYawLimit() { this.yawLimit = null; }
+
+  // Fold any yaw the pointer accumulated this frame back into the cone. Reading
+  // and rewriting as a YXZ Euler preserves pitch and any roll the scene applied.
+  _clampYaw() {
+    if (!this.yawLimit) return;
+    const object = this.controls.getObject();
+    this._lookEuler ||= new THREE.Euler(0, 0, 0, 'YXZ');
+    this._lookEuler.setFromQuaternion(object.quaternion, 'YXZ');
+    const offset = wrapAngle(this._lookEuler.y - this.yawLimit.center);
+    const range = this.yawLimit.range;
+    if (offset >= -range && offset <= range) return;
+    this._lookEuler.y = this.yawLimit.center + (offset < 0 ? -range : range);
+    object.quaternion.setFromEuler(this._lookEuler);
   }
 
   // Arena Lumina owns the timer; the player owns how the movement state is
@@ -65,6 +117,7 @@ export class PlayerController {
   resetInput() {
     this.keys = {};
     this.velocity.set(0, 0, 0);
+    this._jumpRequested = false;   // a Space held across a pause must not fire on resume
     this.moving = false;
     this.sprinting = false;
   }
@@ -82,6 +135,7 @@ export class PlayerController {
 
   update(dt) {
     if (!this.controls.isLocked) return false;
+    this._clampYaw();
     if (this.movementLocked) {
       const obj = this.controls.getObject();
       obj.position.copy(this.movementAnchor);
@@ -157,7 +211,27 @@ export class PlayerController {
       ? this.groundHeight(obj.position.x, obj.position.z, this.eyeBase)
       : 0;
     this.eyeBase += (ground - this.eyeBase) * Math.min(1, dt * 8);
-    obj.position.y = this.eyeBase + CONFIG.EYE_HEIGHT + breath;
+
+    // Combat hop, layered on top of the support height. `eyeBase` keeps chasing the
+    // ground underneath while airborne, so landing resolves onto whatever the player
+    // drifted over — and every other system that reads `eyeBase` (Zone 3's drown
+    // clearance, collision) is deliberately unaffected by the offset.
+    if (this._jumpRequested) {
+      this._jumpRequested = false;
+      if (this.jumpEnabled && !this.movementLocked && this.jumpOffset <= 0
+          && this.stamina >= CONFIG.JUMP_STAMINA) {
+        this.jumpVel = CONFIG.JUMP_SPEED;
+        this.stamina -= CONFIG.JUMP_STAMINA;
+        this._updateStaminaUi();   // the bar is drawn earlier in the frame; a fifth
+                                   // of the tank vanishing should read immediately
+      }
+    }
+    if (this.jumpOffset > 0 || this.jumpVel > 0) {
+      this.jumpVel -= CONFIG.JUMP_GRAVITY * dt;
+      this.jumpOffset = Math.max(0, this.jumpOffset + this.jumpVel * dt);
+      if (this.jumpOffset === 0) this.jumpVel = 0;
+    }
+    obj.position.y = this.eyeBase + this.jumpOffset + CONFIG.EYE_HEIGHT + breath;
 
     return true;
   }

@@ -11,6 +11,14 @@ export const CONFIG = {
   STAMINA_MAX: 1,           // stamina is tracked 0..1 (a normalized "tank")
   STAMINA_DRAIN: 1 / 6,     // units/sec while sprinting + moving → ~6s of full sprint
   STAMINA_REGEN: 1 / 9,     // units/sec recovered while not sprinting → ~9s to refill
+  // Combat-only hop (see PlayerController.setJumpEnabled). A short, heavy leap that
+  // clears a ground shockwave and nothing else: peak = SPEED²/(2·GRAVITY) ≈ 0.80m,
+  // airtime = 2·SPEED/GRAVITY ≈ 0.76s. Deliberately too low to reach any ledge —
+  // collision still resolves against the *ground* height, so this is a dodge, not
+  // a traversal tool.
+  JUMP_SPEED: 4.2,
+  JUMP_GRAVITY: 11,
+  JUMP_STAMINA: 0.2,        // drawn from the same 0..1 sprint tank, so hopping isn't free
   ZONE_HALF: 48,            // play area half-extent (~96×96 m)
   INTERACT_RANGE: 2.7,
   FOG_DENSITY: 0.03,        // lighter than before so the larger space reads
@@ -22,6 +30,25 @@ export const CONFIG = {
   // Independent of DEBUG_ZONE — leave that false to actually see them.
   DEBUG_TEST_ENDING_BUTTON: true, // true → show a title-menu shortcut for the full final cutscene
   DEBUG_GUARDIAN_ZONE_BUTTON: true, // true → show the title shortcut to the Guardian showroom
+};
+
+// Gameplay (in-zone) bloom. The zones' own glow is all additive emissive geometry —
+// string beads, lantern cores, god-ray shafts, the parul star — and those sit well
+// above this threshold, so raising it clips the bloom off ordinary lit surfaces
+// without dimming a single real emitter.
+//
+// Was 0.8 / 0.6 / 0.2 hardcoded in _partials/GameRendering.js. That 0.2 threshold
+// meant almost every surface bloomed, which only got brighter once the zones gained
+// albedo textures (a texture map lifts mid-tones that flat dark colours never
+// reached). Museum uses 0.35/0.5/0.5 and the ending 0.4/0.45/0.85 for comparison.
+// Tuning guide if this still needs adjusting:
+//   THRESHOLD ↑ = fewer things glow at all (kills the washed-out haze)
+//   STRENGTH  ↓ = the things that do glow, glow less intensely
+// Raise THRESHOLD first; drop STRENGTH only if the emitters themselves are too hot.
+export const BLOOM = {
+  STRENGTH: 0.55,          // was 0.8
+  RADIUS: 0.55,
+  THRESHOLD: 0.45,         // was 0.2 — the main fix for the over-bright zones
 };
 
 // Replace this reserved example URL with the deployed City-Wide Portal endpoint.
@@ -107,10 +134,10 @@ export const ENDING = {
       fil: 'Naglalaho ang mga Hibla, ngunit hindi malilimutan ang kanilang pinag-ugnay.'
     },
   ],
-  // The gameplay bloom (0.8 / 0.6 / 0.2) is tuned for the dark underwater
-  // world; the bright ending scenes push everything over that low threshold
-  // and wash out. These gentler values apply for the whole ending sequence so
-  // only true emitters (string beads, portal core) bloom.
+  // The gameplay bloom (see the BLOOM block) is tuned for the dark underwater
+  // world; the bright ending scenes push everything over its threshold and wash
+  // out. These gentler values apply for the whole ending sequence so only true
+  // emitters (string beads, portal core) bloom.
   BLOOM: {
     STRENGTH: 0.4,
     RADIUS: 0.45,
@@ -146,6 +173,11 @@ export const MUSEUM = {
     HALF_W: 3.5,           // wing half-width (z extent about DOOR_Z)
   },
   SLOTS_PER_ZONE: 12,      // pre-built frame slots per zone section (main room + each wing)
+  // Gentler bloom for the walkable hub than the gameplay default (see BLOOM).
+  // The gallery has no signature string-glow to protect, so a lower strength +
+  // higher threshold keeps the marble/plaster surfaces and picture bulbs clean
+  // instead of hazing out. Stashed/restored around zone entry (see Game.js).
+  BLOOM: { STRENGTH: 0.35, RADIUS: 0.5, THRESHOLD: 0.5 },
   SOUL_ALTAR: {
     X: 0,
     Z: 0,
@@ -170,6 +202,14 @@ export const GUARDIAN = {
 
 // Riddle challenge: how many bugtong must be solved (drawn from the larger pool).
 export const RIDDLE_COUNT = 3;
+
+// Per-run world seed. ES modules are singletons, so this is generated exactly
+// once per page load (= one playthrough) and stays stable for the whole run.
+// It partitions the riddle pool into one disjoint block per zone arena (see
+// `riddlesForZone` in data/riddles.js): a bugtong never appears in two zones in
+// the same run, while each retry rotates a fresh window through the zone's block
+// so retries show different riddles. A different run reshuffles all blocks.
+export const WORLD_SEED = (Math.random() * 0x1_0000_0000) >>> 0;
 
 // Artifact scatter (post-arena return): every still-uncollected artifact bursts
 // from the return origin and arcs out to spread-out landing points.
@@ -242,7 +282,10 @@ export const COMBAT = {
   SPAWN_RADIUS_MAX: 12,
   SPAWN_MIN_PLAYER_DIST: 5,
   POOL_BOLTS: 16,
-  POOL_SPITS: 24,
+  // Every hostile projectile shares this pool. The Feastkeeper's Spiral Feast puts
+  // ~25 rounds in the air on its own, so 24 would silently starve the spitter adds
+  // (ProjectilePool.fire returns null when exhausted) for the length of a volley.
+  POOL_SPITS: 48,
   LEASH_RADIUS: 24,           // walk this far from the artifact → fight resets
   HURT_FLASH: 0.25,           // seconds the red vignette holds
   // Pathfinding: a per-zone walkability grid + BFS flow field toward the
@@ -297,6 +340,12 @@ export const HUD = {
   THREAT_INTERVAL: 0.05,      // seconds between marker refreshes (~20 Hz)
   THREAT_MARGIN: 0.4,        // pull off-screen arrows inward, nearer the crosshair
   HEALTH_LAG: 1.1,            // ghost-fill drain rate, fraction of the bar per second
+  // Floating combat text (src/ui/_partials/CombatPopups.js). The pool is sized
+  // for a busy wave plus a boss hit streak without recycling a label mid-read.
+  POPUPS: 16,                 // floating combat labels in flight
+  POPUP_LIFE: 0.85,           // seconds a damage number lives
+  POPUP_CALLOUT_LIFE: 1.25,   // ARMOR BROKEN / ENRAGED linger longer
+  POPUP_RISE: 1.15,           // world units per second a label drifts upward
 };
 
 // Memory Arena (Strings v2.0) — the instanced combat space entered from a main
@@ -340,6 +389,19 @@ export const RAIL_ARENA = {
   LAYER_SPEED: { near: 1.2, mid: 1.0, far: 0.55 },
   CAMERA_BOB: 0.08,
   CAMERA_ROLL: 0.018,
+  // Aim cone for the rail encounter: the player is riding a forward-facing bangka,
+  // so the gaze stays on the lane ahead instead of turning back over the stern.
+  // Radians, measured from straight ahead (-Z, the boat's heading).
+  LOOK_YAW_CENTER: 0,
+  LOOK_YAW_RANGE: 1.22,   // ~70 deg left/right; widened to cover the lateral drift
+  LOOK_PITCH_UP: 0.61,    // ~35 deg
+  LOOK_PITCH_DOWN: 0.52,  // ~30 deg
+  // Lateral drift: the bangka wanders across the current instead of holding a
+  // dead-straight line, so lanterns never sit at a fixed screen offset. Seeded
+  // value noise — organic, but identical for a given run seed.
+  DRIFT_RANGE: 0.6,       // metres off CENTER.x at full swing
+  DRIFT_PERIOD: 3.5,      // seconds per noise key; a full meander runs ~10s
+  DRIFT_KEYS: 9,          // noise samples before the wander cycles
   ROUNDS: RIDDLE_COUNT,
   RIDDLE_TIMES: [20, 55, 90],
   PROMPT_DELAY: 3,
@@ -410,9 +472,16 @@ export const TOWER_ARENA = {
     HEIGHT_FOLLOW: 5,
   },
   GATE_HEIGHTS: [6, 12, 18],
-  GATE_CHOICE_GAP: 3.8,
-  WRONG_SLOW: 0.55,
-  WRONG_SLOW_TIME: 4,
+  // Seal consoles: the player walks up to one and taps E to read its bugtong.
+  // CONSOLE_OFFSET pushes the plinth sideways off the walking lane — the gate
+  // landing's half-extent is GATE_LANDING_HALF (3.0) and the ramp is RAMP_WIDTH
+  // (3.2) wide, so 2.1 clears the lane while staying on the slab.
+  CONSOLE_OFFSET: 2.1,
+  CONSOLE_RANGE: 2.8,
+  // A wrong bugtong answer surges the tide instead of burdening movement: the
+  // tower's only real currency is vertical clearance, and a slow that stacks with
+  // a rising flood reads as a death sentence rather than a setback.
+  WRONG_TIDE_SURGE: 1.2,
   VERTICAL_LUMINA_BAND: 1.5,
 };
 
@@ -449,6 +518,9 @@ export const WORLD_UP = new THREE.Vector3(0, 1, 0);
 export function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 
 export function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// Shortest signed distance between two angles, in (-PI, PI].
+export function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // Small seeded PRNG for deterministic placement.
 export function mulberry32(a) {

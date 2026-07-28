@@ -64,6 +64,9 @@ export class CombatManager {
 
     // Every DOM overlay a fight owns lives in CombatHud; this class only calls it.
     this.hud = new CombatHud();
+    // Floating combat text reprojects itself each frame, so the HUD needs the
+    // camera up front rather than on every hit.
+    this.hud.setCamera(camera);
 
     // scratch vectors — combat runs every frame, so no per-frame allocation
     this._vMuzzle = new THREE.Vector3();
@@ -119,11 +122,16 @@ export class CombatManager {
   registerPlayerBoltHit(defeated = false) {
     // Hits landed by the rapid-fire release do not feed Alab back into itself.
     if (this._alabActive) return;
+    const wasFull = this._alabCharge >= 1;
     this._alabCharge = Math.min(
       1,
       this._alabCharge + COMBAT.ALAB.HIT_GAIN + (defeated ? COMBAT.ALAB.KILL_GAIN : 0),
     );
     this.hud.setAlab(this._alabCharge, this._alabActive);
+    // The guide listens for this to teach the R release the first time the bar fills.
+    if (!wasFull && this._alabCharge >= 1) {
+      document.dispatchEvent(new CustomEvent('strings:alab-ready'));
+    }
   }
 
   // Begin a fight: waves spawn around `origin` (a THREE.Vector3). Options:
@@ -155,6 +163,11 @@ export class CombatManager {
     this._flowTimer = 0;
     if (this._wavesHeld) this.hud.setWave(0, this._waveTotal());
     else this._spawnWave();
+    // The hop is a combat verb, not a traversal one, so it only exists inside a
+    // fight. Zone 2's and Zone 3's managers override startFight without calling
+    // super, which scopes this to the Memory Arena — correct, since the rail boat
+    // is movement-locked and the tower's ascent reads altitude off `eyeBase`.
+    this.player.setJumpEnabled(true);
     this.hud.show();
     this._updateHealthUi();
   }
@@ -225,6 +238,7 @@ export class CombatManager {
     this._alabActive = false;
     this._alabCooldown = 0;
     this.hud.setAlab(this._alabCharge, false);
+    this.player.setJumpEnabled(false);   // also lands the player if the fight ends mid-hop
     if (!preserveVfx) this.vfx.reset();
     this._hideHud();
   }
@@ -342,10 +356,25 @@ export class CombatManager {
     this._hurtTimer = COMBAT.HURT_FLASH;
     this.hud.hurt(true);
     if (sourcePos) this.hud.damageFrom(sourcePos, this.camera);
+    // Sourceless damage (a wrong answer, a missed rail shot) still gets a
+    // number — anchored just ahead of the camera so it reads centre-screen.
+    this.hud.popupPlayerDamage(sourcePos || this._playerPopupAnchor(), dmg);
     this._fovPunch = Math.min(10, this._fovPunch + COMBAT.FEEL.FOV_PUNCH);
     this._playDamageSound();
     this._updateHealthUi();
     if (this.hp <= 0) this._playerDied = true;   // Game consumes → combat faint
+  }
+
+  // A world point a few metres down the view axis, used when a hit has no
+  // attacker to point at. Its own scratch pair: the shared muzzle/dir vectors
+  // are live inside the bolt pass this can be called from.
+  _playerPopupAnchor() {
+    this._vAnchorDir ||= new THREE.Vector3();
+    this._vAnchor ||= new THREE.Vector3();
+    this.camera.getWorldDirection(this._vAnchorDir);
+    return this._vAnchor.copy(this.camera.position)
+      .addScaledVector(this._vAnchorDir, 4)
+      .setY(this.camera.position.y - 0.35);
   }
 
   _playDamageSound() { this.audio.playPlayerHurt(); }
@@ -463,7 +492,10 @@ export class CombatManager {
         this._vDir.copy(s.vel).setY(0).normalize();
         this.bolts.deactivate(s);
         this._hitMarker();
+        // Report what actually landed, so a killing blow never prints overkill.
+        const applied = Math.min(e.hp, this.boltDamage);
         const defeated = e.hit(this.boltDamage);
+        this.hud.popupDamage(this._vEnemy, applied);
         this.registerPlayerBoltHit(defeated);
         if (defeated) {
           this.audio.playEnemyDeath();
@@ -486,6 +518,9 @@ export class CombatManager {
     }
 
     // Hostile spits vs the player: XZ circle + a generous vertical band.
+    // At most ONE spit lands per frame: a boss bullet-pattern can put several
+    // rounds inside the hitbox on the same tick, and without this the player eats
+    // the whole cluster at once with no i-frames to absorb it.
     for (const s of this.spits.slots) {
       if (!s.active) continue;
       const dx = s.mesh.position.x - playerPos.x;
@@ -497,8 +532,10 @@ export class CombatManager {
       // impact point (which is the player's own position).
       this._vSource.copy(s.mesh.position).addScaledVector(s.vel, -0.5);
       this.vfx.projectileImpact(s.mesh.position);
+      const dealt = s.damage ?? COMBAT.SPITTER.DAMAGE;
       this.spits.deactivate(s);
-      this._damagePlayer(COMBAT.SPITTER.DAMAGE, this._vSource);
+      this._damagePlayer(dealt, this._vSource);
+      break;
     }
 
     this._reapAndUpdate(simDt, t, playerPos, dt);
@@ -584,6 +621,9 @@ export class CombatManager {
     this.hud.dispose();
     this._onEnemyDefeated = null;
     this.setOvercharge(false);
+    // Teardown doesn't route through abortFight, so disarm here too — otherwise
+    // leaving a zone mid-fight carries the combat hop into the museum.
+    this.player.setJumpEnabled(false);
     this.camera.fov = this._baseFov;
     this.camera.updateProjectionMatrix();
     this._hideHud();

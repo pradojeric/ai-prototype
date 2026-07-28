@@ -5,6 +5,7 @@ const CONTROL_HINTS = Object.freeze({
   interact: ['Interaction', 'E — Reach toward the memory'],
   cast: ['Combat', 'Click — Cast Light'],
   release: ['Cursor', 'Esc — Release the cursor'],
+  alab: ['Alab Ready', 'R — Release Alab for rapid fire'],
 });
 
 const LUMINA_HINTS = Object.freeze({
@@ -41,6 +42,8 @@ export class JourneyGuide {
 
     this._onLumina = (event) => this.showLumina(event.detail?.type);
     document.addEventListener('strings:lumina-effect', this._onLumina);
+    this._onAlabReady = () => this.showControl('alab');
+    document.addEventListener('strings:alab-ready', this._onAlabReady);
   }
 
   setObjective(model, animate = true) {
@@ -99,6 +102,7 @@ export class JourneyGuide {
     this.disposed = true;
     this.queue.length = 0;
     document.removeEventListener('strings:lumina-effect', this._onLumina);
+    document.removeEventListener('strings:alab-ready', this._onAlabReady);
   }
 
   _setProgress(

@@ -97,6 +97,7 @@ export class ArenaBoss {
     const impact = position || this.center();
     if (this.shieldVfx) this.shieldVfx.impact(impact);
     else this.combat.vfx.keeperPulse(impact, 'telegraph');
+    this.combat.hud.popupBlocked(impact);
     this.audio?.playHit?.();
   }
 
@@ -110,7 +111,25 @@ export class ArenaBoss {
       this._armorBreakAudioFinal = remaining <= 0;
     } else {
       this.audio?.playArmorBreak?.(remaining <= 0);
+      this._announceArmorBreak(remaining <= 0);
     }
+  }
+
+  // Armor callouts ride the same clock as the crack and its sound, so the text
+  // never arrives before the shell visibly gives way.
+  _announceArmorBreak(final) {
+    this.combat.hud.popupCallout(
+      this._calloutAnchor(),
+      final ? 'SHIELD SHATTERED' : 'ARMOR BROKEN',
+    );
+  }
+
+  // Callouts sit above the chest so they clear the damage numbers landing on it.
+  _calloutAnchor() {
+    const anchor = (this._callout ||= new THREE.Vector3());
+    anchor.copy(this.guardian.center());
+    anchor.y += 1.5;
+    return anchor;
   }
 
   _updateVfx(dt) {
@@ -120,6 +139,7 @@ export class ArenaBoss {
     if (this._armorBreakAudioDelay > 0) return;
     this._armorBreakAudioDelay = -1;
     this.audio?.playArmorBreak?.(this._armorBreakAudioFinal);
+    this._announceArmorBreak(this._armorBreakAudioFinal);
   }
 
   // Pre-boss hit test. The guardian is unkillable until its bugtong armor is
@@ -171,10 +191,12 @@ export class ArenaBoss {
 
   damage(amount, position = null) {
     if (this.defeated || amount <= 0) return;
+    const applied = Math.min(this.hp, amount);   // never print overkill
     this.hp = Math.max(0, this.hp - amount);
     this.audio?.playHit?.();
     this.combat.hud.hitMarker();
     const impact = position || this.center();
+    this.combat.hud.popupDamage(impact, applied);
     if (this.shieldVfx) this.shieldVfx.hit(impact);
     else if (this._vfxStyle) this.combat.vfx.bossHit(impact, this._vfxStyle);
     else this.combat.vfx.keeperPulse(impact, 'hit');
@@ -194,6 +216,7 @@ export class ArenaBoss {
 
     this.phase = next;
     this._invuln = this.tuning.ENRAGE_INVULN;
+    this.combat.hud.popupCallout(this._calloutAnchor(), 'ENRAGED');
     if (this.shieldVfx) {
       this.shieldVfx.phaseShift(this.phase);
       if (this.audio?.playBossPhase) this.audio.playBossPhase(this.phase);

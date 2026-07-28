@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
 import { fadeMat, pulseEmissive, stackedLimb, spiralCore, angDelta } from './primitives.js';
+import { skin } from './_partials/GuardianTextureKit.js';
 
 // A wavy tentacle: a chain of nested joints (each holds a tapered bead), so
 // rotating the joints propagates a travelling curl. Returns joints for animation.
@@ -57,6 +58,18 @@ export function buildZone2Guardian(figure) {
     [matBody, 0.9], [matMask, 0.92], [matCoral, 0.9], [matFin, 0.5],
     [matCyan, 0.96], [matGlow, 0.96],
   ];
+  // --- CC0 surface detail (see `_partials/GuardianTextureKit.js`) -----------
+  // ambientCG has no coral material, so Sponge001 stands in: its porous organic
+  // relief is the closest thing to reef structure in a CC0 library. Its albedo is
+  // a strong orange, which would turn the body's teal and the accents' pink to mud
+  // when multiplied — so both take normals + roughness only, and the authored coral
+  // palette carries the colour by itself. The mask is the one hard, polished surface
+  // on this guardian, so it keeps marble's albedo and veining under the ice-blue tint.
+  skin(matBody, 'sponge', { repeat: 2, albedo: false });
+  skin(matCoral, 'sponge', { repeat: 3, albedo: false });
+  skin(matMask, 'marble', { repeat: 1 });
+  skin(matFin, 'fabric', { repeat: 2 });    // woven weft across the draped mantle
+
   const beadGeo = new THREE.SphereGeometry(1, 8, 6);      // unit bead (scaled per use)
   const relicGeo = new THREE.SphereGeometry(0.14, 10, 8);
 

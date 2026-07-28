@@ -14,8 +14,54 @@ export class RailScenery {
     scene.add(this.root);
     this.layers = { near: [], mid: [], far: [] };
     this.materials = this._createMaterials();
+    this._adoptRollSafeLook();
     this._buildBoat();
     this._buildRiver(rng);
+    // Seeded so a given run's drift is reproducible; drawn after the river so the
+    // scenery layout keeps the rng sequence it was authored against.
+    this._driftKeys = Array.from({ length: RAIL_ARENA.DRIFT_KEYS }, () => rng() * 2 - 1);
+    this._driftKeys[0] = 0;   // start dead centre, then ease out into the wander
+    this._driftStart = null;  // first update's clock, so the noise begins at key 0
+  }
+
+  // Lateral wander, in metres off CENTER.x. Value noise: smoothstep between
+  // seeded keys, cycling through the key ring so it never settles or repeats
+  // on a beat the player can read.
+  _driftOffset(t) {
+    if (this._driftStart === null) this._driftStart = t;
+    const keys = this._driftKeys;
+    const pos = (t - this._driftStart) / RAIL_ARENA.DRIFT_PERIOD;
+    const index = Math.floor(pos);
+    const frac = pos - index;
+    const a = keys[((index % keys.length) + keys.length) % keys.length];
+    const b = keys[(((index + 1) % keys.length) + keys.length) % keys.length];
+    return (a + (b - a) * (frac * frac * (3 - 2 * frac))) * RAIL_ARENA.DRIFT_RANGE;
+  }
+
+  // The boat sway rolls the player camera (see update). PointerLockControls
+  // rebuilds yaw/pitch each mousemove by reading the camera quaternion back as a
+  // YXZ Euler, which is only a lossless round-trip when the quaternion is itself
+  // composed as Y*X*Z — the default XYZ rotation order is not, so a rolled camera
+  // decoded as YXZ leaks roll into yaw/pitch, defeats the pitch clamp, and lets
+  // the view tumble upside down. Switching the camera to YXZ makes the roll
+  // survive the round-trip untouched and keeps look control well behaved.
+  //
+  // The same pass installs the rail aim cone: the player is riding a forward-
+  // facing bangka, so pitch is fenced through PointerLockControls' polar limits
+  // and yaw through the player's own clamp — no turning back over the stern.
+  _adoptRollSafeLook() {
+    const controls = this.player.controls;
+    const object = controls.getObject();
+    this._prevRotationOrder = object.rotation.order;
+    this._prevMinPolar = controls.minPolarAngle;
+    this._prevMaxPolar = controls.maxPolarAngle;
+    // Re-derive from the live quaternion so adopting the new order cannot move
+    // the current gaze (assigning .order alone would reinterpret the old angles).
+    object.rotation.setFromQuaternion(object.quaternion, 'YXZ');
+    // Polar angle is measured from +Y, so up/down limits invert into it.
+    controls.minPolarAngle = Math.PI / 2 - RAIL_ARENA.LOOK_PITCH_UP;
+    controls.maxPolarAngle = Math.PI / 2 + RAIL_ARENA.LOOK_PITCH_DOWN;
+    this.player.setYawLimit(RAIL_ARENA.LOOK_YAW_CENTER, RAIL_ARENA.LOOK_YAW_RANGE);
   }
 
   _createMaterials() {
@@ -180,19 +226,31 @@ export class RailScenery {
 
     const bob = Math.sin(t * 1.35) * 0.1 + Math.sin(t * 2.1 + 0.8) * 0.025;
     const roll = Math.sin(t * 0.92) * 0.035;
+    const drift = this._driftOffset(t);
+    this.boat.position.x = drift;
     this.boat.position.y = CONFIG.WATER_LEVEL + 0.3 + bob;
     this.boat.rotation.z = roll;
     this.boat.rotation.x = Math.sin(t * 0.71) * 0.018;
 
+    // The player rides the same drift. This runs after PlayerController.update
+    // has pinned the locked position to its anchor, so writing the transform
+    // here wins for the frame; the anchor is kept in sync for anything that
+    // reads it (and for the frames the rail phase is paused).
     const object = this.player.controls.getObject();
+    object.position.x = RAIL_ARENA.CENTER.x + drift;
     object.position.y = RAIL_ARENA.BOAT_EYE_BASE + CONFIG.EYE_HEIGHT +
       Math.sin(t * 1.35) * RAIL_ARENA.CAMERA_BOB;
     object.rotation.z = Math.sin(t * 0.92) * RAIL_ARENA.CAMERA_ROLL;
+    this.player.movementAnchor.copy(object.position);
   }
 
   dispose() {
     const object = this.player.controls.getObject();
-    object.rotation.z = 0;
+    object.rotation.z = 0;                       // level the roll before restoring
+    object.rotation.setFromQuaternion(object.quaternion, this._prevRotationOrder);
+    this.player.controls.minPolarAngle = this._prevMinPolar;
+    this.player.controls.maxPolarAngle = this._prevMaxPolar;
+    this.player.clearYawLimit();
     this.scene.remove(this.root);
     this.root.traverse((child) => { if (child.geometry) child.geometry.dispose(); });
     for (const material of Object.values(this.materials)) material.dispose();

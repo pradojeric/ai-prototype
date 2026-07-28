@@ -72,13 +72,6 @@ export class RevelerProjectilePool {
     return false;
   }
 
-  get formationLocked() {
-    for (const slot of this.slots) {
-      if (slot.active && (slot.state === 'charging' || slot.state === 'queued')) return true;
-    }
-    return false;
-  }
-
   spawnFormation(count, rng) {
     if (this.hasActive) return 0;
     const available = Math.max(0, Math.min(count, this.slots.length));

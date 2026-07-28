@@ -12,6 +12,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { HUD, clamp01 } from '../config.js';
+import { CombatPopups } from './_partials/CombatPopups.js';
 
 export class CombatHud {
   constructor() {
@@ -55,6 +56,7 @@ export class CombatHud {
     this._arcs = this._buildPool('dmg-arcs', HUD.DMG_ARCS, 'dmg-arc');
     this._arcState = this._arcs.map(() => ({ life: 0, angle: 0 }));
     this._markers = this._buildPool('threat-markers', HUD.THREAT_MARKERS, 'threat-marker');
+    this._popups = new CombatPopups('combat-popups', HUD.POPUPS);
 
     // Scratch — the threat pass runs every frame over every live enemy.
     this._v = new THREE.Vector3();
@@ -313,6 +315,30 @@ export class CombatHud {
     this._arcs[slot].style.opacity = '1';
   }
 
+  // ---- floating combat text ---------------------------------------------
+
+  // Popups reproject every frame, so the camera is handed over once (by
+  // CombatManager) instead of being passed on every hit.
+  setCamera(camera) { this._popups.setCamera(camera); }
+
+  // Damage the player dealt. Fractional bolt damage (overcharge) is rounded so
+  // the number stays a number, and a hit that rounds to zero still shows 1 —
+  // silence would read as a miss.
+  popupDamage(position, amount) {
+    if (amount <= 0) return;
+    this._popups.spawn(position, String(Math.max(1, Math.round(amount))), 'damage');
+  }
+
+  // Damage the player took, at the position of whatever dealt it.
+  popupPlayerDamage(position, amount) {
+    if (amount <= 0) return;
+    this._popups.spawn(position, String(Math.max(1, Math.round(amount))), 'player');
+  }
+
+  popupBlocked(position) { this._popups.spawn(position, 'BLOCKED', 'blocked'); }
+
+  popupCallout(position, text) { this._popups.spawn(position, text, 'callout'); }
+
   // ---- off-screen threat markers ---------------------------------------
 
   // Enemies the player cannot see get an edge chip pointing at them. Runs on a
@@ -363,11 +389,13 @@ export class CombatHud {
       this._arcs[i].style.opacity = '0';
     }
     for (const marker of this._markers) marker.style.opacity = '0';
+    this._popups.clear();
   }
 
   // Fade the damage arcs and drain the health ghost. Driven on real dt so the
   // HUD keeps settling through hitstop and after a fight ends.
   update(dt) {
+    this._popups.update(dt);
     if (this._healFlashRemaining > 0) {
       this._healFlashRemaining = Math.max(0, this._healFlashRemaining - dt);
       if (this._healFlashRemaining <= 0) this.elHealth.classList.remove('lumina-heal');
@@ -403,5 +431,6 @@ export class CombatHud {
     for (const el of this._markers) el.remove();
     this._arcs.length = 0;
     this._markers.length = 0;
+    this._popups.dispose();
   }
 }

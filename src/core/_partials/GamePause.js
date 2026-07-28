@@ -150,7 +150,13 @@ export class GamePauseController {
   _phaseNeedsPointerLock() {
     if (!POINTER_PHASES.has(this.game.phase)) return false;
     if (this.game.discovery?.active) return false;
-    if (document.getElementById('riddle')?.classList.contains('active')) return false;
+    // A click-driven riddle card wants the cursor free on resume. Arena 3's seal
+    // bugtong is answered with the number keys while the tower keeps running, so
+    // that one must reclaim pointer lock or the player resumes unable to move.
+    const riddle = document.getElementById('riddle');
+    if (riddle?.classList.contains('active') && !riddle.classList.contains('keys')) {
+      return false;
+    }
     return true;
   }
 

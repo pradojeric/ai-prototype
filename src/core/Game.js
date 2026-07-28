@@ -537,6 +537,16 @@ export class Game {
     // already-filled slots, so calling it on every museum entry just adds the
     // newly recovered pieces (idempotent).
     this.museum.setHubLighting(true);
+    // Swap to the gentler hub bloom (stash the gameplay values so zone entry can
+    // restore them). Guarded so repeated hub entries don't stash the hub values.
+    if (!this._preHubBloom) {
+      this._preHubBloom = {
+        strength: this.bloom.strength, radius: this.bloom.radius, threshold: this.bloom.threshold,
+      };
+      this.bloom.strength = MUSEUM.BLOOM.STRENGTH;
+      this.bloom.radius = MUSEUM.BLOOM.RADIUS;
+      this.bloom.threshold = MUSEUM.BLOOM.THRESHOLD;
+    }
     this.museum.populate(this._collectedArtifacts());
     this._syncMuseumSouls();
     this._syncJourneyGuide();
@@ -574,6 +584,13 @@ export class Game {
     this.elFlash.style.opacity = '1';
     void this.elFlash.offsetHeight;
     this.elFlash.style.transition = '';
+    // Restore the gameplay bloom the hub swapped out (see _enterMuseum).
+    if (this._preHubBloom) {
+      this.bloom.strength = this._preHubBloom.strength;
+      this.bloom.radius = this._preHubBloom.radius;
+      this.bloom.threshold = this._preHubBloom.threshold;
+      this._preHubBloom = null;
+    }
     this._loadZone(zoneId);
     this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
   }
@@ -780,7 +797,9 @@ export class Game {
         this._arenaFaint(); this.composer.render(); return;
       }
       if (this.arena && !this.busy) {
-        this.arena.update(dt, t, playerPos);
+        // The tap is passed through for Arena 3's seal consoles; the other two
+        // arena controllers ignore the extra argument.
+        this.arena.update(dt, t, playerPos, this._ePressed);
         if (this.arena.consumeFailure?.()) {
           this._arenaFaint(); this.composer.render(); return;
         }

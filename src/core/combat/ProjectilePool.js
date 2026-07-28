@@ -31,6 +31,7 @@ export class ProjectilePool {
         owner: null,
         reflected: false,
         source: null,
+        damage: null,   // null = the firer's default; set for bespoke shots (boss patterns)
       });
     }
   }
@@ -48,6 +49,7 @@ export class ProjectilePool {
       s.owner = meta.owner ?? null;
       s.reflected = meta.reflected ?? false;
       s.source = meta.source ?? null;
+      s.damage = meta.damage ?? null;
       return s;
     }
     return null;
@@ -59,6 +61,7 @@ export class ProjectilePool {
     slot.owner = null;
     slot.reflected = false;
     slot.source = null;
+    slot.damage = null;
   }
 
   // Advance live bolts; kill on expiry, wall hit, or sinking below the seabed.

@@ -18,6 +18,7 @@ export class TowerArenaController {
     this.phase = 'ascent';
     this.elapsed = 0;
     this.waterHeight = TOWER_ARENA.BASE_WATER_HEIGHT;
+    this._tidePenalty = 0;   // accumulated metres from wrong bugtong answers
     this.combat = null;
     this.keeper = null;
     this.gates = null;
@@ -37,8 +38,6 @@ export class TowerArenaController {
     this.elRisk = document.getElementById('tower-risk');
     this.elSealCount = document.getElementById('tower-seal-count');
     this.elSealPips = [...(document.getElementById('tower-seals')?.children || [])];
-    this.elSlow = document.getElementById('tower-slow');
-    this.elSlowTime = document.getElementById('tower-slow-time');
     this.elEvent = document.getElementById('tower-event');
   }
 
@@ -61,7 +60,13 @@ export class TowerArenaController {
       this.player,
       {
         onEvent: (text, tone) => this.showEvent(text, tone),
-        onSlow: () => this._renderSlow(),
+        // A missed bugtong permanently raises the flood for this attempt. It has
+        // to accumulate into a term the per-frame water formula reads, because
+        // _updateAscent recomputes waterHeight from `elapsed` every frame and
+        // would erase a direct write.
+        onTideSurge: () => {
+          this._tidePenalty += TOWER_ARENA.WRONG_TIDE_SURGE;
+        },
         onSeal: () => this._renderSeals(),
       },
     );
@@ -104,6 +109,7 @@ export class TowerArenaController {
     this._eventRemaining = 0;
     this._guardianIntroRequested = false;
     this.waterHeight = TOWER_ARENA.BASE_WATER_HEIGHT;
+    this._tidePenalty = 0;
     this.world.setWaterLevel(this.waterHeight);
     this._resetPlayerState();
     this._createGates(false);
@@ -118,7 +124,6 @@ export class TowerArenaController {
     this.elHud?.classList.remove('warning', 'critical');
     this.elEvent?.classList.remove('active', 'warning', 'success');
     this._renderSeals();
-    this._renderSlow();
   }
 
   _beginBossPhase() {
@@ -129,8 +134,8 @@ export class TowerArenaController {
     this.combat.beginBossPhase();
     // The final seal opens on the summit landing, so this transition fires the same
     // frame it is answered — after which the boss loop never ticks the gate manager
-    // again. Finalize the gates now so the last seal's answer nodes and veil are
-    // disposed instead of freezing mid-break on the deck.
+    // again. Finalize the gates now so the last seal's veil and console are settled
+    // instead of freezing mid-fade on the deck.
     this.gates.openAll();
     this.lumina.reset(
       (this.seed ^ LUMINA.SEED ^ Math.imul(this._attempt, 0x9e3779b1)) >>> 0,
@@ -153,6 +158,7 @@ export class TowerArenaController {
     this.elapsed = 0;
     this._eventRemaining = 0;
     this.waterHeight = TOWER_ARENA.BOSS_WATER_HEIGHT;
+    this._tidePenalty = 0;
     this.world.setWaterLevel(this.waterHeight);
     this._resetPlayerState();
     this._createGates(true);
@@ -172,7 +178,6 @@ export class TowerArenaController {
     this.keeper.begin();
     this.showEvent('The Keeper reforms at the summit', 'warning');
     this._renderSeals();
-    this._renderSlow();
   }
 
   restartAfterFaint(combat) {
@@ -183,7 +188,7 @@ export class TowerArenaController {
     this.begin(combat);
   }
 
-  update(dt, t, playerPos) {
+  update(dt, t, playerPos, ePressed = false) {
     if (this.failed || !this.player.controls.isLocked) return;
     this._updateEvent(dt);
     if (this.phase === 'boss') {
@@ -191,18 +196,18 @@ export class TowerArenaController {
       return;
     }
     if (this.phase !== 'ascent') return;
-    this._updateAscent(dt, t, playerPos);
+    this._updateAscent(dt, t, playerPos, ePressed);
   }
 
-  _updateAscent(dt, t, playerPos) {
+  _updateAscent(dt, t, playerPos, ePressed) {
     this.elapsed += dt;
     const rise = Math.max(0, this.elapsed - TOWER_ARENA.GRACE_DURATION);
     this.waterHeight = Math.min(
       TOWER_ARENA.MAX_WATER_HEIGHT,
-      TOWER_ARENA.BASE_WATER_HEIGHT + rise * TOWER_ARENA.RISE_SPEED,
+      TOWER_ARENA.BASE_WATER_HEIGHT + rise * TOWER_ARENA.RISE_SPEED + this._tidePenalty,
     );
     this.world.setWaterLevel(this.waterHeight);
-    this.gates.update(dt, t, playerPos);
+    this.gates.update(dt, t, playerPos, ePressed);
 
     const atSummitHeight = this.player.eyeBase >= TOWER_ARENA.SUMMIT_HEIGHT - 0.8;
     const summitRadius = Math.max(1, (this.world.towerSummitBounds?.radius || 9) - 0.35);
@@ -279,7 +284,6 @@ export class TowerArenaController {
       this.elRisk.textContent = isCritical ? 'Drowning' : isWarning ? 'Tide close' : 'Air stable';
     }
     this._renderSeals();
-    this._renderSlow();
   }
 
   _renderSeals() {
@@ -289,12 +293,6 @@ export class TowerArenaController {
     }
     if (this.elSealCount) this.elSealCount.textContent = `${opened} / 3`;
     this.elSealPips.forEach((pip, index) => pip.classList.toggle('open', index < opened));
-  }
-
-  _renderSlow() {
-    const remaining = this.gates?.slowRemaining || 0;
-    this.elSlow?.classList.toggle('active', remaining > 0);
-    if (this.elSlowTime) this.elSlowTime.textContent = remaining.toFixed(1);
   }
 
   consumeFailure() {
@@ -350,7 +348,6 @@ export class TowerArenaController {
     this.combat?.hud.hideBoss();
     this.elEvent?.classList.remove('active');
     this.elHud?.classList.remove('active', 'warning', 'critical');
-    this.elSlow?.classList.remove('active');
   }
 
   guardianCenter() {
@@ -366,6 +363,5 @@ export class TowerArenaController {
     this.combat?.hud.hideBoss();
     this.elHud?.classList.remove('active', 'warning', 'critical');
     this.elEvent?.classList.remove('active', 'warning', 'success');
-    this.elSlow?.classList.remove('active');
   }
 }

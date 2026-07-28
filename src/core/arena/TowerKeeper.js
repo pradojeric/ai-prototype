@@ -11,7 +11,7 @@ const HIT_FLASH_GAIN = 1.15;
 const DEBRIS_POOL_SIZE = 9;
 
 export const TOWER_KEEPER_TUNING = {
-  HP: 200,
+  HP: 500,
   VFX_STYLE: 'zone3',
   HIT_RADIUS: 2.3,
   PHASE_THRESHOLDS: [0.66, 0.33],
@@ -404,7 +404,7 @@ export class TowerKeeper extends ArenaBoss {
 
       const impact = slot.warning.position;
       if (Math.hypot(playerPos.x - impact.x, playerPos.z - impact.z) <=
-          this.tuning.DEBRIS_RADIUS) {
+        this.tuning.DEBRIS_RADIUS) {
         this.combat.damage(this.tuning.DEBRIS_DAMAGE, impact);
         this.player.applyKnockback(
           playerPos.x - impact.x,
@@ -469,8 +469,8 @@ export class TowerKeeper extends ArenaBoss {
         Math.cos(playerAngle - beamAngle),
       );
       if (Math.abs(Math.sin(difference) * distance) <=
-          this.tuning.BEAM_WIDTH * 0.5 &&
-          Math.cos(difference) > 0) return true;
+        this.tuning.BEAM_WIDTH * 0.5 &&
+        Math.cos(difference) > 0) return true;
     }
     return false;
   }

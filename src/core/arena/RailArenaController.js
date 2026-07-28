@@ -5,7 +5,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { LUMINA, RAIL_ARENA, mulberry32 } from '../../config.js';
-import { drawRiddles } from '../../data.js';
+import { riddlesForZone } from '../../data.js';
 import { LanternProjectile } from './LanternProjectile.js';
 import { LuminaManager } from './LuminaManager.js';
 import { RailScenery } from './RailScenery.js';
@@ -75,7 +75,10 @@ export class RailArenaController {
     this._phaseTimer = 0;
     this._attempt++;
     this._rng = mulberry32((this.seed ^ Math.imul(this._attempt, 0x9e3779b1)) >>> 0);
-    this._riddles = drawRiddles(RAIL_ARENA.ROUNDS + 2, this._rng);
+    // Draw from this arena's own riddle block (disjoint from other zones, so no
+    // bugtong repeats across zones); each retry rotates to a fresh set. The
+    // per-attempt _rng above still drives spawn/scenery randomness.
+    this._riddles = riddlesForZone(this.world.zone.id, RAIL_ARENA.ROUNDS + 2);
     this._beginAttempt();
 
     this.combat.startFight(this._center);

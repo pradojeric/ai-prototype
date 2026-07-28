@@ -7,6 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { BLOOM } from '../../config.js';
 
 export function createGameRenderer() {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -27,11 +28,14 @@ export function createPostProcessing(renderer, scene, camera) {
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
+  // Gameplay bloom (CONFIG's BLOOM block). Game.js stashes and restores these live
+  // values around the museum hub and the ending, so changing them here carries into
+  // every scene that borrows the gameplay look.
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight),
-    0.8,
-    0.6,
-    0.2,
+    BLOOM.STRENGTH,
+    BLOOM.RADIUS,
+    BLOOM.THRESHOLD,
   );
   composer.addPass(bloom);
 

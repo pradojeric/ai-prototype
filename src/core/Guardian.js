@@ -152,6 +152,12 @@ export class Guardian {
     return this._v;
   }
 
+  // Optional attack pose from the fight layer ('throw' | 'charge' | 'slam'), so a
+  // boss's patterns read on the body and not only in VFX. Optional-chained on
+  // purpose: a zone's builder opts in by exporting `gesture`, and the zones that
+  // don't need stubs.
+  gesture(kind) { this._body?.gesture?.(kind); }
+
   // Defeat: implode with a bigger puff, hide, and return the world position so the
   // caller can burst the artifacts from here.
   defeat() {

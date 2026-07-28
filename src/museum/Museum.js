@@ -6,6 +6,7 @@
 // cutscene drives a camera over it, and a future hub will render it directly
 // with the player walking and the frames populated by collected artifacts.
 import * as THREE from 'three';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { MUSEUM } from '../config.js';
 import { createVortexMaterial } from './PortalVortex.js';
 import { SoulPedestal } from './_partials/SoulPedestal.js';
@@ -53,6 +54,7 @@ export class Museum {
 
     this._lights();
     this._shell();
+    this._loadTextures();   // CC0 PBR maps → floor/wall/ceiling surface detail
     this._frames();
     this._wings();
     this._portalSigns();
@@ -87,6 +89,55 @@ export class Museum {
 
   _geo(g) { this._geos.push(g); return g; }
 
+  // Bake world-size-proportional UV repeats into a plane geometry so a shared
+  // tiling texture keeps consistent texel density on planes of very different
+  // sizes (walls, floor, ceiling). `mat.userData.tile` = world units per repeat;
+  // no-op for untextured materials (hallway walls) so it is always safe to call.
+  _tilePlane(geo, w, h, mat) {
+    const t = mat && mat.userData && mat.userData.tile;
+    if (!t) return geo;
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / t, uv.getY(i) * h / t);
+    uv.needsUpdate = true;
+    return geo;
+  }
+
+  // Load the committed CC0 (ambientCG) museum texture sets and bind them to the
+  // shell materials. Mirrors RestoredKit._loadTextures: color(sRGB)/normal/rough,
+  // RepeatWrapping so the baked per-plane UVs tile. Crucially, `.color` is left
+  // untouched — the dark-intro / bright-hub tint (see _shell / setHubLighting)
+  // stays the mood driver; the albedo map just multiplies against it for detail.
+  _loadTextures() {
+    this._texLoader ||= new THREE.TextureLoader();
+    const base = 'assets/textures/';
+    const load = (name) => {
+      const color = this._texLoader.load(base + name + '/color.jpg');
+      color.colorSpace = THREE.SRGBColorSpace;
+      const normal = this._texLoader.load(base + name + '/normal.jpg');
+      const rough = this._texLoader.load(base + name + '/roughness.jpg');
+      for (const tx of [color, normal, rough]) {
+        tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+        tx.anisotropy = 4;
+        this._texs.push(tx);
+      }
+      return { color, normal, rough };
+    };
+    const apply = (mat, set) => {
+      mat.map = set.color;
+      mat.normalMap = set.normal;
+      mat.roughnessMap = set.rough;
+      mat.roughness = 1;          // now driven by the roughness map
+      // Keep IBL gentle per-material (version-proof — Scene.environmentIntensity
+      // only exists in newer three) so the HDRI reflections stay subtle and never
+      // wash out the tuned hub palette or cross the bloom threshold.
+      mat.envMapIntensity = 0.4;
+      mat.needsUpdate = true;     // .color kept as-is: it stays the intro/hub tint
+    };
+    apply(this.floorMat, load('marble'));        // polished marble gallery floor
+    apply(this.wallMat, load('gallery-wall'));   // plaster gallery walls
+    apply(this.ceilMat, load('marble-tiles'));   // tiled ceiling accent
+  }
+
   _lights() {
     // Base fill — the museum is lightly lit and clearly visible the whole intro,
     // lights on or off. The portal "lights on" beat (setHallLit) only adds the
@@ -115,12 +166,18 @@ export class Museum {
     const floorMat = this.floorMat = this._mat({ color: 0x60717d, roughness: 0.85, metalness: 0.1 });
     const wallMat = this.wallMat = this._mat({ color: 0x7e959e, roughness: 0.95 });
     const ceilMat = this.ceilMat = this._mat({ color: 0x4e6068, roughness: 1 });
+    // World units per texture repeat (read by _tilePlane to bake consistent
+    // texel density into every plane sharing the material — large marble slabs
+    // on the floor, plaster runs on the walls, smaller tiles overhead).
+    floorMat.userData.tile = 4.0;
+    wallMat.userData.tile = 4.0;
+    ceilMat.userData.tile = 3.0;
 
-    const floor = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(H * 2, H * 2)), floorMat);
+    const floor = new THREE.Mesh(this._tilePlane(this._geo(new THREE.PlaneGeometry(H * 2, H * 2)), H * 2, H * 2, floorMat), floorMat);
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
 
-    const ceil = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(H * 2, H * 2)), ceilMat);
+    const ceil = new THREE.Mesh(this._tilePlane(this._geo(new THREE.PlaneGeometry(H * 2, H * 2)), H * 2, H * 2, ceilMat), ceilMat);
     ceil.rotation.x = Math.PI / 2;
     ceil.position.y = Y;
     this.scene.add(ceil);
@@ -208,7 +265,7 @@ export class Museum {
 
   // A flat wall panel (plane) of given size, positioned + rotated about Y.
   _wall(mat, x, y, z, w, h, ry) {
-    const m = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(w, h)), mat);
+    const m = new THREE.Mesh(this._tilePlane(this._geo(new THREE.PlaneGeometry(w, h)), w, h, mat), mat);
     m.position.set(x, y, z);
     m.rotation.y = ry;
     this.scene.add(m);
@@ -309,11 +366,11 @@ export class Museum {
     // Shell — floor, ceiling, far wall, two long walls, and the near-wall panels
     // that close the plane x=±H as seen FROM the wing (the main room's wall
     // planes are single-sided and invisible from behind).
-    const floor = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(W.LEN, W.HALF_W * 2)), this.floorMat);
+    const floor = new THREE.Mesh(this._tilePlane(this._geo(new THREE.PlaneGeometry(W.LEN, W.HALF_W * 2)), W.LEN, W.HALF_W * 2, this.floorMat), this.floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(cx, 0, W.DOOR_Z);
     this.scene.add(floor);
-    const ceil = new THREE.Mesh(this._geo(new THREE.PlaneGeometry(W.LEN, W.HALF_W * 2)), this.ceilMat);
+    const ceil = new THREE.Mesh(this._tilePlane(this._geo(new THREE.PlaneGeometry(W.LEN, W.HALF_W * 2)), W.LEN, W.HALF_W * 2, this.ceilMat), this.ceilMat);
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(cx, Y, W.DOOR_Z);
     this.scene.add(ceil);
@@ -491,15 +548,15 @@ export class Museum {
 
     // Base fill does the real lighting work now that the picture spots are gone:
     // warm-tinted key + hemisphere read as gallery lighting without per-fragment cost.
-    g.add(new THREE.AmbientLight(0xffffff, 0.75));
-    g.add(new THREE.HemisphereLight(0xf3f7ff, 0x3a4046, 0.65));
-    const key = new THREE.DirectionalLight(0xfff4e0, 0.7);
+    g.add(new THREE.AmbientLight(0xffffff, 0.55));
+    g.add(new THREE.HemisphereLight(0xf3f7ff, 0x3a4046, 0.5));
+    const key = new THREE.DirectionalLight(0xfff4e0, 0.55);
     key.position.set(0, 8, 3);
     g.add(key);
 
     // Kept modest so the lamps don't bloom into the whole ceiling once the
     // composer's ACES + bloom run (the bulbs sit well above the bloom threshold).
-    const bulbMat = this._mat({ color: 0x000000, emissive: 0xfff2d8, emissiveIntensity: 1.4 });
+    const bulbMat = this._mat({ color: 0x000000, emissive: 0xfff2d8, emissiveIntensity: 0.9 });
     const bulbGeo = this._geo(new THREE.SphereGeometry(0.07, 12, 12));
     const cordMat = this._mat({ color: 0x0c0f10, roughness: 1 });
 
@@ -532,7 +589,7 @@ export class Museum {
       const cord = new THREE.Mesh(this._geo(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 6)), cordMat);
       cord.position.set(cx, y + 0.25, cz);
       g.add(cord);
-      const pl = new THREE.PointLight(0xffe6c0, 1.6, 12, 1.6);
+      const pl = new THREE.PointLight(0xffe6c0, 1.1, 12, 1.6);
       pl.position.set(cx, y, cz);
       g.add(pl);
     }
@@ -619,6 +676,7 @@ export class Museum {
       this.pedMat.color.setHex(0x6a7074);
       this.ambient.intensity = 0.3;    // hubGroup dominates — keep the base fill low
       this.hemi.intensity = 0.25;
+      this._loadEnvironment();         // subtle IBL reflections — hub only
     } else if (this.hubGroup.parent === this.scene) {
       this.scene.remove(this.hubGroup);
       this.floorMat.color.setHex(0x60717d);
@@ -627,7 +685,27 @@ export class Museum {
       this.pedMat.color.setHex(0x303b41);
       this.ambient.intensity = 3.0;    // restore the lightly-lit intro base fill
       this.hemi.intensity = 0.15;
+      this.scene.environment = null;   // intro stays dark & reflection-free
     }
+  }
+
+  // Lazily load the CC0 studio HDRI and set it as the scene environment for the
+  // walkable hub, giving the marble floor and metal frame borders soft real-world
+  // reflections. Hub only — the intro clears it (setHubLighting off) so the moody
+  // opening is unchanged. The equirectangular .hdr is used purely as `environment`
+  // (reflections/IBL); `scene.background` is deliberately left as the dark color.
+  _loadEnvironment() {
+    if (this._envTex) { this.scene.environment = this._envTex; return; }
+    if (this._envLoading) return;
+    this._envLoading = true;
+    new RGBELoader().load('assets/hdri/gallery_1k.hdr', (tex) => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      this._envTex = tex;
+      // Keep IBL gentle so the added ambient light never washes out the tuned
+      // hub palette or crosses the bloom threshold.
+      if ('environmentIntensity' in this.scene) this.scene.environmentIntensity = 0.35;
+      if (this.hubMode) this.scene.environment = tex;   // still in the hub when it arrives
+    });
   }
 
   // Final-state museum: keep the completed gallery walkable and readable, but
@@ -809,6 +887,7 @@ export class Museum {
     this.clear();                 // free any slot-owned art mat/tex first
     this.soulPedestal.dispose();
     if (this._bulbInst) this._bulbInst.dispose();
+    if (this._envTex) { this.scene.environment = null; this._envTex.dispose(); this._envTex = null; }
     for (const g of this._geos) g.dispose();
     for (const m of this._mats) m.dispose();
     for (const t of this._texs) t.dispose();

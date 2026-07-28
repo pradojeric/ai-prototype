@@ -279,7 +279,9 @@ export class TowerCombatManager extends CombatManager {
           (enemy.radius + COMBAT.BOLT.RADIUS) ** 2) continue;
         this.bolts.deactivate(shot);
         this._hitMarker();
+        const applied = Math.min(enemy.hp, this.boltDamage);
         const defeated = enemy.hit(this.boltDamage);
+        this.hud.popupDamage(this._vEnemy, applied);
         this.registerPlayerBoltHit(defeated);
         this.vfx.enemyImpact(this._vEnemy, enemy.type, defeated);
         if (defeated) {
