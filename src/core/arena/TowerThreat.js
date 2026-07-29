@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { TOWER_ARENA } from '../../config.js';
 import { fadeMat, angDelta } from '../guardians/primitives.js';
+import { attachAquaticSpiritVisual } from '../combat/AquaticSpiritVisual.js';
 import { ThreatBody } from '../combat/ThreatBody.js';
 
 const GARGOYLE_GLOW = 0xffc75a;
@@ -37,6 +38,10 @@ export class TowerThreat extends ThreatBody {
     this.world = world;
     this.player = player;
     this.cfg = cfg;
+    // The squid sentry's broad mantle and tentacles need a wider target than its
+    // compact movement blocker. This affects player bolts only; melee spacing,
+    // attacks, and navigation continue to use the authored gameplay radius.
+    this.boltRadius = type === 'gargoyle' ? 1.3 : this.radius;
     this.anchor = anchor;
     this.hudVisible = true;
     this.projectileDamage = cfg.DAMAGE;
@@ -57,6 +62,7 @@ export class TowerThreat extends ThreatBody {
       this.hudVisible = Math.abs(player.eyeBase - this.group.position.y) <= VERTICAL_MARKER_BAND;
     }
     this._buildBody();
+    attachAquaticSpiritVisual(this);
     if (options.placed) this._fade = 1;
   }
 

@@ -30,7 +30,7 @@ export const CONFIG = {
   // Independent of DEBUG_ZONE — leave that false to actually see them.
   DEBUG_SKIP_MUSEUM_BUTTON: true, // true → show the title shortcut into the walkable museum hub
   DEBUG_TEST_ENDING_BUTTON: false, // true → show a title-menu shortcut for the full final cutscene
-  DEBUG_GUARDIAN_ZONE_BUTTON: false, // true → show the title shortcut to the Guardian showroom
+  DEBUG_GUARDIAN_ZONE_BUTTON: true, // true → show the title shortcut to the Guardian showroom
 };
 
 // PRESENTER SKIP — the hidden "magic key" for live demos in front of a crowd.

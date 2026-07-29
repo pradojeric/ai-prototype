@@ -3,8 +3,8 @@
 //
 // The only pattern that attacks the deck rather than the player: a scatter of
 // impact rings appear, pulse for TELEGRAPH seconds, and then the stones that
-// belong to them land. Answering it is pure spatial reading — there is no dodge
-// window per stone, only a place to already be standing.
+// belong to them land. Overlapping circles deal their impacts independently,
+// and a hit briefly slows movement so the rest of the staggered wave matters.
 //
 // One stone in a wave may carry a lumina power-up (POWERUP_CHANCE), which is what
 // keeps the pattern from being pure denial: the safest ground and the rewarding
@@ -16,8 +16,6 @@ import * as THREE from 'three';
 
 const POOL_SIZE = 9;          // must be >= max(STONES.COUNT)
 const SPAWN_HEIGHT = 8;       // metres above the deck the stones drop from
-const IMPACT_KNOCKBACK = 3.5;
-
 export class MemoryStones {
   /**
    * @param {THREE.Scene} scene
@@ -38,6 +36,7 @@ export class MemoryStones {
     this._live = 0;
     this._dropIndex = -1;
     this._drop = new THREE.Vector3();
+    this._slowTimer = 0;
 
     this._rockGeometry = new THREE.DodecahedronGeometry(0.48, 0);
     this._rockMaterial = new THREE.MeshStandardMaterial({
@@ -113,6 +112,10 @@ export class MemoryStones {
   }
 
   update(dt, playerPos) {
+    if (this._slowTimer > 0) {
+      this._slowTimer = Math.max(0, this._slowTimer - dt);
+      if (this._slowTimer <= 0) this.player.setMovementSlow(1);
+    }
     if (this._live <= 0) return;
     for (const slot of this.slots) {
       if (!slot.active) continue;
@@ -124,6 +127,7 @@ export class MemoryStones {
         if (slot.delay > 0) continue;
         slot.falling = true;
         slot.rock.visible = true;
+        slot.warning.scale.setScalar(1);
       }
 
       slot.rock.position.y -= this.tuning.FALL_SPEED * dt;
@@ -139,7 +143,8 @@ export class MemoryStones {
     const at = slot.warning.position;
     if (Math.hypot(playerPos.x - at.x, playerPos.z - at.z) <= this.tuning.RADIUS) {
       this.combat.damage(this.tuning.DAMAGE, at);
-      this.player.applyKnockback(playerPos.x - at.x, playerPos.z - at.z, IMPACT_KNOCKBACK);
+      this.player.setMovementSlow(this.tuning.SLOW_SCALE);
+      this._slowTimer = this.tuning.SLOW_DURATION;
     }
     this.combat.vfx.keeperPulse(at, 'hit');
 
@@ -156,6 +161,8 @@ export class MemoryStones {
   }
 
   clear() {
+    if (this._slowTimer > 0) this.player.setMovementSlow(1);
+    this._slowTimer = 0;
     this._live = 0;
     this._dropIndex = -1;
     for (const slot of this.slots) {

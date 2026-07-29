@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { CONFIG, RAIL_ARENA } from '../../config.js';
 import { fadeMat, angDelta } from '../guardians/primitives.js';
+import { attachAquaticSpiritVisual } from '../combat/AquaticSpiritVisual.js';
 import { ThreatBody } from '../combat/ThreatBody.js';
 
 export class RailThreat extends ThreatBody {
@@ -39,6 +40,7 @@ export class RailThreat extends ThreatBody {
       fadeMat(0xfff2c4, isSniper ? 0x7fe8ff : 0xff765f, 1.7, 0.95, 0.35, 0), 0.95,
     ));
     this._buildBody(isSniper);
+    attachAquaticSpiritVisual(this);
 
     this._center = new THREE.Vector3();
   }

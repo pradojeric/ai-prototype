@@ -234,6 +234,7 @@ export class ThreatBody {
   _extraGlow() { return 0; }
 
   dispose() {
+    this._disposed = true;
     this.scene.remove(this.group);
     this.group.traverse((object) => { if (object.geometry) object.geometry.dispose(); });
     for (const material of this._ownedMats) material.dispose();
