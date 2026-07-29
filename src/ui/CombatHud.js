@@ -29,6 +29,11 @@ export class CombatHud {
     this.elWaveLeft = document.getElementById('wave-left');
     this.elHurt = document.getElementById('hurt');
     this.elCross = document.getElementById('crosshair');
+    this.elMeleeRing = document.getElementById('meleering');
+    this.elMeleeProg = this.elMeleeRing?.querySelector('.prog') ?? null;
+    // 2πr for the r=26 ring in index.html; the dash offset is written against it.
+    this._meleeCircumference = 163.4;
+    this._meleeReady = null;      // last pushed state, so classes aren't rewritten every frame
     this.elBoss = document.getElementById('boss-bar');
     this.elBossName = document.getElementById('boss-name');
     this.elBossFill = document.getElementById('boss-hp-fill');
@@ -95,6 +100,7 @@ export class CombatHud {
     if (wave) this.elWave.classList.add('active');
     else this.elWave.classList.remove('active');
     this.elCross.classList.add('combat');
+    this.elMeleeRing?.classList.add('active');
   }
 
   hide() {
@@ -103,6 +109,8 @@ export class CombatHud {
     this.elWave.classList.remove('active', 'boss');
     this.elCross.classList.remove('combat');
     this.elCross.classList.remove('hit');
+    this.elMeleeRing?.classList.remove('active', 'ready');
+    this._meleeReady = null;
     this.elHurt.classList.remove('active');
     this._healFlashRemaining = 0;
     this._hitMarkerRemaining = 0;
@@ -161,6 +169,19 @@ export class CombatHud {
   }
 
   setOvercharge(active) { this.elCross.classList.toggle('overcharge', active); }
+
+  // Melee shockwave cooldown ring around the crosshair. `progress` is 0..1
+  // toward being usable again; `ready` is the authoritative gate (the manager
+  // weighs cooldown AND stamina), so the ring never says ready for a press that
+  // would do nothing. Class writes are edge-guarded — this runs every frame.
+  setMelee(progress, ready) {
+    if (!this.elMeleeProg || !this.elMeleeRing) return;
+    const pct = clamp01(progress);
+    this.elMeleeProg.style.strokeDashoffset = `${this._meleeCircumference * (1 - pct)}`;
+    if (this._meleeReady === ready) return;
+    this._meleeReady = ready;
+    this.elMeleeRing.classList.toggle('ready', !!ready);
+  }
 
   setAlab(charge, firing) {
     const pct = clamp01(charge);

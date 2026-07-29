@@ -777,3 +777,93 @@ shared combat HUD and existing Zone 3 Guardian body.
 - [x] Confirm `Arena1.md` structure and current Arena 3 implementation details
 - [x] Create `Arena3.md` covering ascent, seals, summit boss, retry, HUD, and code ownership
 - [x] Verify documented values against source and run Markdown whitespace/file-limit checks
+
+---
+
+# Task — Journey Objective & First-Time Guidance UI (2026-07-23)
+
+## Objective
+
+Add a museum-styled desktop guidance layer that always communicates the player's
+current objective outside combat, collapses to a small status label during arena
+combat, and teaches controls and Memory Lumina effects through short, non-pausing,
+once-per-run notifications.
+
+## Locked decisions
+
+- [x] Show only the current objective, revealed as progression changes
+- [x] Guide the full required loop: Rift challenge, Guardian defeat, scattered
+      memories, Guardian Soul, museum return, and Final Memory
+- [x] Keep optional activities and world-space navigation markers out of scope
+- [x] Use short actionable copy with a story-led museum/archive voice
+- [x] Show count plus progress bar where measurable
+- [x] Collapse automatically to a small label during combat; no manual toggle
+- [x] Reuse the existing combat HUD instead of duplicating waves, riddles, or boss HP
+- [x] Animate objective changes without pausing gameplay
+- [x] Add contextual first-time keyboard/mouse hints, one at a time, timeout dismissal
+- [x] Explain each Lumina color briefly when its effect first applies
+- [x] Reset objectives and tutorial-seen state on browser refresh
+- [x] Target desktop only; mobile UI is not included
+
+## Planning and implementation checklist
+
+- [x] Trace museum, zone, arena, artifact, Soul, and Lumina state transitions
+- [x] Inventory the affected UI states and current HUD ownership
+- [x] Load the game UI pattern reference and record it in the plan
+- [x] Write the scoped implementation plan
+- [x] User review and approval of `implementation_plan.md`
+- [x] Add semantic objective definitions and a focused guidance UI module
+- [x] Add objective, collapsed-combat, and transient-toast markup/styles
+- [x] Wire progression updates to existing authoritative game transitions
+- [x] Wire once-per-run contextual control hints
+- [x] Wire first-application Lumina explanations
+- [x] Run syntax, DOM-reference, line-count, reduced-motion, and whitespace checks
+- [ ] Manually verify desktop text fit, transitions, combat collapse, restart/faint
+      behavior, all three Lumina explanations, and clean browser console (local
+      server sandbox denied; escalated server permission declined)
+
+---
+
+# Task — Bring Enemy Direction Arrows Inward (2026-07-23)
+
+## Objective
+
+Move off-screen enemy direction arrows closer to the crosshair so they remain
+readable during combat, without changing tracking or enemy visibility behavior.
+
+## Checklist
+
+- [x] Trace the threat-marker projection and edge-clamp path
+- [x] Confirm the marker is controlled by the shared HUD configuration
+- [x] Reduce the threat-marker clamp radius from `0.86` to `0.62`
+- [x] Run syntax, focused behavior, line-count, and whitespace checks
+- [ ] Manually verify arrow readability during browser combat
+
+---
+
+# Task — Artifact Origins & Lore Discovery Cards (2026-07-23)
+
+## Objective
+
+Rewrite all 27 artifact records as historically grounded Origin and Lore
+descriptions, then update the discovery overlay to present both sections as one
+cohesive, readable museum story.
+
+## Checklist
+
+- [x] Inspect `src/data.js`, `src/ui/DiscoveryScreen.js`, discovery markup/styles,
+      and the collection/museum replay call path
+- [x] Lock content direction with user: all zones, historically grounded, English
+      with Filipino/Pangasinan terms, medium length, correct names where needed
+- [x] Start MCP research with Philippine government and institutional sources
+- [x] Write scoped implementation plan
+- [x] User review and approval of `implementation_plan.md`
+- [x] Complete and record source-backed research for all 27 entries
+- [x] Replace `fact`/`note` with `origin`/`lore` in every artifact record
+- [x] Update discovery markup, renderer, and responsive styling
+- [x] Audit stale `fact`/`note` consumers and preserve API/museum behavior
+- [x] Run syntax, reference, line-count, and whitespace checks
+- [ ] Manually verify desktop/mobile discovery text fit and museum replay in browser
+      (local server sandbox denied; escalated server permission declined)
+
+---

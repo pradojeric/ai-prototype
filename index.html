@@ -23,6 +23,14 @@
     <circle class="prog" cx="40" cy="40" r="34"></circle>
   </svg>
 
+  <!-- Melee shockwave cooldown; sits inside the hold ring so the two never
+       collide (they can never be on screen together anyway — one is exploration,
+       the other combat). -->
+  <svg id="meleering" viewBox="0 0 80 80" aria-hidden="true">
+    <circle class="track" cx="40" cy="40" r="26"></circle>
+    <circle class="prog" cx="40" cy="40" r="26"></circle>
+  </svg>
+
   <div id="stamina">
     <div class="label">Stamina</div>
     <div class="track">
@@ -232,7 +240,7 @@
     <div class="sub">"Beneath the water, the city still breathes."</div>
     <div class="zone" id="start-zone">Zone 1 — PONSIA</div>
     <div class="enter">Click to Descend</div>
-    <div class="controls">WASD — Wade · SHIFT — Sprint · MOUSE — Look · CLICK — Cast Light · E — Reach · ESC — Release
+    <div class="controls">WASD — Wade · SHIFT — Sprint · MOUSE — Look · HOLD CLICK — Cast Light · F — Shockwave · E — Reach · ESC — Release
     </div>
   </div>
 

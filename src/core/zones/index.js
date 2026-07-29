@@ -14,6 +14,7 @@ import { zoneDebug } from './zoneDebug.js';
 import { arena1 } from './arena1.js';
 import { arena2 } from './arena2.js';
 import { arena3 } from './arena3.js';
+import { arena3boss } from './arena3boss.js';
 
 export const ZONES = {
   zone1,
@@ -25,6 +26,9 @@ export const ZONES = {
   arena1,
   arena2,
   arena3,
+  // Entered from arena3's summit portal rather than from a zone's Rift; the
+  // return still targets Zone 3 (see Game._transferArena).
+  arena3boss,
 };
 
 export function createWorld(zoneId = 'zone1') {

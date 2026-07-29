@@ -3,7 +3,8 @@ const CONTROL_HINTS = Object.freeze({
   look: ['Awareness', 'Mouse — Look around'],
   sprint: ['Movement', 'Shift — Sprint'],
   interact: ['Interaction', 'E — Reach toward the memory'],
-  cast: ['Combat', 'Click — Cast Light'],
+  cast: ['Combat', 'Hold Click — Cast Light'],
+  shockwave: ['Combat', 'F — Shockwave, shoves what is closing in'],
   release: ['Cursor', 'Esc — Release the cursor'],
   alab: ['Alab Ready', 'R — Release Alab for rapid fire'],
 });

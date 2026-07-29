@@ -29,7 +29,10 @@ const INTRO = {
     ],
     color: '#77e3d5',
   },
-  arena3: {
+  // The Keeper is met on the far side of the summit portal (arena3boss); the
+  // ascent that earns the crossing is Arena 3's, hence the shared framing below.
+  // Placeholder copy and shot list until arena3boss's real geometry is authored.
+  arena3boss: {
     name: 'THE KEEPER OF MEMORIES',
     title: 'Ang Tagapag-ingat ng mga Alaala',
     dialogue: [
@@ -160,29 +163,38 @@ export class GuardianIntroCutscene {
           gaze(0, 0.85), gaze(0, 0.55),
           { fovFrom: 44, fovTo: 48, shake: 0.025, ease: 'creep', seed: 7 }),
       ];
-    } else if (arenaId === 'arena3') {
-      // Keeper: scrape across the summit stones, cut upward through architectural
-      // details and the memory core, then retreat to expose its impossible scale.
+    } else if (arenaId === 'arena3boss') {
+      // Keeper: skim in low over the deck, cut upward through the body to the
+      // memory core, then retreat past the rail to expose its impossible scale.
+      //
+      // Every camera point here is authored against the Keeper's deck, which sits
+      // 2.29 m below its chest (the gaze origin) with a 0.8 m rail around the rim.
+      // A yOffset of -1.5 therefore sits ~0.8 m above the stones, and anything at
+      // or beyond the 9 m deck radius is kept above -1.4 so the rail never cuts
+      // across frame. The previous pass inherited the tower's tighter skim, which
+      // put the settle shot 16 cm UNDER the deck and filled it with floor.
       shots = [
-        shot(1.05, point(11.5, 5.8, -2.25), point(7.2, 2.2, -2.15),
+        // Crosses the rim at ~93% through: held just over the rail top so the
+        // 0.095 shake reads as vaulting the railing rather than clipping it.
+        shot(1.05, point(13.5, 6.4, -1.35), point(8.2, 2.6, -1.38),
           gaze(0, 1.1), gaze(0, 1.65),
           { fovFrom: 76, fovTo: 55, rollFrom: 0.105, rollTo: 0.025, shake: 0.095, ease: 'rush', seed: 8 }),
-        shot(0.68, point(3.5, -4.4, -2.2), point(2.8, -2.4, -1.9),
+        shot(0.68, point(4.2, -4.8, -1.5), point(3.2, -2.6, -1.25),
           gaze(-0.8, -0.15), gaze(0, 0.5),
           { fovFrom: 45, fovTo: 36, rollFrom: -0.12, rollTo: -0.045, shake: 0.055, ease: 'rush', seed: 9 }),
-        shot(0.62, point(3.2, 2.5, -1.25), point(3.05, 1.3, 0.15),
+        shot(0.62, point(3.2, 2.5, -0.9), point(3.05, 1.3, 0.35),
           gaze(0.45, -0.4), gaze(0, 0.35),
           { fovFrom: 40, fovTo: 35, rollFrom: 0.075, rollTo: 0.02, shake: 0.04, ease: 'smooth', seed: 10 }),
-        shot(timing.holds[0], point(7.2, -3.9, -2.15), point(5.7, 1.8, -1.85),
+        shot(timing.holds[0], point(7.6, -4.1, -1.45), point(6.1, 1.9, -1.15),
           gaze(-0.65, 1.25), gaze(0.3, 0.75),
           { fovFrom: 51, fovTo: 43, rollFrom: -0.065, rollTo: 0.025, shake: 0.025, ease: 'smooth', seed: 11 }),
-        shot(timing.cutaway, point(2.8, 0.7, -0.35), point(2.5, -0.5, -0.15),
+        shot(timing.cutaway, point(2.8, 0.7, 0.05), point(2.5, -0.5, 0.2),
           gaze(0.25, 0), gaze(0, 0.1),
           { fovFrom: 35, fovTo: 31, rollFrom: 0.08, rollTo: -0.025, shake: 0.08, ease: 'rush', seed: 12 }),
-        shot(timing.holds[1], point(4.6, 5.2, -1.75), point(10.8, 1.1, -2.55),
+        shot(timing.holds[1], point(4.8, 5.4, -1.15), point(11.2, 1.2, -1.35),
           gaze(0.75, 0.9), gaze(0, 0.8),
           { fovFrom: 40, fovTo: 57, rollFrom: 0.09, rollTo: 0, shake: 0.035, ease: 'smooth', seed: 13 }),
-        shot(timing.settle, point(8.6, 0, -2.45), point(9.7, 0, -2.25),
+        shot(timing.settle, point(10.2, 0, -1.35), point(11.4, 0, -1.2),
           gaze(0, 0.8), gaze(0, 0.55),
           { fovFrom: 43, fovTo: 47, shake: 0.02, ease: 'creep', seed: 14 }),
       ];

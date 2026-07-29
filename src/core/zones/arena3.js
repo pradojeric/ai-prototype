@@ -2,8 +2,9 @@
 // ARENA 3 — PANANISIA TOWER ASCENSION.
 // A Bolinao Lighthouse-inspired hollow ruin with twelve smooth walkable ramp
 // flights wrapped around a hollow shaft and ending at a supported octagonal
-// boss deck. Geometry publishes authored encounter anchors; tower gameplay is
-// owned by the controller and combat modules.
+// summit deck holding the portal out to the Keeper's arena (arena3boss).
+// Geometry publishes authored encounter anchors; tower gameplay is owned by the
+// controller and combat modules.
 // ============================================================
 import * as THREE from 'three';
 import { CONFIG } from '../../config.js';
@@ -480,23 +481,17 @@ function buildSummit(world, resources) {
   bridgeRails.instanceMatrix.needsUpdate = true;
   world.scene.add(bridgeRails);
 
-  world.towerBossAddAnchors = [
-    { x: 5.2, z: 0 },
-    { x: 0, z: -5.2 },
-    { x: -5.2, z: 0 },
-    { x: 0, z: 5.2 },
-  ].map((point, index) => ({
-    ...point,
+  // The summit is an exit, not a boss deck: the Keeper fight lives in arena3boss.
+  // Anchor only — TowerArenaController builds the portal itself (same split the
+  // seal veils use), so the doorway can be sealed until the third bugtong lands.
+  // Facing the bridge entry means the player walks straight into it on arrival.
+  world.towerSummitPortalAnchor = {
+    x: 0,
     y: height,
-    flight: FLIGHT_COUNT + index,
-    rotation: index % 2 ? Math.PI / 2 : 0,
-    halfW: 1.6,
-    halfD: 1.6,
-    startHeight: height,
-    endHeight: height,
-    localX: 0,
-    localZ: 0,
-  }));
+    z: 0,
+    rotation: Math.atan2(SUMMIT_ENTRY_POINT.x, SUMMIT_ENTRY_POINT.z),
+    radius: 1.7,
+  };
   world.towerSummitBounds = {
     height,
     radius: SUMMIT_RADIUS,
@@ -518,6 +513,8 @@ export const arena3 = {
   label: 'Memory Tower',
   controller: 'tower',
   spawnGuardian: false,
+  // The summit portal leads here; Game._transferArena keeps the Zone 3 return.
+  nextArenaId: 'arena3boss',
   // Seed for the tower's seeded randomness (riddle draw, combat spawns, Keeper timing).
   // Drawn fresh on every read instead of a fixed constant so each attempt fetches a
   // different set of bugtong — TowerGateManager re-reads world.zone.seed each time it

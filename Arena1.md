@@ -136,8 +136,10 @@ The player must land bolts on the guardian's **chest** (a 2.3 m sphere) while do
 | II | ≤66% | 1.9 s | 5–8 s | 1 / 3 / 5 |
 | III | ≤33% | 1.3 s | 3.5–6 s | mostly 3 and 5 |
 
-At zero health the Feastkeeper implodes, the arena collapses, and the player returns to
-Zone 1 with the artifacts bursting from where it fell.
+At zero health the Feastkeeper implodes into the shared **5.6-second victory-rift
+sequence**. Memory shards burst from the fallen boss, reverse into a rift at that
+position, and pull the first-person camera through it. The white threshold hides the
+existing return to Zone 1, where the artifacts burst from where the Feastkeeper fell.
 
 ---
 
@@ -183,6 +185,7 @@ real.
 | Lumina drops | [src/core/arena/LuminaManager.js](src/core/arena/LuminaManager.js) |
 | Boss frame, health bars, markers | [src/ui/CombatHud.js](src/ui/CombatHud.js) |
 | Arena/wave/enemy tunables | `ARENA` and `COMBAT` in [src/config.js](src/config.js) |
+| Shared boss explosion, rift, and first-person pull | [src/cutscene/ArenaVictoryCutscene.js](src/cutscene/ArenaVictoryCutscene.js) and [src/cutscene/_partials/ArenaVictoryRift.js](src/cutscene/_partials/ArenaVictoryRift.js) |
 | Scene swap, entry, return, faint | [src/core/_partials/ArenaFlow.js](src/core/_partials/ArenaFlow.js) |
 
 Boss numbers are deliberately **not** in `config.js` — each zone's boss is an `ArenaBoss`

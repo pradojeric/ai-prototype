@@ -74,6 +74,51 @@
   filter: drop-shadow(0 0 6px rgba(111, 216, 208, .85));
 }
 
+/* ---- Melee shockwave cooldown ring (inside the hold ring) ----
+   Fills clockwise as the shockwave recovers; goes warm and pulses on ready, so
+   the state is readable in peripheral vision without leaving the crosshair. */
+#meleering {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 78px;
+  height: 78px;
+  margin: -39px 0 0 -39px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+  z-index: 5;
+}
+
+#meleering.active { opacity: 1; }
+
+#meleering circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+#meleering .track { stroke: rgba(234, 246, 244, 0.10); }
+
+#meleering .prog {
+  stroke: rgba(255, 186, 92, .9);
+  stroke-linecap: round;
+  stroke-dasharray: 163.4;
+  stroke-dashoffset: 163.4;
+  transition: stroke .2s;
+  filter: drop-shadow(0 0 4px rgba(255, 186, 92, .7));
+}
+
+#meleering.ready .prog {
+  stroke: rgba(255, 226, 150, 1);
+  filter: drop-shadow(0 0 7px rgba(255, 200, 110, .95));
+  animation: melee-ready .9s ease-in-out infinite alternate;
+}
+
+@keyframes melee-ready {
+  to { filter: drop-shadow(0 0 12px rgba(255, 226, 150, 1)); }
+}
+
 /* ---- Stamina and health ---- */
 #stamina,
 #alab,

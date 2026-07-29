@@ -51,6 +51,9 @@ export class CombatManager {
     this._waveGap = 0;             // countdown between waves
     this._fireCooldown = 0;
     this._fireRequested = false;
+    this._firing = false;          // left mouse HELD; auto-repeats on _fireCooldown
+    this._meleeRequested = false;  // edge-triggered F, consumed by the next update()
+    this._meleeCooldown = 0;
     this._overchargeDamageMult = 1;
     this._alabCharge = 0;
     this._alabActive = false;
@@ -75,6 +78,7 @@ export class CombatManager {
     this._vSpit = new THREE.Vector3();
     this._vSpawn = new THREE.Vector3();
     this._vSource = new THREE.Vector3();
+    this._vShock = new THREE.Vector3();
   }
 
   // Arena-owned reward systems subscribe here instead of reaching into the
@@ -156,6 +160,7 @@ export class CombatManager {
     this._leash = opts.leash ?? null;
     this._wave = 0;
     this._waveGap = 0;
+    this._resetPlayerInput();
     this.hp = COMBAT.PLAYER_HP;
     // Fresh flow field so wave 1 routes correctly from its first frame.
     const p = this.player.controls.getObject().position;
@@ -208,12 +213,42 @@ export class CombatManager {
     this._updateWaveLeft();
   }
 
-  // Left-click while a fight is on; executed in the next update() tick.
+  // Left mouse held down. The bolt then auto-repeats on _fireCooldown for as
+  // long as this stays true, which is the whole point: the cooldown already sits
+  // at 0 while idle, so the press still fires instantly and the sustained rate
+  // is exactly BOLT.COOLDOWN — identical to a perfect clicker, minus the clicking.
+  setFiring(flag) {
+    this._firing = !!flag;
+    if (!flag) this._fireRequested = false;
+  }
+
+  // One-shot fire, kept for callers that want a single bolt rather than a hold.
   requestFire() { this._fireRequested = true; }
 
-  // Drop a queued click when focus/pointer lock is lost so resuming never emits
-  // a shot that was requested before the pause menu appeared.
-  cancelInput() { this._fireRequested = false; }
+  // Whether the trigger is currently held. Read by the input watchdog so it can
+  // skip the common case without touching internals.
+  get firing() { return this._firing; }
+
+  // F pressed. Edge-triggered by the caller and consumed by the next update():
+  // a request raised while the shockwave is cooling down is DROPPED, never
+  // queued, so leaning on the key can't make it fire the instant it comes back.
+  requestMelee() { this._meleeRequested = true; }
+
+  // Melee gate. Both tolls are paid on release, and both are checked here so the
+  // HUD ring and the release path can never disagree about readiness.
+  get meleeReady() {
+    return this._meleeCooldown <= 0 && this.player.stamina >= COMBAT.SHOCKWAVE.STAMINA;
+  }
+
+  // Drop every held/queued input when focus or pointer lock is lost, so resuming
+  // never emits a shot requested before the pause menu appeared — and, more
+  // importantly, so a mouse button released outside the window cannot leave the
+  // player firing forever. GamePause and the pointer-lock watchdog both call this.
+  cancelInput() {
+    this._fireRequested = false;
+    this._firing = false;
+    this._meleeRequested = false;
+  }
 
   // Game polls this once per frame; true exactly once per player death.
   consumePlayerDeath() {
@@ -234,6 +269,7 @@ export class CombatManager {
     this.active = false;
     this._origin = null;
     this.hp = COMBAT.PLAYER_HP;
+    this._resetPlayerInput();
     this.setOvercharge(false);
     this._alabActive = false;
     this._alabCooldown = 0;
@@ -421,11 +457,138 @@ export class CombatManager {
       }
       if (this._alabCharge <= 0) this._alabActive = false;
       this.hud.setAlab(this._alabCharge, this._alabActive);
-    } else if (this._fireRequested && this._fireCooldown <= 0) {
+    } else if ((this._firing || this._fireRequested) && this._fireCooldown <= 0) {
       this._fireBolt();
       this._fireCooldown = COMBAT.BOLT.COOLDOWN;
     }
     this._fireRequested = false;
+  }
+
+  // ---- melee shockwave ---------------------------------------------------
+
+  // Tick the cooldown, push it to the crosshair ring, and consume a pending
+  // request. The request is cleared unconditionally: a press that arrives on a
+  // closed gate is spent, not banked.
+  _updatePlayerMelee(dt, playerPos) {
+    if (this._meleeCooldown > 0) this._meleeCooldown = Math.max(0, this._meleeCooldown - dt);
+    const wanted = this._meleeRequested;
+    this._meleeRequested = false;
+    if (wanted && this.meleeReady) this._releaseShockwave(playerPos);
+    this._syncMeleeHud();
+  }
+
+  _syncMeleeHud() {
+    const { COOLDOWN, STAMINA } = COMBAT.SHOCKWAVE;
+    // The ring fills as the cooldown recovers, but readiness also needs the
+    // stamina to be there — so the ring reports whichever gate is further from
+    // open, and the player is never told "ready" for a press that won't fire.
+    const byCooldown = 1 - this._meleeCooldown / COOLDOWN;
+    const byStamina = STAMINA > 0 ? this.player.stamina / STAMINA : 1;
+    this.hud.setMelee(Math.min(byCooldown, byStamina), this.meleeReady);
+  }
+
+  // The panic button: a radial pulse that shoves and damages every echo around
+  // the player and sweeps hostile shots out of the air. Bosses are deliberately
+  // untouched — their shells own bolt-consumption and phase rules that an AoE
+  // would walk straight past (see ShellRotation.testBolt and friends).
+  _releaseShockwave(playerPos) {
+    const S = COMBAT.SHOCKWAVE;
+    this._meleeCooldown = S.COOLDOWN;
+    this.player.spendStamina(S.STAMINA);
+
+    const radiusSq = S.RADIUS * S.RADIUS;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      enemy.center(this._vEnemy);
+      const dx = this._vEnemy.x - playerPos.x;
+      const dz = this._vEnemy.z - playerPos.z;
+      if (dx * dx + dz * dz > radiusSq) continue;
+      if (Math.abs(this._vEnemy.y - playerPos.y) > S.VERTICAL) continue;
+      // Shove first: _damageEnemyFromMelee may kill and stop the body moving,
+      // and a corpse that never got pushed reads as a hit that didn't connect.
+      const dist = Math.hypot(dx, dz) || 1;
+      this._knockbackFromMelee(enemy, dx / dist, dz / dist, S.KNOCKBACK);
+      this._damageEnemyFromMelee(enemy, this._vEnemy);
+    }
+
+    this._deflectShots(playerPos, S.DEFLECT_RADIUS);
+    this._shockwaveFeedback(playerPos);
+  }
+
+  // Shove one echo away from the blast. Enemy.nudge routes through _move, so the
+  // push respects world collision exactly like pursuit does — an echo can't be
+  // knocked through a wall. Arena threats that don't model displacement (they
+  // extend ThreatBody rather than Enemy) override this.
+  _knockbackFromMelee(enemy, nx, nz, strength) {
+    enemy.nudge(nx * strength, nz * strength);
+  }
+
+  // Hostile rounds caught in the pulse are destroyed. Subclasses that can do
+  // something better with them (Arena 2 turns them around on the shooter)
+  // override this.
+  _deflectShots(playerPos, radius) {
+    const radiusSq = radius * radius;
+    let swept = 0;
+    for (const shot of this.spits.slots) {
+      if (!shot.active) continue;
+      if (shot.mesh.position.distanceToSquared(playerPos) > radiusSq) continue;
+      this.vfx.projectileImpact(shot.mesh.position);
+      this.spits.deactivate(shot);
+      swept++;
+    }
+    return swept;
+  }
+
+  // Shared release feel: ground ring, shard burst, hand slam, punch, sound.
+  _shockwaveFeedback(playerPos) {
+    const S = COMBAT.SHOCKWAVE;
+    // Draw the ring on the surface the player is standing on, not at the eye —
+    // eyeBase tracks the real support in every arena, the raised tower included.
+    this._vShock.set(playerPos.x, this.player.eyeBase + 0.06, playerPos.z);
+    // The pooled ring torus has a 0.55 base radius, so this scale makes the
+    // drawn edge land exactly on the radius that was just tested.
+    this.vfx.ring(this._vShock, S.COLOR, {
+      horizontal: true, duration: 0.42, startScale: 0.3, endScale: S.RADIUS / 0.55,
+    });
+    this.vfx.burst(this._vShock, S.COLOR, 1.1, { count: 8, gravity: 0.4, rise: 0.5 });
+    this.viewmodel.triggerSlam();
+    this.audio.playShockwave();
+    this._fovPunch += S.FOV_PUNCH;
+  }
+
+  // One landed melee hit, routed through the same bookkeeping a bolt hit uses.
+  // Shockwave kills deliberately do NOT feed Alab (registerPlayerBoltHit): that
+  // meter is bolt mastery, and an AoE charging it would make the R burst free.
+  // They DO drop Lumina and count toward the wave, so clears resolve normally.
+  _damageEnemyFromMelee(enemy, center) {
+    const applied = Math.min(enemy.hp, COMBAT.SHOCKWAVE.DAMAGE);
+    const defeated = enemy.hit(COMBAT.SHOCKWAVE.DAMAGE);
+    this.hud.popupDamage(center, applied);
+    if (defeated) {
+      this.audio.playEnemyDeath();
+      this._hitstop = COMBAT.FEEL.HITSTOP;
+      this.vfx.death(center, enemy.type);
+      this.vfx.residue(center, enemy.type);
+      this._updateWaveLeft();
+      if (this._onEnemyDefeated) {
+        this._onEnemyDefeated(enemy.type, center, enemy.dropMultiplier);
+      }
+    } else {
+      this.audio.playHit();
+      this.vfx.impact(center, enemy.type);
+    }
+    return defeated;
+  }
+
+  // Clear every combat input and put the shockwave back on a full cooldown tick.
+  // Called at both ends of a fight so a melee can never carry across encounters.
+  _resetPlayerInput() {
+    this._fireCooldown = 0;
+    this._fireRequested = false;
+    this._firing = false;
+    this._meleeRequested = false;
+    this._meleeCooldown = 0;
+    this.hud.setMelee(1, true);
   }
 
   update(dt, t, playerPos) {
@@ -443,8 +606,9 @@ export class CombatManager {
     this._updatePending(dt);
 
     // ESC safety: freeze the combat sim while the pointer is unlocked so a
-    // pause menu can't get the player killed.
-    if (!this.player.controls.isLocked) { this._fireRequested = false; return; }
+    // pause menu can't get the player killed. Held fire is dropped here too —
+    // a button still down when the pointer unlocks must be re-pressed.
+    if (!this.player.controls.isLocked) { this.cancelInput(); return; }
 
     // Leash: wandering too far resets the fight (the echoes sink back down).
     // Arenas pass no leash (the player is walled in), so this is skipped there.
@@ -471,8 +635,10 @@ export class CombatManager {
       if (this._hitstop <= 0) this._hitstop = 0;
     }
 
-    // Fire a light-bolt from the lure along the camera's aim.
+    // Fire a light-bolt from the lure along the camera's aim, and resolve a
+    // shockwave release. Both run on real dt: player agency never gets hitstop.
     this._updatePlayerFire(dt);
+    this._updatePlayerMelee(dt, playerPos);
 
     // Materialised threats behind the player receive HUD markers.
     this.hud.trackThreats(this.enemies, this.camera, dt);

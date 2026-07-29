@@ -24,21 +24,21 @@ import { OverloadChannel } from './_partials/OverloadChannel.js';
 // Per-phase arrays are indexed by phase 0/1/2 (BOSS_DEFAULTS.PHASE_THRESHOLDS),
 // so each must have exactly three entries.
 const REVELER_TUNING = {
-  HP: 300,
+  HP: 150,
   ANCHORS: [-5.5, 0, 5.5],
   MOVE_WARNING: 0.45,
   MOVE_DURATION: 0.6,
   MOVE_INTERVAL: [[5, 7], [4, 6], [3, 5]],
   FORMATION_COUNT: [[1, 2], [2, 3], [3, 5]],
   SUMMON_COUNT: [[1, 2], [1, 3], [2, 3]],
-  SUMMON_INTERVAL: [[3.5, 5], [3, 4.5], [2.5, 4]],
-  REFLECT_DAMAGE: 5,
+  SUMMON_INTERVAL: [[5, 10], [5, 8], [4, 7]],
+  REFLECT_DAMAGE: 6,
 
   // --- attack scheduler ---
   // Weights are relative. Overload is deliberately rare: it is a ~20s set-piece,
   // and at these intervals the first one lands roughly half a minute in.
   ATTACK_INTERVAL: [[3.4, 4.6], [2.8, 3.8], [2.2, 3.0]],
-  ATTACK_WEIGHTS: { formation: 3, shell: 2, scatter: 2, overload: 1 },
+  ATTACK_WEIGHTS: { formation: 5, shell: 2, scatter: 2, overload: 1 },
 
   // Shell Rotation. GAP_ARC ~50 deg. GAP_MULT multiplies boltDamage rather than
   // being a flat number, so the Lumina overcharge still doubles it.
@@ -65,7 +65,7 @@ const REVELER_TUNING = {
   // real slack early and tightens with the enrage. To run a 15s channel instead,
   // drop NODE_COUNT to 6 — the difficulty lands in the same place.
   OVERLOAD: {
-    DURATION: [22, 20, 18], NODE_COUNT: 10, NODE_HP: [6, 8], SEPARATION: 3.2,
+    DURATION: [22, 20, 18], NODE_COUNT: 6, NODE_HP: [3, 4], SEPARATION: 3.2,
     Y_RANGE: [0.7, 4.2], Z_RANGE: [-27, -12],
     BEAM_DAMAGE: 35, BEAM_HOLD: 0.7, STAGGER: 3,
   },

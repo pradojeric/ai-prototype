@@ -13,6 +13,17 @@ The player must survive fixed Gargoyle sentries, vertically tracking Gale shoote
 and three shootable memory seals before reaching a flat octagonal summit and fighting
 the Keeper.
 
+> **Superseded (2026-07-29):** the summit is now a **portal**, not a boss deck.
+> Opening the third seal lights it; walking into it carries the player to
+> **arena3boss**, a separate arena where the Keeper fight happens. Arena 3 itself
+> therefore has no boss and no win state — it ends when the player leaves through
+> the portal, with the tide still rising underneath. Everything below describing
+> the summit encounter, the boss retry point, and the ascent→boss handoff now
+> applies to `arena3boss.js` / `KeeperArenaController.js` instead. See
+> `_partials/implementation_plan_summit_portal_arena3boss.md`.
+> (This document also predates later combat tuning — e.g. the Keeper's HP is 500
+> in `TowerKeeper.js`, not the 60 quoted below. Treat the code as authoritative.)
+
 ---
 
 ## The loop at a glance
@@ -250,9 +261,11 @@ own stylesheet.
 ## Victory and return
 
 At zero Keeper HP, its active attack lane disappears, the Guardian body fades, combat
-and remaining threats stop, and the arena collapse begins. The shared Arena flow then
-returns the player to Zone 3, scatters the zone's artifacts from the fallen Guardian
-position, and spawns the Zone 3 Guardian Soul if it has not already been recovered.
+and remaining threats stop, and the shared **5.6-second victory-rift sequence** begins.
+Memory shards burst from the Keeper, reverse into a rift at its elevated world
+position, and pull the first-person camera across the boss deck and through the
+threshold. The preserved Arena 3 return then scatters the zone's artifacts from the
+fallen Guardian position and spawns the Zone 3 Guardian Soul if needed.
 
 ---
 
@@ -272,6 +285,7 @@ position, and spawns the Zone 3 Guardian Soul if it has not already been recover
 | Boss frame, health bars, threat counts, markers, and damage arcs | [src/ui/CombatHud.js](src/ui/CombatHud.js) |
 | Arena 3 HUD styling | [_partials/tower-arena-hud.css](_partials/tower-arena-hud.css) |
 | Tower, shared combat, and reward tunables | `TOWER_ARENA`, `COMBAT`, and `LUMINA` in [src/config.js](src/config.js) |
+| Shared boss explosion, rift, and first-person pull | [src/cutscene/ArenaVictoryCutscene.js](src/cutscene/ArenaVictoryCutscene.js) and [src/cutscene/_partials/ArenaVictoryRift.js](src/cutscene/_partials/ArenaVictoryRift.js) |
 | Arena entry, faint handling, victory return, artifacts, and Guardian Soul | [src/core/_partials/ArenaFlow.js](src/core/_partials/ArenaFlow.js) |
 
 Keeper-specific values remain beside the boss behavior in `TowerKeeper.js`. Shared

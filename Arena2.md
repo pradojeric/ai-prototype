@@ -245,9 +245,11 @@ No completed riddle run has to be replayed after a boss-phase death.
 ## Victory and return
 
 At zero boss HP, active boss projectiles are cleared, The Reveler implodes, combat and
-Lumina stop, and the arena collapse begins. The shared Arena flow then returns the
-player to Zone 2, scatters the zone's artifacts from the fallen Guardian position, and
-spawns the Zone 2 Guardian Soul if it has not already been recovered.
+Lumina stop, and the shared **5.6-second victory-rift sequence** begins. Memory shards
+burst from the fallen boss, reverse into a rift at that position, and pull the
+first-person camera off the stationary boat and through the threshold. The shared
+Arena flow then returns the player to Zone 2, scatters the zone's artifacts from the
+fallen Guardian position, and spawns the Zone 2 Guardian Soul if needed.
 
 ---
 
@@ -268,6 +270,7 @@ spawns the Zone 2 Guardian Soul if it has not already been recovered.
 | Boss frame, segmented clock, health, markers | [src/ui/CombatHud.js](src/ui/CombatHud.js) |
 | Arena 2 HUD styling | [_partials/rail-arena-hud.css](_partials/rail-arena-hud.css) |
 | Rail and shared combat tunables | `RAIL_ARENA`, `COMBAT`, and `LUMINA` in [src/config.js](src/config.js) |
+| Shared boss explosion, rift, and first-person pull | [src/cutscene/ArenaVictoryCutscene.js](src/cutscene/ArenaVictoryCutscene.js) and [src/cutscene/_partials/ArenaVictoryRift.js](src/cutscene/_partials/ArenaVictoryRift.js) |
 | Arena entry, faint handling, victory return, rewards | [src/core/_partials/ArenaFlow.js](src/core/_partials/ArenaFlow.js) |
 
 The Reveler's boss-specific numbers stay beside its behavior in `RevelerBoss.js` and

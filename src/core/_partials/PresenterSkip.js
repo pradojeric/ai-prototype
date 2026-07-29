@@ -68,7 +68,7 @@ export const presenterSkipMethods = {
   //      dead air in a demo while the boss is the part a crowd came to watch, so
   //      this is deliberately preferred over ending the encounter;
   //   3. only once the boss is up is the encounter won outright. The main loop's
-  //      existing `arena.won` check then plays the normal collapse and
+  //      existing `arena.won` check then plays the normal victory rift and
   //      `_returnFromArena()`, so the artifacts and Soul still burst from the
   //      fallen guardian exactly as after a real victory.
   _presenterSkipArena() {

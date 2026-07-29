@@ -19,6 +19,7 @@ export class ViewModel {
     this.bobT = 0;
     this.reach = 0;                  // 0..1 hold-to-collect reach, set by Game
     this.castT = 0;                  // 1→0 cast-recoil envelope (see triggerCast)
+    this.slamT = 0;                  // 1→0 shockwave-slam envelope (see triggerSlam)
   }
 
   _buildHand() {
@@ -135,6 +136,11 @@ export class ViewModel {
   // forward punch + finger flick + lure flash layered over the idle pose.
   triggerCast() { this.castT = 1; }
 
+  // Melee shockwave: the hand drops and drives DOWN rather than punching flat
+  // forward like a cast. Its own envelope, not a reuse of castT, so a shockwave
+  // released mid-burst doesn't fight the bolt recoil for the same channel.
+  triggerSlam() { this.slamT = 1; }
+
   // World position of the glowing lure — the muzzle a light-bolt spawns from.
   // Matrices are fresh from the previous frame's render, so this is safe to
   // call at fire time without an extra updateMatrixWorld pass.
@@ -149,19 +155,26 @@ export class ViewModel {
     // Cast recoil: a sharp punch forward that eases back (decays ~6x/sec).
     this.castT = Math.max(0, this.castT - dt * 6);
     const cast = this.castT * this.castT;   // squared so the snap front-loads
+    // Slam: slower decay than a cast so the heavier verb reads as heavier.
+    this.slamT = Math.max(0, this.slamT - dt * 3.6);
+    const slam = this.slamT * this.slamT;
 
     this.group.position.x = this.basePos.x + Math.cos(this.bobT * 0.5) * amp;
-    this.group.position.y = this.basePos.y + Math.sin(this.bobT) * amp + 0.06 * this.reach;
-    this.group.position.z = this.basePos.z - 0.2 * this.reach - 0.08 * cast;  // reach/cast forward
+    this.group.position.y = this.basePos.y + Math.sin(this.bobT) * amp + 0.06 * this.reach
+      - 0.22 * slam;                        // the slam drives the hand DOWN
+    this.group.position.z = this.basePos.z - 0.2 * this.reach - 0.08 * cast
+      - 0.05 * slam;                        // and a little forward with it
     this.group.rotation.z = 0.16 + Math.sin(this.bobT * 0.5) * 0.02;
+    this.group.rotation.x = 0.5 + 0.55 * slam;   // palm rolls down toward the water
 
     // fingers: faint idle drift so the hand never looks rigid, straightening
     // open as the reach fills (each finger offset so they don't move in unison)
     for (let i = 0; i < 4; i++) {
       const f = this.fingers[i];
       const idle = Math.sin(this.bobT * 0.8 + i * 1.7) * 0.03;
-      f.root.rotation.x = f.baseX + idle - this.reach * 0.15 - cast * 0.2;  // snap open on cast
-      f.mid.rotation.x = -0.18 + idle * 0.5 + this.reach * 0.14;      // uncurl
+      f.root.rotation.x = f.baseX + idle - this.reach * 0.15 - cast * 0.2   // snap open on cast
+        - slam * 0.34;                                                // and wider on a slam
+      f.mid.rotation.x = -0.18 + idle * 0.5 + this.reach * 0.14 + slam * 0.3;  // uncurl
     }
     this.thumb.rotation.y = this._thumbBaseY + this.reach * 0.25;     // spread
 
@@ -172,7 +185,8 @@ export class ViewModel {
 
     // lure glow: gentle idle flicker, swelling as you reach
     const flicker = Math.sin(this.bobT * 1.3) * 0.06;
-    this.lureLight.intensity = 0.5 + flicker + this.reach * 1.1 + cast * 2.5;
-    this.lureMat.emissiveIntensity = 2.2 + this.reach * 1.8 + cast * 3;
+    // The slam flares harder than a cast — it is the bigger release of the two.
+    this.lureLight.intensity = 0.5 + flicker + this.reach * 1.1 + cast * 2.5 + slam * 4.5;
+    this.lureMat.emissiveIntensity = 2.2 + this.reach * 1.8 + cast * 3 + slam * 5;
   }
 }

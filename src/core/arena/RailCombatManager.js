@@ -27,6 +27,7 @@ export class RailCombatManager extends CombatManager {
     this._playerDied = false;
     this._riddleScale = 1;
     this._zephyrScale = 1;
+    this._resetPlayerInput();
     this.hud.show();
     this.hud.setWave(0, '∞');
     this.hud.setBossWaves(true);
@@ -116,11 +117,11 @@ export class RailCombatManager extends CombatManager {
 
   _playDamageSound() { this.audio.playHullImpact(); }
 
-  _defeatThreat(threat, position, reflected = false) {
+  _defeatThreat(threat, position, reflected = false, damage = this.boltDamage) {
     // A reflected shot always finishes the target, so the number it prints is
     // whatever health was left rather than the bolt's rating.
-    const applied = Math.min(threat.hp, reflected ? threat.hp : this.boltDamage);
-    const defeated = threat.hit(reflected ? threat.hp : this.boltDamage, reflected);
+    const applied = Math.min(threat.hp, reflected ? threat.hp : damage);
+    const defeated = threat.hit(reflected ? threat.hp : damage, reflected);
     this.hud.popupDamage(position, applied);
     if (!reflected) this.registerPlayerBoltHit(defeated);
     if (!defeated) {
@@ -139,6 +140,14 @@ export class RailCombatManager extends CombatManager {
 
   _reflectShot(playerBolt, hostileShot) {
     this.bolts.deactivate(playerBolt);
+    this._turnShot(hostileShot);
+  }
+
+  // Hand a hostile round back to whoever fired it. Shared by the bolt parry and
+  // the melee shockwave, which is the shockwave's real job out here: the boat is
+  // anchored and the snipers sit well outside melee range, so the pulse earns
+  // its place by clearing the air rather than by reaching a body.
+  _turnShot(hostileShot) {
     hostileShot.owner = 'player';
     hostileShot.reflected = true;
     hostileShot.life = 2.5;
@@ -154,16 +163,47 @@ export class RailCombatManager extends CombatManager {
     this._hitMarker();
   }
 
+  // The shockwave parries instead of erasing: anything already turned around is
+  // skipped so one pulse can't re-aim a round that is already flying home.
+  _deflectShots(playerPos, radius) {
+    const radiusSq = radius * radius;
+    let turned = 0;
+    for (const shot of this.spits.slots) {
+      if (!shot.active || shot.reflected) continue;
+      if (shot.mesh.position.distanceToSquared(playerPos) > radiusSq) continue;
+      this._turnShot(shot);
+      turned++;
+    }
+    return turned;
+  }
+
+  // RailThreat extends ThreatBody, not Enemy, so there is no collision-aware
+  // nudge() to call — but it also floats in open water with nothing to be pushed
+  // into, so displacing the group directly is both safe and the whole shove. A
+  // boarder integrates its own position toward the boat, so this really does
+  // set back its approach; a station-keeping sniper simply drifts.
+  _knockbackFromMelee(threat, nx, nz, strength) {
+    threat.group.position.x += nx * strength;
+    threat.group.position.z += nz * strength;
+  }
+
+  // Route melee damage through the same kill bookkeeping a bolt hit uses, so
+  // drops, popups, and the threat count stay identical to every other kill here.
+  _damageEnemyFromMelee(enemy, center) {
+    return this._defeatThreat(enemy, center, false, COMBAT.SHOCKWAVE.DAMAGE);
+  }
+
   update(dt, t, playerPos) {
     this._updateFeel(dt);
     if (!this.active) {
       if (this.enemies.length) this._reapRail(dt, t, playerPos, 1);
       return;
     }
-    if (!this.player.controls.isLocked) { this._fireRequested = false; return; }
+    if (!this.player.controls.isLocked) { this.cancelInput(); return; }
     this._updatePending(dt);
 
     this._updatePlayerFire(dt);
+    this._updatePlayerMelee(dt, playerPos);
     const threatScale = Math.min(this._riddleScale, this._zephyrScale);
     let threatDt = dt * threatScale;
     if (this._hitstop > 0) {

@@ -1,10 +1,17 @@
+// ============================================================
+// TOWER ARENA (Arena 3) — the timed ascent only.
+//
+// The tide rises, three bugtong seals gate the climb, and the summit holds the
+// portal out to the Keeper. The Keeper fight itself lives in KeeperArenaController
+// (arena3boss) — this controller ends when the player walks into the portal, not
+// when a boss dies, so it has no win state of its own.
+// ============================================================
 import { CONFIG, TOWER_ARENA, LUMINA } from '../../config.js';
 import { LuminaManager } from './LuminaManager.js';
 import { TowerGateManager } from './TowerGateManager.js';
-import { TowerKeeper } from './TowerKeeper.js';
+import { SummitPortal } from './SummitPortal.js';
 
 const EVENT_DURATION = 2.4;
-const BOSS_RETRY_POINT = { x: 0, y: 19.62, z: 5.5 };
 
 export class TowerArenaController {
   constructor(scene, audio, player, seed, world) {
@@ -20,11 +27,11 @@ export class TowerArenaController {
     this.waterHeight = TOWER_ARENA.BASE_WATER_HEIGHT;
     this._tidePenalty = 0;   // accumulated metres from wrong bugtong answers
     this.combat = null;
-    this.keeper = null;
+    this.portal = null;
     this.gates = null;
     this._attempt = 0;
     this._eventRemaining = 0;
-    this._guardianIntroRequested = false;
+    this._transferRequested = false;
     this.lumina = new LuminaManager(scene, player, audio, {
       preserveDropHeight: true,
       walkVerticalRadius: TOWER_ARENA.VERTICAL_LUMINA_BAND,
@@ -73,23 +80,9 @@ export class TowerArenaController {
     if (opened) this.gates.openAll();
   }
 
-  _createKeeper() {
-    this.keeper?.dispose();
-    const keeperSeed = (
-      this.seed ^ 0x4b454550 ^ Math.imul(this._attempt, 0x45d9f3b)
-    ) >>> 0;
-    this.keeper = new TowerKeeper(
-      this.scene,
-      this.player,
-      this.combat,
-      this.audio,
-      {
-        bounds: this.world.towerSummitBounds,
-        seed: keeperSeed,
-        onEvent: (text, tone) => this.showEvent(text, tone),
-        onPowerUpDrop: (position) => this.lumina.drop(position),
-      },
-    );
+  _createPortal() {
+    this.portal?.dispose();
+    this.portal = new SummitPortal(this.scene, this.world.towerSummitPortalAnchor);
   }
 
   _resetPlayerState() {
@@ -107,13 +100,13 @@ export class TowerArenaController {
     this.phase = 'ascent';
     this.elapsed = 0;
     this._eventRemaining = 0;
-    this._guardianIntroRequested = false;
+    this._transferRequested = false;
     this.waterHeight = TOWER_ARENA.BASE_WATER_HEIGHT;
     this._tidePenalty = 0;
     this.world.setWaterLevel(this.waterHeight);
     this._resetPlayerState();
     this._createGates(false);
-    this._createKeeper();
+    this._createPortal();
     this.lumina.beginAttempt(
       combat,
       (this.seed ^ LUMINA.SEED ^ Math.imul(this._attempt, 0x9e3779b1)) >>> 0,
@@ -126,79 +119,14 @@ export class TowerArenaController {
     this._renderSeals();
   }
 
-  _beginBossPhase() {
-    if (this.phase !== 'ascent' && this.phase !== 'guardian-intro') return;
-    this.phase = 'boss';
-    this.waterHeight = TOWER_ARENA.BOSS_WATER_HEIGHT;
-    this.world.setWaterLevel(this.waterHeight);
-    this.combat.beginBossPhase();
-    // The final seal opens on the summit landing, so this transition fires the same
-    // frame it is answered — after which the boss loop never ticks the gate manager
-    // again. Finalize the gates now so the last seal's veil and console are settled
-    // instead of freezing mid-fade on the deck.
-    this.gates.openAll();
-    this.lumina.reset(
-      (this.seed ^ LUMINA.SEED ^ Math.imul(this._attempt, 0x9e3779b1)) >>> 0,
-    );
-    this.elHud?.classList.remove('active', 'warning', 'critical');
-    this.combat.hud.setBoss({
-      name: 'The Keeper of Memories',
-      hp: this.keeper.hp,
-      maxHp: this.keeper.maxHp,
-    });
-    if (this.keeper.begin()) {
-      this.showEvent('The Keeper of Memories awakens', 'warning');
-      this.combat.hud.popupCallout(this.keeper.center(), 'SPACE TO LEAP');
-    }
-  }
-
-  _beginBossRetry(combat) {
-    this._attempt++;
-    this._bindCombat(combat);
-    this.won = false;
-    this.failed = false;
-    this.phase = 'boss';
-    this.elapsed = 0;
-    this._eventRemaining = 0;
-    this.waterHeight = TOWER_ARENA.BOSS_WATER_HEIGHT;
-    this._tidePenalty = 0;
-    this.world.setWaterLevel(this.waterHeight);
-    this._resetPlayerState();
-    this._createGates(true);
-    this._createKeeper();
-    this.lumina.beginAttempt(
-      combat,
-      (this.seed ^ LUMINA.SEED ^ Math.imul(this._attempt, 0x9e3779b1)) >>> 0,
-    );
-    combat.startFight({ mode: 'boss', attempt: this._attempt });
-    combat.hud.setBoss({
-      name: 'The Keeper of Memories',
-      hp: this.keeper.hp,
-      maxHp: this.keeper.maxHp,
-    });
-    this.elHud?.classList.remove('active', 'warning', 'critical');
-    this.elEvent?.classList.remove('active', 'warning', 'success');
-    this.keeper.begin();
-    this.showEvent('The Keeper reforms at the summit', 'warning');
-    this.combat.hud.popupCallout(this.keeper.center(), 'SPACE TO LEAP');
-    this._renderSeals();
-  }
-
+  // Drowning is the only failure here, so a faint always replays the climb.
   restartAfterFaint(combat) {
-    if (this.phase === 'boss' || this.phase === 'won') {
-      this._beginBossRetry(combat);
-      return;
-    }
     this.begin(combat);
   }
 
   update(dt, t, playerPos, ePressed = false) {
     if (this.failed || !this.player.controls.isLocked) return;
     this._updateEvent(dt);
-    if (this.phase === 'boss') {
-      this._updateBoss(dt, t, playerPos);
-      return;
-    }
     if (this.phase !== 'ascent') return;
     this._updateAscent(dt, t, playerPos, ePressed);
   }
@@ -213,12 +141,13 @@ export class TowerArenaController {
     this.world.setWaterLevel(this.waterHeight);
     this.gates.update(dt, t, playerPos, ePressed);
 
-    const atSummitHeight = this.player.eyeBase >= TOWER_ARENA.SUMMIT_HEIGHT - 0.8;
-    const summitRadius = Math.max(1, (this.world.towerSummitBounds?.radius || 9) - 0.35);
-    const insideSummitPerimeter = Math.hypot(playerPos.x, playerPos.z) <= summitRadius;
-    if (this.gates.allOpen() && atSummitHeight && insideSummitPerimeter) {
-      this.phase = 'guardian-intro';
-      this._guardianIntroRequested = true;
+    // The portal opens on the third seal. The tide is deliberately still rising
+    // underneath it — the summit is an escape, not a safe room.
+    const sealsDone = this.gates.allOpen();
+    this.portal.setOpen(sealsDone);
+    this.portal.update(dt, t);
+    if (sealsDone && this.portal.contains(playerPos)) {
+      this._requestTransfer();
       return;
     }
 
@@ -231,45 +160,40 @@ export class TowerArenaController {
     this._renderHud(rise, eye);
   }
 
-  _updateBoss(dt, t, playerPos) {
-    this.world.setWaterLevel(TOWER_ARENA.BOSS_WATER_HEIGHT);
-    this.keeper.update(dt, t, playerPos);
-    this.lumina.update(dt, t, playerPos);
-    this.combat.hud.setBoss({
-      name: 'The Keeper of Memories',
-      hp: this.keeper.hp,
-      maxHp: this.keeper.maxHp,
-    });
-    if (!this.keeper.defeated || this.won) return;
-    this.won = true;
-    this.phase = 'won';
-    this.showEvent('The Keeper releases the memory', 'success');
-    this.combat.stop({ preserveVfx: true });
+  // Hand the run to arena3boss. Settling the gates here matters: the third seal
+  // can be answered on the summit landing itself, so the veil and console would
+  // otherwise freeze mid-fade as the world is torn down.
+  _requestTransfer() {
+    if (this._transferRequested) return;
+    this._transferRequested = true;
+    this.phase = 'transfer';
+    this.gates.openAll();
+    this.player.clearExternalMotion();
+    this.combat?.stop({ preserveVfx: false });
+    this.elHud?.classList.remove('active', 'warning', 'critical');
+    this.showEvent('The way opens', 'success');
   }
 
-  // Presenter skip, first press: skip the timed ascent and its three memory seals
-  // and go straight to the Keeper, fully playable. This is the same handoff a
-  // mid-boss death uses, so the seals finish settled and the tide is already at
-  // its boss height. Game repositions the player afterwards via getRetryPoint().
-  presenterSkipToBoss() {
-    if (this.phase !== 'ascent' || !this.combat) return false;
-    this._beginBossRetry(this.combat);
+  consumeArenaTransferRequest() {
+    if (!this._transferRequested) return false;
+    this._transferRequested = false;
     return true;
   }
 
-  // Presenter skip: mirror the win block in _updateBoss so a demo can leave the
-  // ascent at any point. The seal-console riddle card is torn down explicitly —
-  // unlike the other arenas the tower's riddles run inside a live simulation, so
-  // one may still be on screen when the key lands.
-  presenterWin() {
-    if (this.won) return;
+  // Presenter skip: Arena 3 has no boss and no win of its own, so both skip
+  // levels do the same honest thing — settle the seals and take the portal. The
+  // Keeper is then skippable again on the far side. The riddle card is torn down
+  // explicitly because, unlike the other arenas, the tower's bugtong run inside a
+  // live simulation and one may still be on screen when the key lands.
+  presenterSkipToBoss() {
+    if (this.phase !== 'ascent' || !this.combat) return false;
     this.gates?.presenterAbort();
-    this.won = true;
-    this.phase = 'won';
-    this.showEvent('The Keeper releases the memory', 'success');
-    this.player.clearExternalMotion();
-    this.combat?.stop({ preserveVfx: true });
-    this.combat?.hud?.hideBoss?.();
+    this._requestTransfer();
+    return true;
+  }
+
+  presenterWin() {
+    this.presenterSkipToBoss();
   }
 
   showEvent(text, tone = 'success') {
@@ -330,39 +254,16 @@ export class TowerArenaController {
     return true;
   }
 
-  consumeGuardianIntroRequest() {
-    if (!this._guardianIntroRequested) return false;
-    this._guardianIntroRequested = false;
-    return true;
-  }
-
-  guardianIntroCenter() {
-    return this.keeper.center().clone();
-  }
-
-  prepareGuardianIntroduction() {
-    this.keeper.body.show();
-    this.combat.hud.hideBoss();
-    this.elHud?.classList.remove('active', 'warning', 'critical');
-    this.elEvent?.classList.remove('active', 'warning', 'success');
-  }
-
-  updateGuardianIntro(dt, t, facingTarget) {
-    this.keeper.body.update(dt, t, facingTarget);
-  }
-
-  completeGuardianIntroduction() {
-    this._beginBossPhase();
-  }
-
+  // The player leaves through the portal rather than beating anything here, so
+  // there is no staged retry point — a faint replays the climb from the base.
   getRetryPoint() {
-    return this.phase === 'boss' || this.phase === 'won' ? BOSS_RETRY_POINT : null;
+    return null;
   }
 
   collidesPlayerAt(x, z, radius, supportY) {
     return !!(
       this.gates?.collidesPlayerAt(x, z, radius, supportY) ||
-      this.keeper?.blocksPlayerAt(x, z, radius, supportY) ||
+      this.portal?.collidesPlayerAt(x, z, radius, supportY) ||
       this.combat?.blocksPlayerAt(x, z, radius, supportY)
     );
   }
@@ -371,22 +272,18 @@ export class TowerArenaController {
     this.lumina.reset();
     this.gates?.dispose();
     this.gates = null;
-    this.keeper?.dispose();
-    this.keeper = null;
+    this.portal?.dispose();
+    this.portal = null;
     this.player.clearExternalMotion();
     this.combat?.hud.hideBoss();
     this.elEvent?.classList.remove('active');
     this.elHud?.classList.remove('active', 'warning', 'critical');
   }
 
-  guardianCenter() {
-    return this.keeper?.center() || { x: 0, y: TOWER_ARENA.SUMMIT_HEIGHT, z: 0 };
-  }
-
   dispose() {
     this.lumina.dispose();
     this.gates?.dispose();
-    this.keeper?.dispose();
+    this.portal?.dispose();
     this.combat?.setEnemyDefeatedHandler(null);
     this.combat?.setTowerEventHandler(null);
     this.combat?.hud.hideBoss();

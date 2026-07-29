@@ -1,3 +1,162 @@
+# Task — Arena Boss Victory Rift Cutscene (2026-07-29)
+
+Plan: [_partials/implementation_plan_arena_victory_rift.md](_partials/implementation_plan_arena_victory_rift.md)
+
+## Confirmed direction
+
+- [x] Shared animation for Arena 1, Arena 2, and `arena3boss`
+- [x] First-person, unskippable, 5–6 seconds
+- [x] Rift forms at the boss and pulls the camera toward it
+- [x] No new audio assets; existing Web Audio API cues only
+- [x] Preserve return, progression, balance, and boss-only retries
+
+## Checklist
+
+- [x] Inspect current boss victory, rift, camera, VFX, and return ownership
+- [x] Record the approved technical plan
+- [x] User review and approve the implementation plan
+- [x] Implement the shared cutscene and pooled rift/death VFX
+- [x] Integrate lifecycle, resize, distortion, and cleanup
+- [x] Run static/tests/file-limit verification
+- [ ] User manually verify all three boss victories in browser
+
+---
+
+# Task — Keeper Weighted Attack Scheduler + Partial Split (2026-07-29)
+
+Plan: [_partials/implementation_plan_keeper_scheduler.md](_partials/implementation_plan_keeper_scheduler.md)
+
+## Confirmed direction (user)
+
+- [x] Full parity — the aimed shot becomes a weighted pattern, not a filler clock
+- [x] Full split — body + all three set-pieces move to `_partials/`
+- [x] Summon path built but **default off** (`SUMMON_INTERVAL: null`)
+- [x] Retune freely, including per-phase attack weights
+
+## Checklist
+
+- [x] `_partials/TowerKeeperBody.js` — body, fade, hit flash, `setFlare()`
+- [x] `_partials/BeaconCharge.js` — lane, dash, hit/miss recovery, `moving` flag
+- [x] `_partials/MemoryStones.js` — debris pool, warnings, power-up drop
+- [x] `_partials/LighthouseSweep.js` — approach, blade, sweep, `approaching` flag
+- [x] `TowerKeeper.js` — nested tuning blocks + weighted scheduler + `_pattern` guard
+- [x] Per-phase `ATTACK_WEIGHTS`; sweep weighted 2 at phase 0 so it is never starved
+- [x] `SHOT.BURST` [1,2,3] to offset the shot's lower frequency
+- [x] Phase flare as its own `_flare` countdown, not a pattern
+- [x] Summon tunables wired to the previously-uncalled `combat.spawnBossGroup(phase)`
+- [x] Preserve external API (constructor, `begin`, `update`, `center`,
+      `blocksPlayerAt`, `body.show/update`, `projectileDamage/Knockback`)
+- [x] Verify: `node --check` on all changed files, stale-reference grep, line limits
+- [ ] User manually verify in browser: patterns visibly rotate, sweep appears in
+      phase 0, burst shot reads cleanly, no body-block pin during charge/approach
+
+---
+
+# Task — Hold-to-Fire Bolts + Melee Shockwave (2026-07-29)
+
+Plan: [_partials/implementation_plan_hold_fire_melee.md](_partials/implementation_plan_hold_fire_melee.md)
+
+## Confirmed direction (user)
+
+- [x] Auto-repeat while the mouse is held — no charge shot, no DPS change
+- [x] `F` releases the melee shockwave
+- [x] Shockwave does damage **and** knockback
+- [x] All three combat managers: base, Tower, Rail
+- [x] Cooldown UI rides the crosshair
+- [x] User review and approve the implementation plan
+- [x] Melee also deflects projectiles (Arena 2's real use for it)
+- [x] Melee gated so it cannot be abused
+
+## Checklist
+
+- [x] `COMBAT.SHOCKWAVE` config block; amend the stale "left click" `BOLT` comment
+- [x] `CombatManager`: `setFiring()`, held-fire gate on the existing `_fireCooldown`
+- [x] `CombatManager`: `requestMelee()`, `_updatePlayerMelee()`, `_releaseShockwave()`
+- [x] `_damageEnemyFromMelee()` hook + Tower/Rail overrides for their own kill accounting
+- [x] Widen `RailCombatManager._defeatThreat` with a `damage` argument
+- [x] Clear `_firing` on pointer-lock loss, pause, fight start, and abort
+- [x] `ViewModel.triggerSlam()` — a down-forward slam envelope separate from `castT`
+- [x] `AudioManager.playShockwave()` — procedural thump + noise whoosh
+- [x] `#meleering` crosshair ring: markup, CSS, `CombatHud.setMelee()`
+- [x] Input wiring: `mousedown`/`mouseup`/`pointerlockchange` + `KeyF`
+- [x] Control text: `index.html` controls line, `JourneyGuide` hints, `ArenaFlow` prompts
+- [x] Verify: `node --check` across `src/**/*.js`, existing Node tests, line limits
+- [ ] User manually verify in browser: hold-fire cadence, no stuck fire after
+      pause/alt-tab, shockwave damage + shove, ring cooldown readout, all 3 arenas
+
+## Deviations from the plan (all forced by what the code actually does)
+
+- **Knockback had to become a hook.** `nudge()`/`_move()` live on `Enemy`, but
+  `RailThreat` and `TowerThreat` extend `ThreatBody` directly — the planned
+  `enemy.nudge()` call would have thrown a TypeError in Arenas 2 and 3. Now
+  `_knockbackFromMelee()`: base uses the collision-aware nudge, Rail displaces
+  the group directly (open water, nothing to be pushed through), Tower is a
+  deliberate no-op (gargoyles are anchored and gales re-write `position.x/z`
+  from `_fixedX/_fixedZ` every frame, so a shove would be erased next frame).
+- **Stamina became the second abuse gate**, which forced stamina to regenerate
+  while `movementLocked` — Arena 2's early return skipped the regen block, so
+  the boat would have had two shockwaves for the entire ride and no more.
+- **`AudioManager.js` had to be split.** It was already at 1008 lines (over the
+  1000 limit) before this task; `playShockwave` pushed it to 1048. The 15
+  wave-combat one-shots moved to `_partials/CombatSfx.js` and are mixed onto the
+  prototype, so every existing call site is unchanged. Now 616 + 447.
+- **Base `_deflectShots` destroys, Rail's turns the shot around**, per the user's
+  note that melee should still deflect bullets in Arena 2.
+
+## Verification record
+
+- 21/21 Node tests pass (`node --test tests/*.test.js tests/*.test.mjs`)
+- All `src/**/*.js` pass `node --check`; 0 unresolved relative imports
+- `CombatSfx` mixin runtime-verified: 15 methods attach to a stub prototype and
+  all 14 sound calls no-op safely with `ready = false`
+- Every file under the 1000-line limit (largest: `World.js` at 942)
+- `git diff --check` clean; `#meleering` resolves in both `index.html` and CSS
+
+---
+
+# Task — Summit Portal and Arena 3 Boss Keeper Fight (2026-07-29)
+
+Plan: [_partials/implementation_plan_summit_portal_arena3boss.md](_partials/implementation_plan_summit_portal_arena3boss.md)
+
+## Confirmed direction
+
+- [x] Keeper of Memories moves out of Arena 3 into a new arena
+- [x] New `arena3boss` module — traversable scaffold now, real design specced later
+- [x] Portal is entered by walking into it (no prompt, no key)
+- [x] Tide keeps rising on the summit — the portal is a timed escape
+- [x] Dying to the Keeper retries in `arena3boss`, not the tower climb
+- [x] `arena3boss` has static water, no rising tide
+- [x] Keeper intro cutscene plays on arrival in `arena3boss`
+- [x] User review and approve the implementation plan
+- [x] Publish the summit portal anchor from `arena3.js`
+- [x] Build `SummitPortal` (vortex panel, sealed/open states, walk-in trigger)
+- [x] Strip the Keeper out of `TowerArenaController`
+- [x] Add `KeeperArenaController` with retry-in-place and the intro hooks
+- [x] Scaffold `arena3boss.js` and register it
+- [x] Add `_transferArena` preserving `_returnZone`, and wire the Game consume
+- [x] Add `arena3boss` intro-cutscene script and audio palette
+- [x] Flag the superseded summit sections in `Arena3.md`
+- [x] Verify syntax, file limits, and the presenter-skip contract
+- [x] Fix the Keeper intro's blocked view: re-author the `arena3boss` shot list
+      and remove the deck plinth (arena3boss only; no shared camera clamp)
+- [ ] User manually verify climb → portal → Keeper → death retry → win → Zone 3
+- [ ] User manually verify the Keeper intro cutscene is unobstructed
+
+## Verification record
+
+- 21/21 Node tests passed (`node --test tests/*.test.js tests/*.test.mjs`)
+- All 103 `src/**/*.js` modules pass `node --check`; 0 unresolved relative imports
+- No external references remain to the removed `TowerArenaController` members
+  (`keeper`, `_beginBossPhase`, `consumeGuardianIntroRequest`, `BOSS_RETRY_POINT`)
+- All touched files well under the 1000-line limit (largest: `Game.js` at 923)
+- `git diff --check` clean
+- `_transferArena` tears down the live arena/combat before `_loadArena` overwrites
+  them — an arena→arena hop, unlike a zone→arena entry, has both already running
+- Browser verification of the portal trigger, the Keeper handoff, and the Zone 3
+  return remains the user gate
+
+---
+
 # Task — Awaken Stage and Eyes-Opening Transition (2026-07-28)
 
 Plan: [_partials/implementation_plan_awaken_transition.md](_partials/implementation_plan_awaken_transition.md)
@@ -677,94 +836,6 @@ panel, while preserving interaction prompts and all combat/status UI.
 
 ---
 
-# Task — Journey Objective & First-Time Guidance UI (2026-07-23)
-
-## Objective
-
-Add a museum-styled desktop guidance layer that always communicates the player's
-current objective outside combat, collapses to a small status label during arena
-combat, and teaches controls and Memory Lumina effects through short, non-pausing,
-once-per-run notifications.
-
-## Locked decisions
-
-- [x] Show only the current objective, revealed as progression changes
-- [x] Guide the full required loop: Rift challenge, Guardian defeat, scattered
-      memories, Guardian Soul, museum return, and Final Memory
-- [x] Keep optional activities and world-space navigation markers out of scope
-- [x] Use short actionable copy with a story-led museum/archive voice
-- [x] Show count plus progress bar where measurable
-- [x] Collapse automatically to a small label during combat; no manual toggle
-- [x] Reuse the existing combat HUD instead of duplicating waves, riddles, or boss HP
-- [x] Animate objective changes without pausing gameplay
-- [x] Add contextual first-time keyboard/mouse hints, one at a time, timeout dismissal
-- [x] Explain each Lumina color briefly when its effect first applies
-- [x] Reset objectives and tutorial-seen state on browser refresh
-- [x] Target desktop only; mobile UI is not included
-
-## Planning and implementation checklist
-
-- [x] Trace museum, zone, arena, artifact, Soul, and Lumina state transitions
-- [x] Inventory the affected UI states and current HUD ownership
-- [x] Load the game UI pattern reference and record it in the plan
-- [x] Write the scoped implementation plan
-- [x] User review and approval of `implementation_plan.md`
-- [x] Add semantic objective definitions and a focused guidance UI module
-- [x] Add objective, collapsed-combat, and transient-toast markup/styles
-- [x] Wire progression updates to existing authoritative game transitions
-- [x] Wire once-per-run contextual control hints
-- [x] Wire first-application Lumina explanations
-- [x] Run syntax, DOM-reference, line-count, reduced-motion, and whitespace checks
-- [ ] Manually verify desktop text fit, transitions, combat collapse, restart/faint
-      behavior, all three Lumina explanations, and clean browser console (local
-      server sandbox denied; escalated server permission declined)
-
----
-
-# Task — Bring Enemy Direction Arrows Inward (2026-07-23)
-
-## Objective
-
-Move off-screen enemy direction arrows closer to the crosshair so they remain
-readable during combat, without changing tracking or enemy visibility behavior.
-
-## Checklist
-
-- [x] Trace the threat-marker projection and edge-clamp path
-- [x] Confirm the marker is controlled by the shared HUD configuration
-- [x] Reduce the threat-marker clamp radius from `0.86` to `0.62`
-- [x] Run syntax, focused behavior, line-count, and whitespace checks
-- [ ] Manually verify arrow readability during browser combat
-
----
-
-# Task — Artifact Origins & Lore Discovery Cards (2026-07-23)
-
-## Objective
-
-Rewrite all 27 artifact records as historically grounded Origin and Lore
-descriptions, then update the discovery overlay to present both sections as one
-cohesive, readable museum story.
-
-## Checklist
-
-- [x] Inspect `src/data.js`, `src/ui/DiscoveryScreen.js`, discovery markup/styles,
-      and the collection/museum replay call path
-- [x] Lock content direction with user: all zones, historically grounded, English
-      with Filipino/Pangasinan terms, medium length, correct names where needed
-- [x] Start MCP research with Philippine government and institutional sources
-- [x] Write scoped implementation plan
-- [x] User review and approval of `implementation_plan.md`
-- [x] Complete and record source-backed research for all 27 entries
-- [x] Replace `fact`/`note` with `origin`/`lore` in every artifact record
-- [x] Update discovery markup, renderer, and responsive styling
-- [x] Audit stale `fact`/`note` consumers and preserve API/museum behavior
-- [x] Run syntax, reference, line-count, and whitespace checks
-- [ ] Manually verify desktop/mobile discovery text fit and museum replay in browser
-      (local server sandbox denied; escalated server permission declined)
-
----
-
 # Task — Fix Arena 2 rail look tumbling upside down
 
 The boat sway wrote roll onto the player camera, which corrupted
@@ -864,6 +935,58 @@ Plan: [_partials/implementation_plan_presenter_skip.md](_partials/implementation
       (works either side of the arena; unlocks the next museum portal as usual)
 - [x] Completion card: Shift+P walks on into the hub
 - [ ] **Needs in-browser verification** (no automated harness in this repo)
+
+---
+
+## Keeper of Memories — attack pattern pass
+
+Plan: [_partials/implementation_plan_keeper_attack_tuning.md](_partials/implementation_plan_keeper_attack_tuning.md)
+
+- [x] `CHARGE_SPEED` 13.5 → 19 — the dash commits faster; telegraph, interval and
+      recovery/stun windows deliberately untouched so the dodge window and whiff
+      punish are unchanged
+- [x] New `beam-approach` state before `beam-telegraph`: the Keeper walks to
+      `(0, 0)` at `BEAM_APPROACH_SPEED` (9 u/s, ≤0.76s) so the lighthouse sweep
+      pivots on the arena centre
+- [x] `_startBeamApproach()` bail-out timer — an interrupted walk still commits to
+      the sweep rather than stalling the fight
+- [x] Keeper stays at centre after the sweep; shots/charges resume from there
+- [x] `blocksPlayerAt()` also non-blocking during `beam-approach`, so a player on
+      the centre can't be pinned inside the walking body
+- [x] `BEAM_CLEARANCE: 0.55` — the sweep is jumpable, same value as the
+      Feastkeeper's Offering Slam so the Zone 1 jump-dodge transfers (~0.43s
+      window against the ~0.80m hop); `_playerInBeam()` gates on `jumpOffset`
+- [x] Sweep speed/width untouched — footwork stays a valid answer, the jump is
+      the cornered-or-caught-out option
+- [x] Laser rework: each arm is a deck scorch line **plus** a vertical shader
+      blade whose height *is* the hit volume, so the attack looks jumpable
+- [x] `_partials/LighthouseBeamMaterial.js` — local-space `ShaderMaterial`: hot
+      scrolling core at the deck, soft body falloff, crisp rim at the clearance
+      line, slower counter-pulse so the scroll isn't one repeating stripe
+- [x] `_setBeamIntensity()` drives scorch opacity + blade `uOpacity` together;
+      existing telegraph ramp unchanged. `uTime` resets per sweep
+- [x] Beam reach fixed to the 9m deck (`bounds.radius`) instead of 13.6m, which
+      hung the beam out over the void; hit cut-off uses the same `_beamReach`
+- [x] Guardian intro: hide the ViewModel for the cinematic — the hand is a child
+      of the player camera, which stays in the scene, so it drew as a floating
+      limb at the player's staged position (affected all three zones, not just
+      the Keeper)
+- [x] `Game._faceCamera(target)` — yaw onto a world position, pitch/roll levelled;
+      replaces the `_levelCamera()` call in `_runGuardianIntroduction` and runs
+      after `begin()` so it reads the live `arena.guardianCenter()`
+- [x] Instant snap, hidden by the same-frame `renderPass.camera` swap back to the
+      player camera; no input lock needed
+- [x] Attack callouts matching the other two bosses: `BEACON CHARGE`,
+      `MEMORY STONES`, `LIGHTHOUSE SWEEP` via `combat.hud.popupCallout`, fired at
+      pattern start; the basic shot stays silent as `spit`/`formation` do
+- [x] Sweep is called out on the walk, before the already-centred shortcut, so
+      that path is never silent and the attack announces exactly once
+- [x] The three replaced `onEvent` log lines dropped; the charge-miss stun and
+      phase-change lines stay (outcomes, not attack announcements)
+- [ ] **Needs in-browser verification** (no automated harness in this repo) —
+      shader compile, blade height readability, charge dodgeability at 19 u/s,
+      no hand in any boss intro, control returning aimed at each boss, and the
+      three callouts firing once each at the right beat
 
 ---
 

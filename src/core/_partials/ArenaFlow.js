@@ -15,10 +15,16 @@ import { RailCombatManager } from '../arena/RailCombatManager.js';
 import { RailArenaController } from '../arena/RailArenaController.js';
 import { TowerArenaController } from '../arena/TowerArenaController.js';
 import { TowerCombatManager } from '../arena/TowerCombatManager.js';
+import { KeeperArenaController } from '../arena/KeeperArenaController.js';
 
 function arenaTypes(definition) {
   if (definition.controller === 'tower') {
     return { Combat: TowerCombatManager, Controller: TowerArenaController };
+  }
+  // The Keeper fights on a republished tower deck, so it keeps the tower's
+  // combat manager (Liwanag HUD, summoned echoes, no navmesh).
+  if (definition.controller === 'keeper') {
+    return { Combat: TowerCombatManager, Controller: KeeperArenaController };
   }
   if (definition.controller === 'rail') {
     return { Combat: RailCombatManager, Controller: RailArenaController };
@@ -36,6 +42,26 @@ export const arenaFlowMethods = {
     this.elFlash.style.opacity = '1';
     void this.elFlash.offsetHeight;
     this.elFlash.style.transition = '';
+    this._loadArena(arenaId);
+    this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
+  },
+
+  // Arena-to-arena hop (Arena 3's summit portal → the Keeper's deck). Identical
+  // to _enterArena except that `_returnZone` is deliberately NOT reassigned:
+  // it still holds the zone whose Rift started the run, so winning the Keeper
+  // returns to Zone 3 with its artifact scatter rather than dumping the player
+  // back onto the tower.
+  _transferArena(arenaId) {
+    if (!arenaId || this.busy || this._loadingZone) return;
+    this._loadingZone = true;
+    this.audio.playTeleport();
+    this.elFlash.style.transition = 'none';
+    this.elFlash.style.opacity = '1';
+    void this.elFlash.offsetHeight;
+    this.elFlash.style.transition = '';
+    // Unlike a zone→arena entry there is a live controller and combat manager
+    // here; _loadArena would otherwise overwrite them and orphan their handlers.
+    this._disposeArenaEntities();
     this._loadArena(arenaId);
     this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
   },
@@ -108,6 +134,7 @@ export const arenaFlowMethods = {
     this.elPrompt.classList.remove('active');
     this._syncJourneyGuide();
     this.journeyGuide.showControl('cast');
+    this.journeyGuide.showControl('shockwave');
   },
 
   async _runGuardianIntroduction(arenaId) {
@@ -116,6 +143,10 @@ export const arenaFlowMethods = {
     this.elCross.classList.remove('active');
     this.elPrompt.classList.remove('active');
     this.journeyGuide.setObjective({ mode: 'hidden' }, false);
+    // Prepare first: controllers that build their boss body for the cinematic
+    // rather than in begin() (the Keeper) need combat bound before anything asks
+    // them where that body is. Combat is ignored by the controllers that don't.
+    this.arena?.prepareGuardianIntroduction?.(this.combat);
     const target = this.arena?.guardianIntroCenter?.()
       || this.guardian?.center().clone()
       || new THREE.Vector3();
@@ -125,35 +156,70 @@ export const arenaFlowMethods = {
     // the cinematic so orbiting camera shots do not make the Guardian follow the
     // lens.
     this._guardianIntroFacingTarget = playerPosition.clone();
-    this.arena?.prepareGuardianIntroduction?.();
     this.audio.playGuardianIntro(arenaId, this.guardianIntro.durationFor(arenaId));
+    // The hand is a child of the player camera, which stays in the scene during
+    // the cinematic — left visible it renders as a hand floating at the player's
+    // staged position, in shot.
+    this.viewmodel.group.visible = false;
     this.renderPass.camera = this.guardianIntro.camera;
     await this.guardianIntro.play(arenaId, target, playerPosition);
     this.renderPass.camera = this.camera;
+    this.viewmodel.group.visible = true;
     this._guardianIntroFacingTarget = null;
-    this._levelCamera();
     if (this.arena?.completeGuardianIntroduction) {
       this.arena.completeGuardianIntroduction();
     } else {
       this.arena.begin(this.combat, this.guardian);
     }
+    // Hand control back looking at the boss rather than wherever the player
+    // happened to be facing when they walked in. Read the live centre after the
+    // fight has begun, since a controller may move its body on begin.
+    this._faceCamera(this.arena?.guardianCenter?.() || target);
     this.busy = false;
     this.elCross.classList.add('active');
     this._syncJourneyGuide();
     this.journeyGuide.showControl('cast');
+    this.journeyGuide.showControl('shockwave');
   },
 
   async _returnFromArena() {
     if (this.busy) return;
     this.busy = true;
     this.elCross.classList.remove('active');
-    const fallenCenter = this.arena.guardianCenter();
-    await this.pause.wait(ARENA.COLLAPSE * 1000);
-
+    this.elPrompt.classList.remove('active');
+    this.journeyGuide.setObjective({ mode: 'hidden' }, false);
+    this.viewmodel.group.visible = false;
+    this.combat?.cancelInput();
+    const arenaId = this.currentZone;
+    const center = this.arena.guardianCenter();
+    const fallenCenter = new THREE.Vector3(center.x, center.y, center.z);
+    const cameraStart = this.camera.getWorldPosition(new THREE.Vector3());
+    const cameraForward = this.camera.getWorldDirection(new THREE.Vector3());
     this.elFlash.style.transition = 'none';
-    this.elFlash.style.opacity = '1';
-    void this.elFlash.offsetHeight;
-    this.elFlash.style.transition = '';
+    this.elFlash.style.opacity = '0';
+    this.renderPass.camera = this.arenaVictoryCutscene.camera;
+    this.endingDistortion.enabled = true;
+    this.endingDistortion.uniforms.uAmount.value = 0;
+    try {
+      await this.arenaVictoryCutscene.play(
+        this.world.scene,
+        arenaId,
+        cameraStart,
+        cameraForward,
+        fallenCenter,
+        () => this.audio.playTeleport(),
+      );
+      this.audio.playPortalImpact();
+    } catch (error) {
+      console.error('Arena victory cutscene failed', { arenaId, error });
+    } finally {
+      this.elFlash.style.opacity = '1';
+      this.arenaVictoryCutscene.dispose();
+      this.renderPass.camera = this.camera;
+      this.endingDistortion.enabled = false;
+      this.endingDistortion.uniforms.uAmount.value = 0;
+      this.elFlash.style.transition = '';
+    }
 
     this._disposeArenaEntities();
     const oldWorld = this.world;
@@ -180,6 +246,7 @@ export const arenaFlowMethods = {
     this._proximity = null;
 
     this._spawnAtDock();
+    this.viewmodel.group.visible = true;
     const origin = new THREE.Vector3(fallenCenter.x, CONFIG.WATER_LEVEL + 2, 10);
     this.artifacts.scatter(origin);
     this.audio.playScatter();

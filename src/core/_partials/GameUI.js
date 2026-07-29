@@ -127,10 +127,22 @@ export function wireGameEvents(game) {
     if (game.phase !== 'museum') game._startGameplayPhase();
     if (wasDescending) game._playZoneIntro();
   });
+  // A combat verb is live only mid-fight, so exploration clicks (and the
+  // pointer-lock click itself) never fire a stray shot or shockwave.
+  const combatLive = () => !game.pause.isPaused && game.phase === 'arena' &&
+    !game.busy && game.player.controls.isLocked && !!game.combat?.active;
+
   document.addEventListener('keydown', (e) => {
     if (!game.pause.isPaused && e.code === 'KeyR' && !e.repeat &&
         game.phase === 'arena' && !game.busy && game.combat?.active) {
       game.combat.activateAlab();
+      return;
+    }
+    // Melee shockwave. Edge-triggered on !e.repeat: a HELD F must not stream
+    // requests at the manager, which is half of why the cooldown can't be
+    // leaned on (the manager drops the other half by never queueing them).
+    if (e.code === 'KeyF' && !e.repeat && combatLive()) {
+      game.combat.requestMelee();
       return;
     }
     if (game.pause.isPaused || e.code !== 'KeyE') return;
@@ -140,14 +152,41 @@ export function wireGameEvents(game) {
   document.addEventListener('keyup', (e) => {
     if (e.code === 'KeyE') game.holdKey = false;
   });
-  // Left click casts a light-bolt — only mid-fight, so exploration clicks
-  // (and the pointer-lock click itself) never fire a stray shot.
+
+  // ---- Held-fire, and the four ways it is guaranteed to stop --------------
+  // Holding left mouse auto-repeats the bolt. A held flag is only safe if it
+  // cannot survive the player letting go off-screen, so releasing is wired
+  // defensively: the explicit mouseup, losing the window, losing pointer lock,
+  // and a per-move reconciliation against what the browser says is actually
+  // held. The manager also clears it whenever pointer lock is down (see
+  // CombatManager.update), which covers the pause menu.
+  const stopFiring = () => game.combat?.setFiring(false);
+
   document.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    if (!game.pause.isPaused && game.phase === 'arena' && !game.busy &&
-        game.player.controls.isLocked && game.combat && game.combat.active) {
-      game.combat.requestFire();
-    }
+    if (combatLive()) game.combat.setFiring(true);
+  });
+  // Unconditional: whatever the game state is, letting go must always release.
+  document.addEventListener('mouseup', (e) => {
+    if (e.button === 0) stopFiring();
+  });
+  // The watchdog. If a mouseup was swallowed — released outside the window,
+  // alt-tabbed mid-hold, a dropped event — the next mouse movement reveals the
+  // truth: MouseEvent.buttons is the live button mask, so bit 0 clear while we
+  // still think we are firing means the button is long gone. This is the case
+  // the explicit listeners cannot catch, and it self-heals on the first move.
+  // Clear-only, never re-arm: resurrecting the flag from a button that happens
+  // to be down would recreate exactly the stuck-fire bug this exists to kill.
+  // Guarded on `firing` first — this runs on every mouse movement in the game.
+  document.addEventListener('mousemove', (e) => {
+    if (game.combat?.firing && !(e.buttons & 1)) stopFiring();
+  });
+  addEventListener('blur', stopFiring);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopFiring();
+  });
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement === null) game.combat?.cancelInput();
   });
   addEventListener('resize', () => {
     game.camera.aspect = innerWidth / innerHeight;
@@ -155,6 +194,7 @@ export function wireGameEvents(game) {
     game.cutscene.resize(innerWidth, innerHeight);
     game.guardianIntro.resize(innerWidth, innerHeight);
     game.faintCutscene.resize(innerWidth, innerHeight);
+    game.arenaVictoryCutscene.resize(innerWidth, innerHeight);
     game.portalCutscene.resize(innerWidth, innerHeight);
     game.museumEndingCutscene.resize(innerWidth, innerHeight);
     game.restoredProvince.resize(innerWidth, innerHeight);

@@ -1,5 +1,35 @@
 # Implementation Plan Index
 
+Current arena victory task:
+
+- `_partials/implementation_plan_arena_victory_rift.md` — shared 5.6-second
+  first-person boss explosion, Memory Rift formation, and pull back to each zone
+
+Current combat controls task:
+
+- `_partials/implementation_plan_hold_fire_melee.md` — hold the mouse to
+  auto-repeat light-bolts instead of clicking per shot, plus an `F` melee
+  shockwave (damage + knockback) with its cooldown drawn on the crosshair
+
+Current boss structure task:
+
+- `_partials/implementation_plan_keeper_scheduler.md` — Keeper of Memories: the
+  four priority-ordered attack clocks become one weighted scheduler with a
+  `_pattern` guard (parity with the Feastkeeper and Reveler), and the 736-line
+  file splits into four mechanic partials
+
+Current combat tuning task:
+
+- `_partials/implementation_plan_keeper_attack_tuning.md` — Keeper of Memories:
+  faster charge dash, a walk-to-centre state so the lighthouse sweep pivots on
+  the tower heart, and a jumpable sweep drawn as a shader light-wall whose height
+  is the hit volume
+
+Current gameplay task:
+
+- `_partials/implementation_plan_summit_portal_arena3boss.md` — Arena 3's summit
+  becomes a walk-in portal; the Keeper of Memories fight moves to a new `arena3boss`
+
 Current UI phase:
 
 - `_partials/implementation_plan_awaken_transition.md` — black Awaken prompt

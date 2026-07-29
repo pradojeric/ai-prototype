@@ -25,10 +25,10 @@ export const CONFIG = {
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
   DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
-  DEBUG_UNLOCK_ALL_ZONES: false, // true → all 3 museum portals start unlocked (walk the hub into
+  DEBUG_UNLOCK_ALL_ZONES: true, // true → all 3 museum portals start unlocked (walk the hub into
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
-  DEBUG_SKIP_MUSEUM_BUTTON: false, // true → show the title shortcut into the walkable museum hub
+  DEBUG_SKIP_MUSEUM_BUTTON: true, // true → show the title shortcut into the walkable museum hub
   DEBUG_TEST_ENDING_BUTTON: false, // true → show a title-menu shortcut for the full final cutscene
   DEBUG_GUARDIAN_ZONE_BUTTON: false, // true → show the title shortcut to the Guardian showroom
 };
@@ -259,10 +259,29 @@ export const PLAYER_RADIUS = 0.45;
 export const COMBAT = {
   PLAYER_HP: 100,
   HEAL_ON_CLEAR: 25,          // hp restored when a fight is won
-  // Player light-bolt: cast from the hand's lure with left click.
+  // Player light-bolt: cast from the hand's lure by HOLDING left mouse. COOLDOWN
+  // doubles as the auto-repeat interval, so a held button reproduces exactly the
+  // cadence a perfect clicker used to manage — same DPS, no sore hand.
   BOLT: {
     SPEED: 38, RADIUS: 0.18, LIFE: 1.2, COOLDOWN: 0.22, DAMAGE: 1,
     COLOR: 0x7fe8ff, SIZE: 0.09,
+  },
+  // Melee shockwave (F): a radial pulse centred on the player. It is the answer
+  // to being surrounded, not a second DPS button — the shove it lands is the
+  // point and the damage is a bonus. Deliberately gated three ways so it cannot
+  // be leaned on: a long COOLDOWN, a STAMINA bill from the same tank that pays
+  // for sprint and the combat hop, and a request that is dropped (never queued)
+  // while either gate is closed, so holding F cannot auto-release it.
+  SHOCKWAVE: {
+    RADIUS: 4.2,              // reaches past CHASER.ATTACK_RANGE (1.4), not across the arena
+    VERTICAL: 2.0,            // ± band around the player; a gale far overhead is missed
+    DAMAGE: 2,                // one-shots a base chaser (CHASER.HP 2); zone HP bonuses resist
+    KNOCKBACK: 2.6,           // ~1s of chaser travel at SPEED 3.2 — a real gap, not a teleport
+    COOLDOWN: 6,
+    STAMINA: 0.3,             // 1.5x a hop, out of the same 0..1 tank (CONFIG.JUMP_STAMINA 0.2)
+    DEFLECT_RADIUS: 5.0,      // hostile shots swept out of the air (slightly wider than the shove)
+    COLOR: 0x7fe8ff,          // the established player-light hue
+    FOV_PUNCH: 3,
   },
   ALAB: {
     KILL_GAIN: 0.10,
@@ -374,7 +393,7 @@ export const HUD = {
 // zone's Memory Rift. The Guardian is an active threat here: waves of drowned
 // echoes attack while the player answers the guardian's bugtong by SHOOTING one
 // of three answer nodes. Each correct answer strips one armor layer; when armor
-// is gone the guardian falls and the arena collapses (back to the main zone).
+// is gone the guardian falls and a victory rift carries the player back.
 export const ARENA = {
   WALL_RADIUS: 26,          // circular wall ring enclosing the play space
   CENTER: { x: 0, z: 0 },   // player spawn + wave/riddle origin
@@ -394,7 +413,26 @@ export const ARENA = {
   NODE_DELAY: 3,            // seconds after the riddle appears before the choices spawn
   PENALTY_CHASERS: 2,       // Starved Fishers spawned on a wrong answer
   PENALTY_SPITTERS: 1,      // the lockout squad has to be a real threat, not a speed bump
-  COLLAPSE: 1.4,            // victory flash/collapse beat before returning
+  // Shared first-person victory return: the defeated boss bursts into memory
+  // shards, those shards reverse into a rift, and the camera is pulled through.
+  VICTORY: {
+    TOTAL: 5.6,
+    IMPACT_END: 0.6,
+    BURST_START: 0.45,
+    BURST_END: 1.8,
+    RIFT_START: 1.1,
+    RIFT_FULL: 2.8,
+    PULL_START: 2.5,
+    DISTORT_START: 4.35,
+    FLASH_START: 5.35,
+    BASE_FOV: 70,
+    PULL_FOV: 78,
+    END_DEPTH: 0.42,
+    SHAKE_MAX: 0.055,
+    RIFT_RADIUS: 2.35,
+    SHARD_COUNT: 40,
+    MOTE_COUNT: 64,
+  },
   // The final boss phase is NOT tuned here: each zone's boss is an ArenaBoss
   // subclass owning its own numbers beside its own mechanics
   // (arena/ArenaBoss.js, arena/FeastkeeperBoss.js).

@@ -112,6 +112,17 @@ export class PlayerController {
 
   setMovementSlow(scale = 1) { this.externalSpeedScale = Math.max(0.1, Math.min(1, scale)); }
 
+  // Draw from the sprint tank for a combat action (the melee shockwave). Kept
+  // here rather than in the combat manager so every stamina cost — sprint, hop,
+  // shockwave — is spent and reported through one owner.
+  spendStamina(amount) {
+    const cost = Math.max(0, amount);
+    if (this.stamina < cost) return false;
+    this.stamina -= cost;
+    this._updateStaminaUi();
+    return true;
+  }
+
   // Focus loss can swallow keyup events. Clear every transient intent at both
   // pause and resume so a held movement/sprint key cannot remain stuck.
   resetInput() {
@@ -142,6 +153,10 @@ export class PlayerController {
       this.velocity.set(0, 0, 0);
       this.moving = false;
       this.sprinting = false;
+      // A rail encounter can't sprint or hop, but it CAN spend stamina on the
+      // shockwave — so the tank still has to refill here, or Arena 2 would get
+      // two melees for the whole ride. The bar itself stays rail-hidden.
+      this.stamina = Math.min(CONFIG.STAMINA_MAX, this.stamina + CONFIG.STAMINA_REGEN * dt);
       return true;
     }
     const f = (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0);

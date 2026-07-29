@@ -33,8 +33,7 @@ export class TowerCombatManager extends CombatManager {
   setTowerEventHandler(handler) { this._onTowerEvent = handler; }
 
   _resetCombatFeel() {
-    this._fireCooldown = 0;
-    this._fireRequested = false;
+    this._resetPlayerInput();
     this._hitstop = 0;
     this._hurtTimer = 0;
     this._fovPunch = 0;
@@ -354,10 +353,11 @@ export class TowerCombatManager extends CombatManager {
     this._updateFeel(dt);
     if (!this.active) return;
     this._updatePending(dt);
-    if (!this.player.controls.isLocked) { this._fireRequested = false; return; }
+    if (!this.player.controls.isLocked) { this.cancelInput(); return; }
     this._time += dt;
     this._updateGaleSpawner(dt, playerPos);
     this._updatePlayerFire(dt);
+    this._updatePlayerMelee(dt, playerPos);
     this.hud.trackThreats(this.enemies, this.camera, dt);
     this.bolts.update(dt, this.world);
     this.spits.update(dt, this.world);
@@ -369,6 +369,31 @@ export class TowerCombatManager extends CombatManager {
   _clearAllThreats() {
     for (const enemy of this.enemies) enemy.dispose();
     this.enemies.length = 0;
+  }
+
+  // No shove up here, deliberately. Gargoyles are perched sentries pinned to
+  // their anchor and gales re-write position.x/z from _fixedX/_fixedZ every
+  // frame, so a displacement would be erased before it could be seen. The
+  // shockwave still damages them and still sweeps their shots out of the air.
+  _knockbackFromMelee() {}
+
+  // Tower threats report hits through the single enemyImpact beat rather than
+  // the base impact/death + residue pair — there is no water surface up here for
+  // a residue ripple to sit on. Same accounting otherwise.
+  _damageEnemyFromMelee(enemy, center) {
+    const applied = Math.min(enemy.hp, COMBAT.SHOCKWAVE.DAMAGE);
+    const defeated = enemy.hit(COMBAT.SHOCKWAVE.DAMAGE);
+    this.hud.popupDamage(center, applied);
+    this.vfx.enemyImpact(center, enemy.type, defeated);
+    if (defeated) {
+      this.audio.playEnemyDeath();
+      this._hitstop = COMBAT.FEEL.HITSTOP;
+      this._onEnemyDefeated?.(enemy.type, center, 1);
+      this._updateWaveLeft();
+    } else {
+      this.audio.playHit();
+    }
+    return defeated;
   }
 
   abortFight({ preserveVfx = false } = {}) {

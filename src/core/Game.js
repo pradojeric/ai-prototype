@@ -28,6 +28,7 @@ import { Museum } from '../museum/Museum.js';
 import { IntroCutscene } from '../cutscene/IntroCutscene.js';
 import { GuardianIntroCutscene } from '../cutscene/GuardianIntroCutscene.js';
 import { FaintCutscene } from '../cutscene/FaintCutscene.js';
+import { ArenaVictoryCutscene } from '../cutscene/ArenaVictoryCutscene.js';
 import { FinalPortal, chooseFinalPortalPosition } from '../cutscene/FinalPortal.js';
 import { PortalPullCutscene, MuseumEndingCutscene } from '../cutscene/EndingCutscenes.js';
 import { RestoredProvince } from '../cutscene/RestoredProvince.js';
@@ -73,6 +74,7 @@ export class Game {
     this.cutscene = null;
     this.faintCutscene = new FaintCutscene();         // scripted black-out on an arena defeat
     this.guardianIntro = new GuardianIntroCutscene();
+    this.arenaVictoryCutscene = new ArenaVictoryCutscene();
 
     const postProcessing = createPostProcessing(this.renderer, this.world.scene, this.camera);
     this.composer = postProcessing.composer;
@@ -288,6 +290,23 @@ export class Game {
     this._lvlEuler.setFromQuaternion(this.camera.quaternion, 'YXZ');
     this._lvlEuler.x = 0;
     this._lvlEuler.z = 0;
+    this.camera.quaternion.setFromEuler(this._lvlEuler);
+  }
+
+  // Yaw the player camera onto a world position and flatten pitch/roll, so a
+  // cutscene can hand control back with the player already looking at what the
+  // cinematic was about. Yaw only: the horizon stays level exactly as after
+  // _levelCamera. Safe to call while pointer-locked — PointerLockControls reads
+  // the camera quaternion back each mouse move, so the next input continues from
+  // this heading rather than fighting it.
+  _faceCamera(target) {
+    const object = this.player.controls.getObject();
+    const dx = target.x - object.position.x;
+    const dz = target.z - object.position.z;
+    if (dx * dx + dz * dz < 1e-6) { this._levelCamera(); return; }
+    this._lvlEuler ||= new THREE.Euler(0, 0, 0, 'YXZ');
+    // The camera looks down its local -Z, so a target dead ahead is yaw 0.
+    this._lvlEuler.set(0, Math.atan2(-dx, -dz), 0);
     this.camera.quaternion.setFromEuler(this._lvlEuler);
   }
 
@@ -803,10 +822,26 @@ export class Game {
     }
 
     // Memory Arena: the reused combat core runs the fight, the ArenaController
-    // runs the riddle rounds + armor, and winning flips arena.won → collapse +
-    // return to the main zone. Firing is via the mousedown → combat.requestFire.
+    // runs the riddle rounds + armor, and winning flips arena.won → victory rift
+    // → return to the main zone. Firing is via mousedown → combat.requestFire.
     if (this.phase === 'arena') {
       const playerPos = this.player.controls.getObject().position;
+      if (this.arenaVictoryCutscene.active) {
+        this.arenaVictoryCutscene.update(dt, t);
+        const victoryCamera = this.arenaVictoryCutscene.camera;
+        this.world.update(dt, t, victoryCamera.position);
+        if (this.guardian) this.guardian.update(dt, t, victoryCamera.position);
+        this.arena?.updateVictoryVisual?.(dt, t, victoryCamera.position);
+        this.combat?.update(dt, t, playerPos);
+        this.endingDistortion.uniforms.uAmount.value =
+          this.arenaVictoryCutscene.distortion;
+        this.endingDistortion.uniforms.uTime.value = t;
+        this.elFlash.style.opacity = String(this.arenaVictoryCutscene.flash);
+        this.audio.updateListener(victoryCamera);
+        this._ePressed = false;
+        this.composer.render();
+        return;
+      }
       if (this.guardianIntro.active) {
         this.world.update(dt, t, this.guardianIntro.camera.position);
         const facingTarget = this._guardianIntroFacingTarget || playerPos;
@@ -835,6 +870,13 @@ export class Game {
         }
         if (this.arena.consumeGuardianIntroRequest?.()) {
           this._runGuardianIntroduction(this.currentZone);
+          this.composer.render();
+          return;
+        }
+        // Arena 3's summit portal: hop to the Keeper's arena without touching
+        // `_returnZone`, so the eventual victory still returns to Zone 3.
+        if (this.arena.consumeArenaTransferRequest?.()) {
+          this._transferArena(this.world.zone.nextArenaId);
           this.composer.render();
           return;
         }
