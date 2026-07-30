@@ -1,3 +1,137 @@
+# Task — Museum Pedestal Galleries + Floating Artifact Cubes (2026-07-29)
+
+Plan: `~/.claude/plans/read-src-museum-museum-js-the-groovy-crown.md`
+
+## Objective
+
+Replace the museum's 36 wall-hung picture frames with per-zone gallery rooms, each
+holding a ring of pedestals — one pedestal per artifact that zone actually has
+(11 / 9 / 7) — with the artwork floating and rotating inside a glass cube.
+
+## Confirmed direction (user)
+
+- [x] Wall frames removed entirely
+- [x] Zone 1 gets a NEW rear gallery past the +Z wall; the main room becomes a lobby
+- [x] Pedestal count derived from `ARTIFACT_DATA`, not a config literal
+- [x] Ring layout, with a zone-marker centrepiece in the middle of each ring
+- [x] Glass cube with the artwork suspended inside
+- [x] Ending tour becomes a full walkthrough of all three rings
+- [x] The 4 old decorative lobby pedestals removed
+- [x] Pull new CC0 textures — pale marble plinths with brass trim
+- [x] `IntroCutscene.js` and `FaintCutscene.js` untouched
+
+## Checklist
+
+- [x] Download CC0 `marble-pale` (Marble012) + `brass` (Metal007) sets; credit them
+- [x] `config.js` — `MUSEUM.GALLERY`, drop `WING`/`SLOTS_PER_ZONE`, raise `ENDING.MUSEUM_DURATION`
+- [x] `_partials/RoomShell.js` — shared `Tracker` / `tilePlane` / `wall` / `loadTextureSet` / `signTexture`
+- [x] `_partials/ArtifactPedestal.js` — plinth, empty socket, glass cube, float+spin
+- [x] `_partials/GalleryRing.js` — room shell, pedestal ring, zone marker, tour anchors
+- [x] `Museum.js` — drop frames/slots, wire 3 rings, rework collision, picking, lights
+- [x] `EndingCutscenes.js` — `MuseumEndingCutscene` full walkthrough via `galleryTour()`
+- [x] `CLAUDE.md` — museum architecture note rewritten for the lobby + galleries
+- [x] Verify: headless museum harness, `node --check`, import resolution, tests, line cap
+- [ ] User manually verify in browser: three rings, glass cubes spin and read from
+      every angle, revisit prompt, intro unchanged, ending walkthrough, epilogue museum
+
+## Fixes forced by the headless geometry check
+
+The first pass built a ring the player could not use; the harness caught both:
+
+- **The ring was too big for the room.** The plan's clearance arithmetic forgot
+  `PLAYER_RADIUS`, so the walk bands inside and outside the ring were ~0.06 m of
+  centre travel — impassable. Room `HALF_W` 3.5 → 4.5, `RING_SHORT` 2.2 → 2.6,
+  `RING_LONG` 4.4 → 4.2, `MARKER_R` 0.85 → 0.6. Now 0.66 m outside, 0.76 m inside.
+- **Equal-ANGLE spacing bunched the plinths at the ellipse's ends**, where spacing
+  collapses to `Δθ·RING_SHORT` — 0.80 m of gap for Zone 1's eleven, less than the
+  player's 0.90 m width, so the ring could never be entered. Pedestals are now
+  placed by equal ARC (`ellipseAngles` in `GalleryRing.js`), giving a uniform
+  1.86 m minimum spacing.
+
+## Fixes after user browser feedback
+
+- **See-through gap where each side wall meets the portal wall.** `_doorwayWall`
+  measured its span symmetrically about the room's `cross` offset, but the lobby
+  edge is centred on 0 — so with `cross = 2.0` the ±X lobby walls ran `z = -8..12`
+  instead of `-10..10`, leaving a 2 m hole at the -Z corner (and 2 m of stray wall
+  past the +Z wall). Zone 1 was unaffected because its `cross` is 0. The span is
+  now passed as absolute `vMin`/`vMax` bounds. Collision was never affected — the
+  walls still blocked; the hole was purely visual.
+
+## Follow-up — smaller lobby, bigger galleries (user request)
+
+The lobby is a crossroads now that no artifact lives in it, so it shrank and the
+rooms it serves grew. `MUSEUM.ROOM_HALF` is the single dial — spawn point,
+hallway anchor, and both cutscenes derive from it.
+
+- Lobby `ROOM_HALF` 10 → **8** (20×20 → 16×16 m)
+- `PORTAL_X` ±5.5 → **±4.8**, so the outer doorways keep a 1.7 m corner panel
+  rather than the 1.0 m the smaller lobby would have left them
+- Gallery `LEN` 12 → **15**, `HALF_W` 4.5 → **6** (108 → 180 m² per room)
+- Ring grown to match: `RING_LONG` 4.2 → **5.4**, `RING_SHORT` 2.6 → **3.4**.
+  Walk bands roughly doubled (1.81 m outside / 1.56 m inside, up from 0.66/0.76)
+  and minimum plinth spacing 1.86 → 2.41 m
+- Hanging lamps rebalanced toward the galleries: lobby 4 → 3 (now spaced as a
+  fraction of `ROOM_HALF`, one over the altar), each gallery 2 → 3. 12 PointLights.
+- **Hub fog pushed back** to near 20 / far 70, restored to 6/26 on the way out. A
+  15 m-deep gallery's far wall sat at ~45% haze under the intro's fog, which is
+  wrong for a room meant to read bright.
+
+Knock-on effects, both verified rather than assumed:
+
+- The **intro is geometrically unchanged in code** but now plays over a smaller
+  lobby: the wake pose moves z 7.8 → 5.8 and the walk to the hallway is 13 m
+  instead of 17.8 m over the same `CUTSCENE.MOVE`, so the drift reads slower.
+  A harness pass confirms the camera stays inside the lobby + open corridor for
+  the whole timeline and still ends inside the corridor.
+- Zone 3's ring is sparser (7 plinths over a 28 m perimeter ≈ 3.6 m apart) since
+  all three rooms stay the same size. Deliberate — the rooms read as siblings.
+
+## Follow-up — ending tour camera flipped on the first pan (user report)
+
+`TimelineCamera._sample` lerps the look POINT, and `lookAt()` degenerates the
+instant that point crosses the camera position — the camera snaps 180°.
+
+- **Beat 1 (reported).** Opened at `z = 6.4` looking at the altar (`z = 0`, so -Z),
+  then lerped the target to the Zone 1 ring centre at `z = 15.5` (+Z). Camera and
+  target both sat on `x = 0`, so the target passed exactly through the lens. The
+  tour now opens on the FAR side of the altar looking across it toward Zone 1 —
+  no reversal at all.
+- **Beat at t=16.2s (found by the new check, not reported).** The Zone 2 -> Zone 3
+  transit was an exact 180° reversal along a single line, degenerate for the same
+  reason. Each room-to-room turn now routes through a `swing` keyframe whose target
+  sits 10 m out along the angular BISECTOR of the turn, so no half exceeds 90° and
+  the target can never cross the camera. Exact reversals are broken toward +Z, so
+  the sweep crosses the galleries rather than the portal wall.
+- Galleries are now exited by pulling back through the doorway while still facing
+  into the room, so the reversal happens in the lobby where there is room to sweep.
+
+Added a standing harness check for this class of bug: minimum look-target distance
+and peak yaw rate along the whole path. Before: 0.16 m and 10,800°/s. After:
+**5.63 m and 122°/s** — a flip reads as thousands of degrees per second, so this
+would have caught both without a playthrough.
+
+## Verification record
+
+- 75/75 headless museum checks pass (throwaway `three` stub + resolver hook, so
+  the real `Museum` is constructed and inspected in Node): pedestal counts derive
+  from `ARTIFACT_DATA` (11/9/7), every plinth is inside its room and clear of the
+  walls, both walk bands are clear for a full lap of all three rings, doorways
+  pass and walls/plinths/markers block, portal corridors unchanged, `populate` is
+  idempotent, cubes bob clear of the plinth top, room-gated picking, plaque
+  repaint frees the old texture, and the ending camera enters all three galleries
+  without ever leaving the walkable shell.
+- The room gate on crosshair picking is load-bearing, not belt-and-braces: the
+  nearest Zone 1 cube is 2.08 m past the lobby's +Z wall, inside `INTERACT_RANGE`.
+- 22/22 existing Node tests pass; all `src/**/*.js` pass `node --check`; 229
+  relative imports resolve; no stale `slotsByZone` / `_addSlot` / `MUSEUM.WING`
+  references remain.
+- Line counts: `Museum.js` 898 → 643, plus `GalleryRing` 369, `ArtifactPedestal`
+  196, `RoomShell` 136 — all well under the 1000 cap.
+- Assets added: 2.2 MB (`marble-pale` at 1K, `brass` downsampled to 512).
+
+---
+
 # Task — Arena Boss Victory Rift Cutscene (2026-07-29)
 
 Plan: [_partials/implementation_plan_arena_victory_rift.md](_partials/implementation_plan_arena_victory_rift.md)

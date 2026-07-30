@@ -54,6 +54,8 @@ teal). The guardians also re-use `rock`, `moss` and `marble` from the tables abo
 | marble        | Marble018       | gallery floor (polished marble) |
 | gallery-wall  | Plaster003      | gallery + wing walls |
 | marble-tiles  | Tiles101        | gallery ceiling (tiled accent) |
+| marble-pale   | Marble012       | artifact plinths + zone-marker bases (pale veined marble, chosen to read against the darker `marble` floor) |
+| brass         | Metal007        | plinth cap rings + zone-marker medallions — 512 px, it only ever covers small trim |
 
 ## Environment map — `assets/hdri/`
 

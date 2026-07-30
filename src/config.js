@@ -29,7 +29,7 @@ export const CONFIG = {
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
   DEBUG_SKIP_MUSEUM_BUTTON: true, // true → show the title shortcut into the walkable museum hub
-  DEBUG_TEST_ENDING_BUTTON: false, // true → show a title-menu shortcut for the full final cutscene
+  DEBUG_TEST_ENDING_BUTTON: true, // true → show a title-menu shortcut for the full final cutscene
   DEBUG_GUARDIAN_ZONE_BUTTON: false, // true → show the title shortcut to the Guardian showroom
 };
 
@@ -127,7 +127,10 @@ export const ENDING = {
     DISTANCE: 6.5,
     RADIUS: 2.35,
   },
-  MUSEUM_DURATION: 13.5,
+  // The museum tour walks the camera into all three gallery rings, not just past
+  // the lobby walls, so it needs roughly twice the old fly-by's length. Independent
+  // of SUBTITLES below — those are keyed to RESTORED_DURATION (see RestoredProvince).
+  MUSEUM_DURATION: 26,
   RESTORED_DURATION: 31,
   SUBTITLES: [
     {
@@ -180,21 +183,60 @@ export const MUSEUM = {
   HALL_LIGHT_COLOR: 0xffe6b0,
   HALL_LIGHT_ON: 4,        // intensity once the light suddenly appears (off until then)
   LOCK_PORTAL_COLOR: 0x1a2730, // dim cold teal-grey for the two locked-zone portals
-  ROOM_HALF: 10,           // half-extent of the gallery room (x/z) — large central square
+  // Half-extent of the LOBBY (x/z). The lobby is a crossroads, not an exhibition
+  // space — the artifacts all live in the galleries now — so it is deliberately
+  // tighter than the rooms it serves. Everything else here is derived from it
+  // (spawn point, hallway anchor, both cutscenes), so this is the one dial.
+  ROOM_HALF: 8,
   ROOM_HEIGHT: 4.2,
   DOOR_HALF: 1.5,          // half-width of each -Z doorway / hallway corridor (geometry + collision)
-  PORTAL_X: [-5.5, 0, 5.5], // doorway center X offsets on the -Z wall (Zone 2 / Zone 1 / Zone 3)
+  // Doorway center X offsets on the -Z wall (Zone 2 / Zone 1 / Zone 3). Pulled in
+  // with the lobby so the outer two keep a full wall panel to their corner
+  // (|x| + DOOR_HALF = 6.3 against ROOM_HALF 8) instead of nearly touching it.
+  PORTAL_X: [-4.8, 0, 4.8],
   HALL_LEN: 5,             // hallway depth past the -Z wall to the portal panel
   EXIT_RADIUS: 1.4,        // walk within this of an unlocked portal's corridor end -> enter that zone
-  // Side-wing galleries off the ±X walls (Zone 2 = -X, Zone 3 = +X). Each wing
-  // is a rectangular room entered through a doorway cut into the main room wall.
-  WING: {
-    DOOR_HALF: 1.2,        // half-width of the wing doorway (geometry + collision)
-    DOOR_Z: 2.0,           // doorway center Z on the ±X walls
-    LEN: 12,               // wing depth outward from the main-room wall (x extent)
-    HALF_W: 3.5,           // wing half-width (z extent about DOOR_Z)
+  // Per-zone gallery rooms. Every zone's artifacts stand on a ring of pedestals in
+  // a room of its own, so the three collections never share a space and the main
+  // room stays a pure lobby (Soul Altar + the three portals). Zone 2 opens through
+  // the -X wall, Zone 3 through the +X wall, and Zone 1 through a doorway in the
+  // +Z wall behind the spawn. All three share one footprint so they read as
+  // siblings; ROOMS only places them.
+  GALLERY: {
+    LEN: 15,               // room depth outward from the lobby wall
+    HALF_W: 6,             // room half-width across that depth
+    DOOR_HALF: 1.2,        // half-width of the doorway cut into the lobby wall
+    DOOR_H: 3.0,           // doorway opening height (matches the -Z portal doorways)
+    // Which lobby wall each room opens through (axis + dir) and where along that
+    // wall its doorway sits (cross). The ±X entries keep the old wing footprint.
+    ROOMS: [
+      { zone: 1, axis: 'z', dir: 1, cross: 0 },
+      { zone: 2, axis: 'x', dir: -1, cross: 2.0 },
+      { zone: 3, axis: 'x', dir: 1, cross: 2.0 },
+    ],
+    // Pedestal ring: an ellipse fitted to the room, long axis along its depth. One
+    // pedestal per artifact the zone actually has (11 / 9 / 7 — derived from
+    // ARTIFACT_DATA, never configured). Pedestals are spaced by equal ARC, not
+    // equal angle, or the ellipse's ends would bunch them tighter than the player
+    // can walk between (Zone 1's 11 are the binding case).
+    //
+    // Sizing is what makes the room walkable, so it is worth showing the working.
+    // Every clearance below is for the player's CENTRE, i.e. already less
+    // PLAYER_RADIUS (0.45) and PEDESTAL_R:
+    //   outside the ring, across:  6.00 - 3.40 - 0.34 - 0.45 = 1.81 m of travel
+    //   outside the ring, at ends: 7.50 - 5.40 - 0.34 - 0.45 = 1.31 m
+    //   inside the ring, across:   3.40 - 0.34 - 0.45 - (0.60 + 0.45) = 1.56 m
+    //   gap between neighbours:    ~2.55 m centres - 0.68 = 1.86 m (player is 0.90)
+    RING_LONG: 5.4,
+    RING_SHORT: 3.4,
+    PEDESTAL_R: 0.34,      // pedestal footprint radius (collision + ring spacing)
+    PLINTH_H: 1.05,        // plinth height — the cube floats above this
+    MARKER_R: 0.6,         // zone-marker centrepiece radius (collision)
+    MARKER_H: 0.4,         // zone marker stays low so you can see across the ring
+    CUBE_Y: 1.36,          // rest height of the floating artifact cube
+    FLOAT: 0.06,           // vertical bob amplitude
+    SPIN: 0.42,            // cube spin, rad/s
   },
-  SLOTS_PER_ZONE: 12,      // pre-built frame slots per zone section (main room + each wing)
   // Gentler bloom for the walkable hub than the gameplay default (see BLOOM).
   // The gallery has no signature string-glow to protect, so a lower strength +
   // higher threshold keeps the marble/plaster surfaces and picture bulbs clean
