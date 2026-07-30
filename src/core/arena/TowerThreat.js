@@ -26,7 +26,8 @@ function localToWorld(anchor, localX, localZ, out) {
 
 export class TowerThreat extends ThreatBody {
   constructor(scene, world, type, anchor, player, options = {}) {
-    const cfg = type === 'gargoyle' ? TOWER_ARENA.GARGOYLE : TOWER_ARENA.GALE;
+    const baseCfg = type === 'gargoyle' ? TOWER_ARENA.GARGOYLE : TOWER_ARENA.GALE;
+    const cfg = { ...baseCfg, ...(options.profile || {}) };
     super(scene, type, {
       hp: cfg.HP,
       radius: cfg.RADIUS,
@@ -63,6 +64,7 @@ export class TowerThreat extends ThreatBody {
     }
     this._buildBody();
     attachAquaticSpiritVisual(this);
+    this.applyPresentation(options.presentation);
     if (options.placed) this._fade = 1;
   }
 
@@ -189,7 +191,7 @@ export class TowerThreat extends ThreatBody {
   }
 
   _updateGalePosition(dt, t, playerPos) {
-    const follow = Math.min(1, dt * TOWER_ARENA.GALE.HEIGHT_FOLLOW);
+    const follow = Math.min(1, dt * this.cfg.HEIGHT_FOLLOW);
     this.group.position.x = this._fixedX;
     this.group.position.z = this._fixedZ;
     this.group.position.y += (playerPos.y - this.group.position.y) * follow;

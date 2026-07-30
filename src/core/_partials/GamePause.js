@@ -7,6 +7,12 @@ const PAUSABLE_PHASES = new Set([
   'playing',
   'museum',
   'arena',
+  'survival',
+  // NOTE: 'survivalFaint' is deliberately absent from both sets. It is a modal
+  // beat like survivalUpgrade/survivalDefeat: pointer lock is already released
+  // when it starts, and making it a pointer phase turned that release into a
+  // 'pointer-lock' pause, which froze the frame loop mid-collapse and left the
+  // player on a black screen with no ledger.
   'debug',
   'faint',
   'endingPortal',
@@ -14,7 +20,14 @@ const PAUSABLE_PHASES = new Set([
   'endingRestored',
 ]);
 
-const POINTER_PHASES = new Set(['playing', 'museum', 'arena', 'debug', 'faint']);
+const POINTER_PHASES = new Set([
+  'playing',
+  'museum',
+  'arena',
+  'survival',
+  'debug',
+  'faint',
+]);
 
 export class GamePauseController {
   // `describeRun` returns the pause ledger's view model for the current run (see

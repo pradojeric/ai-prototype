@@ -12,6 +12,9 @@
   <link rel="stylesheet" href="./_partials/tower-arena-hud.css" />
   <link rel="stylesheet" href="./_partials/journey-guide.css" />
   <link rel="stylesheet" href="./_partials/pause-menu.css" />
+  <link rel="stylesheet" href="./_partials/survival-mode.css" />
+  <link rel="stylesheet" href="./_partials/survival-briefing.css" />
+  <link rel="stylesheet" href="./_partials/survival-title.css" />
 </head>
 
 <body>
@@ -119,6 +122,63 @@
       <span class="time" id="lumina-overcharge-time">0.0s</span>
     </div>
   </div>
+
+  <aside id="survival-hud" aria-label="Endless Memory survival status" hidden>
+    <section class="survival-wave-cluster" aria-labelledby="survival-wave-heading">
+      <div class="survival-kicker" id="survival-wave-heading">Endless Memory</div>
+      <div class="survival-wave-line">
+        <span>Wave</span>
+        <strong id="survival-wave">1</strong>
+      </div>
+      <div class="survival-wave-detail">
+        <span><strong id="survival-remaining">0</strong> remain</span>
+        <i aria-hidden="true"></i>
+        <span id="survival-milestone">Upgrade at Wave 5</span>
+      </div>
+    </section>
+
+    <section class="survival-build-cluster" aria-label="Current Survival build">
+      <div class="survival-weapon">
+        <span class="survival-label">Primary Thread</span>
+        <strong id="survival-weapon">Light Bolt</strong>
+      </div>
+      <div id="survival-heat" class="survival-heat" role="progressbar"
+           aria-label="Laser heat" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="0" hidden>
+        <div class="survival-meter-head">
+          <span>Heat</span>
+          <strong id="survival-heat-label">Ready</strong>
+        </div>
+        <div class="survival-meter-track" aria-hidden="true">
+          <div id="survival-heat-fill" class="survival-meter-fill"></div>
+        </div>
+      </div>
+      <div class="survival-resources">
+        <div class="survival-resource">
+          <span class="survival-key" aria-hidden="true">Q</span>
+          <span>Dash</span>
+          <strong id="survival-dash">1 / 1</strong>
+        </div>
+        <div class="survival-resource reroll">
+          <span class="survival-resource-mark" aria-hidden="true">↻</span>
+          <span>Rerolls</span>
+          <strong id="survival-rerolls">0</strong>
+        </div>
+      </div>
+    </section>
+
+    <section id="survival-health" class="survival-health"
+             role="progressbar" aria-label="Survival health"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+      <div class="survival-meter-head">
+        <span>Liwanag</span>
+        <strong id="survival-health-label">100 / 100</strong>
+      </div>
+      <div class="survival-meter-track" aria-hidden="true">
+        <div id="survival-health-fill" class="survival-meter-fill"></div>
+      </div>
+    </section>
+  </aside>
 
   <div id="hurt"></div>
 
@@ -290,14 +350,148 @@
     <div class="en" id="ending-subtitle-en"></div>
     <div class="fil" id="ending-subtitle-fil"></div>
   </div>
-  <div id="ending-credits">
+  <div id="ending-credits" aria-hidden="true" inert>
     <h1>STRINGS</h1>
     <div class="ending-rule"></div>
     <div class="ending-copy">
       A cultural preservation experience for Pangasinan.<br />
       Created for AI Game On! — Giving Our History a New Heartbeat.
     </div>
-    <button class="menu-btn primary" id="ending-return">Return to Aking Museo</button>
+    <div class="ending-actions" aria-label="Ending actions">
+      <!-- Endless Memory is entered by walking into the Endless Echoes arch in
+           the museum lobby, which this ending opens. -->
+      <button class="menu-btn primary" id="ending-return">Return to Aking Museo</button>
+    </div>
+  </div>
+
+  <div id="survival-boss-stinger" role="status" aria-live="assertive"
+       aria-atomic="true" hidden>
+    <div class="survival-stinger-rift" aria-hidden="true">
+      <i></i><i></i><i></i>
+    </div>
+    <div class="survival-stinger-copy">
+      <div id="survival-boss-kicker">Guardian of Endless Memory</div>
+      <strong id="survival-boss-name">The Feastkeeper</strong>
+      <span id="survival-boss-tier">Boss I</span>
+    </div>
+  </div>
+
+  <!-- Mode title card. Pure black behind the mode's name, played before the
+       briefing on every entry through the arch; the copy is painted from
+       SurvivalBriefing.js so the name lives in exactly one place. -->
+  <div id="survival-title" aria-hidden="true" hidden>
+    <div class="survival-title-shell">
+      <p class="survival-title-kicker" id="survival-title-kicker"></p>
+      <h2 class="survival-title-name" id="survival-title-name"></h2>
+    </div>
+    <p class="survival-title-skip" id="survival-title-skip">Click to skip</p>
+  </div>
+
+  <!-- Pre-run briefing. Shown on every entry through the Endless Echoes arch,
+       before Wave 1 is spawned; the body is painted from SurvivalBriefing.js so
+       the rules quoted here cannot drift from SurvivalRules. -->
+  <div id="survival-briefing" role="dialog" aria-modal="true"
+       aria-labelledby="survival-briefing-title" aria-describedby="survival-briefing-lede"
+       aria-hidden="true" inert hidden>
+    <div class="survival-modal-shell survival-briefing-shell">
+      <header class="survival-modal-head">
+        <p class="survival-kicker" id="survival-briefing-kicker">Beyond the last memory</p>
+        <h2 id="survival-briefing-title">Endless Echoes</h2>
+        <div id="survival-briefing-lede"></div>
+      </header>
+
+      <div class="survival-briefing-columns" id="survival-briefing-sections"></div>
+
+      <footer class="survival-briefing-actions">
+        <p class="survival-briefing-line">
+          <span id="survival-briefing-line-fil"></span>
+          <span id="survival-briefing-line-eng"></span>
+        </p>
+        <button class="menu-btn primary" id="survival-briefing-begin" type="button">
+          Enter the tide
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="survival-upgrade" role="dialog" aria-modal="true"
+       aria-labelledby="survival-upgrade-title" aria-describedby="survival-upgrade-copy"
+       aria-hidden="true" inert hidden>
+    <div class="survival-modal-shell survival-upgrade-shell">
+      <header class="survival-modal-head">
+        <p class="survival-kicker">The memory answers</p>
+        <h2 id="survival-upgrade-title">Choose a Woven Gift</h2>
+        <p id="survival-upgrade-copy">
+          Wave <strong id="survival-upgrade-wave">5</strong> is restored. Choose one thread for this run.
+        </p>
+      </header>
+
+      <div class="survival-card-grid" role="group" aria-label="Upgrade choices">
+        <button class="survival-card" id="survival-upgrade-card-1" type="button" data-slot="0">
+          <span class="survival-card-key" aria-hidden="true">1</span>
+          <span class="survival-card-category"></span>
+          <strong class="survival-card-title"></strong>
+          <span class="survival-card-rank"></span>
+          <span class="survival-card-description"></span>
+          <span class="survival-card-choice">Weave this gift</span>
+        </button>
+        <button class="survival-card" id="survival-upgrade-card-2" type="button" data-slot="1">
+          <span class="survival-card-key" aria-hidden="true">2</span>
+          <span class="survival-card-category"></span>
+          <strong class="survival-card-title"></strong>
+          <span class="survival-card-rank"></span>
+          <span class="survival-card-description"></span>
+          <span class="survival-card-choice">Weave this gift</span>
+        </button>
+        <button class="survival-card" id="survival-upgrade-card-3" type="button" data-slot="2">
+          <span class="survival-card-key" aria-hidden="true">3</span>
+          <span class="survival-card-category"></span>
+          <strong class="survival-card-title"></strong>
+          <span class="survival-card-rank"></span>
+          <span class="survival-card-description"></span>
+          <span class="survival-card-choice">Weave this gift</span>
+        </button>
+      </div>
+
+      <footer class="survival-upgrade-actions">
+        <button class="menu-btn survival-reroll" id="survival-upgrade-reroll" type="button">
+          <span>Reroll choices</span>
+          <span class="survival-reroll-count"><kbd>R</kbd> · <strong id="survival-upgrade-rerolls">0</strong></span>
+        </button>
+        <p>Combat waits while the memory is being woven.</p>
+      </footer>
+    </div>
+  </div>
+
+  <div id="survival-defeat" role="dialog" aria-modal="true"
+       aria-labelledby="survival-defeat-title" aria-hidden="true" inert hidden>
+    <div class="survival-modal-shell survival-defeat-shell">
+      <header class="survival-modal-head">
+        <p class="survival-kicker">The thread returns to silence</p>
+        <h2 id="survival-defeat-title">Memory Unwoven</h2>
+        <p id="survival-defeat-best" role="status">Session best</p>
+      </header>
+
+      <dl class="survival-results" aria-label="Survival run result">
+        <div><dt>Wave</dt><dd id="survival-result-wave">1</dd></div>
+        <div><dt>Active time</dt><dd id="survival-result-time">0:00</dd></div>
+        <div><dt>Echoes defeated</dt><dd id="survival-result-kills">0</dd></div>
+        <div><dt>Guardians defeated</dt><dd id="survival-result-bosses">0</dd></div>
+        <div class="survival-result-weapon">
+          <dt>Final primary thread</dt><dd id="survival-result-weapon">Light Bolt</dd>
+        </div>
+      </dl>
+
+      <section class="survival-result-build" aria-labelledby="survival-result-build-title">
+        <h3 id="survival-result-build-title">Woven Gifts</h3>
+        <ul id="survival-result-upgrades"></ul>
+      </section>
+
+      <footer class="survival-defeat-actions">
+        <button class="menu-btn primary" id="survival-retry" type="button">Retry from Wave 1</button>
+        <button class="menu-btn" id="survival-defeat-return" type="button">Return to Aking Museo</button>
+      </footer>
+    </div>
   </div>
 
   <div id="discovery">

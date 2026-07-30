@@ -1,3 +1,129 @@
+# Task — Firebase Anonymous Cloud Save (2026-07-30)
+
+Plan: [_partials/implementation_plan_firebase_progress.md](_partials/implementation_plan_firebase_progress.md)
+
+## Objective
+
+Persist campaign progress (artifacts, Souls, completed zones, ending) across
+sessions using Firebase Anonymous Auth for identity and Firestore for storage,
+keyed by `uid` — because the GameOn Portal returns only an opaque session token
+and can never supply an email or user id. GameOn stays exactly as it is: the
+optional end-of-campaign reward unlock.
+
+## Implementation checklist
+
+- [ ] Record and index the approved implementation plan before runtime edits
+- [ ] Create the Firebase project, enable Anonymous Auth, and apply the
+      `progress/{uid}` ownership rules (user-side console work)
+- [ ] Add the `FIREBASE` config block and the Firebase ESM entries to the
+      `index.html` import map
+- [ ] Add `src/core/_partials/saveState.js` — pure snapshot/restore/validate
+- [ ] Add `src/core/SaveManager.js` — anonymous sign-in, load, debounced save,
+      with every failure degrading to in-memory play
+- [ ] Wire construction + load into `Game.js` and `queue` calls into the existing
+      collect/Soul/Guardian/zone-complete/ending milestones
+- [ ] Keep the GameOn reward gate reading live session state, never the restored
+      save, so a tampered document cannot claim the artifact
+- [ ] Add `tests/SaveState.test.mjs`; keep the Survival no-persistence assertion
+      in `SurvivalIntegration.test.js` passing
+- [ ] Run full Node tests and the source syntax/import/file-length audits
+- [ ] Manually verify: fresh player, reload mid-Zone-1, restored museum portal
+      locks, and offline/blocked-Firebase still playable
+
+# Task — Endless Memory Survival Mode (2026-07-30)
+
+Plan: `_partials/implementation_plan_survival_mode.md`
+
+## Objective
+
+Add a credits-only, desktop Survival mode with endless escalating waves,
+fifth-wave upgrade drafts, tenth-wave Guardian bosses, run-locked weapon paths,
+elite variants, a collision-safe dash, session-best results, and clean
+retry/museum-return lifecycle while preserving every campaign contract.
+
+## Implementation checklist
+
+- [x] Record and index the approved implementation plan before runtime edits
+- [x] Add deterministic Survival rules: seeded waves, scaling, role unlocks,
+      elite selection, boss ordering, draft/reroll logic, weapon pity/locking,
+      upgrade ranks, and run-result ordering
+- [x] Build and register the 32m-radius authored Memory arena
+- [x] Add optional Survival-only profiles to all six lesser threat roles without
+      changing campaign defaults
+- [x] Add immutable Guardian tuning overrides and external attack resolution
+      while preserving campaign boss behavior
+- [x] Implement `SurvivalCombatManager`, weapons, damage/health, dash integration,
+      elites, volatile hazards, Lumina, Shockwave, and Alab
+- [x] Implement `SurvivalController` wave/boss/intermission/run lifecycle
+- [x] Add `SurvivalFlow` entry, teardown, retry, museum return, and update dispatch
+      without pushing `Game.js` over 1000 lines
+- [x] Add credits entry, Survival HUD, upgrade draft, defeat/results, and
+      keyboard/pointer interaction
+- [x] Extend pause state/model and controls for active Survival only
+- [x] Add procedural Survival Web Audio cues and lifecycle cleanup
+- [x] Add deterministic coverage for all approved rules and access contracts
+- [x] Add `SurvivalMode.md`; update `STRINGS_GDD.md` and `GAME_LOOP.md`
+- [x] Run full Node tests, source syntax/import/DOM/file-length/stale-reference
+      audits, and `git diff --check`
+- [ ] Manually verify legitimate/debug ending entry, Waves 1–10 pacing, and the
+      1.5-second stationary-camera boss stinger with correct pause ownership
+- [ ] Manually verify all weapons, heat/piercing, Space hop, Alab, Shockwave,
+      dash, upgrades, and rerolls
+- [ ] Manually verify all six roles, three elite tells, and each forced Guardian
+- [ ] Manually verify boss cleanup/heal/draft order, pause/resume twice,
+      pointer-lock recovery, defeat/retry, and museum return
+- [ ] Manually verify every new cue and sustained-beam cleanup, active-time
+      exclusions, console state, HUD fit, reduced motion, and ten-threat stress
+      performance (manual runtime gates)
+
+## Static verification
+
+- Full Node suite: **63 / 63 passed**.
+- Every `src/**/*.js` module passes `node --check`; all relative imports resolve.
+- DOM audit: **197 unique IDs** and **151 static `getElementById` references**.
+- All **58 touched/new files** stay below 1000 lines (largest:
+  `src/core/Game.js`, 946 lines).
+- Feature stale-reference and trailing-whitespace searches are clean;
+  `git diff --check` passes.
+- Repository-wide file-length audit still finds the pre-existing, untouched
+  `_partials/task_archive.md` at 1446 lines; no Survival change increased it.
+- Browser timing, balance, pointer-lock, visual, audio, and stress checks remain
+  deliberately unchecked above.
+
+## Design brief
+
+- Player promise: carry the campaign’s restored memories into an endless
+  altar-born combat trial and improvise a build that survives escalating echoes.
+- Target feeling: tense, legible, increasingly chaotic, and rewarding between
+  pressure spikes.
+- Primary verb: aim and fire; secondary verbs are reposition, dash, shockwave,
+  overdrive, draft, and reroll.
+- Core loop: clear a 30–45 second wave, read the next milestone, draft every five
+  waves, defeat a remixed Guardian every ten, then continue until death.
+- Pressure: mixed roles, stat scaling, elites, boss patterns, and finite health.
+- Reward: build-changing upgrades, a locked weapon identity, boss healing, and
+  rerolls.
+- Failure/retry: death records one session-best result and resets the full build
+  on a fast Wave 1 retry.
+- Skill expression: positioning, target priority, dash/shockwave timing, heat or
+  projectile management, and draft/reroll decisions.
+- Non-goals: persistence/meta saves, mobile/gamepad, online boards, riddles, new
+  external assets, arena mutators, and combo scoring.
+
+## Encounter contract
+
+- Circular arena with an open center, six readable spawn lanes, edge cover, and
+  gallery landmarks; player begins at the altar-facing center.
+- Wave 1 immediately teaches chasers and awards progress through combat feedback.
+- Waves 2/3/4 introduce spitter/boarder/sniper; waves 6/8 add gargoyle/gale.
+- Fifth waves are recovery/decision beats; tenth waves clear normal hazards,
+  announce a boss for 1.5 seconds, then deliver one Guardian and only its
+  authored summons instead of a normal recipe.
+- Failure is readable through telegraphs, elite color tells, health/HUD feedback,
+  and an explicit results overlay.
+
+---
+
 # Task — Memory Ledger Pause Menu (2026-07-30)
 
 Plan: `_partials/implementation_plan_pause_menu.md`
@@ -489,8 +615,8 @@ Plan: [_partials/implementation_plan_gameon_api.md](_partials/implementation_pla
 - 21/21 Node tests passed, including the mocked GameOn lifecycle and campaign gate
 - Every `src/**/*.js` module passed `node --check`
 - All 100 relative module imports and 121 `getElementById` references resolve
-- All changed source/UI files remain below 1000 lines; the pre-existing
-  `src/audio/AudioManager.js` remains at 1006 lines
+- All changed source/UI files remained below 1000 lines; `src/audio/AudioManager.js`
+  was later split and is currently below the limit
 - `git diff --check` and the stale endpoint/reference audit passed
 - `main` remains checked out at its original tip; `feat/auth` remains unchanged at
   `d54ef95c2fd637fea0136a203c2902b203b52b2f` and unmerged
@@ -626,3 +752,222 @@ Plan: `_partials/implementation_plan_zone_moonlight.md`
       portals (arenas inherit the new default rig)
 
 ---
+## Survival Mode — early-game balance
+
+Plan: `_partials/implementation_plan_survival_balance.md`
+
+Why wave 1 hurt: the base weapon was the campaign Light Bolt (1 dmg / 0.22s
+≈ 4.5 dps) while Survival threats use their own, much larger health baseline
+(`SURVIVAL_ROLE_BASE_HP`) — a 60 HP five-chaser opener meant ~13s of fire. And
+`primary-power` is multiplicative, so rank 1 on a base of 1 was invisible.
+
+- [x] `SurvivalUpgrades.js` — new `SURVIVAL_LIGHT_BOLT` (3 dmg / 0.22s); rapid
+      1→2.5, lance 3→8, laser 0.55→1.4 per tick. All four now sit in a 12–14 dps
+      band. `COMBAT.BOLT.DAMAGE` untouched — it is shared with the campaign.
+- [x] `SurvivalWeapons.js` — base branch reads `SURVIVAL_LIGHT_BOLT`; keeps
+      `COMBAT.BOLT.RADIUS` so the bolt looks unchanged
+- [x] `SurvivalRules.js` — `SURVIVAL_FIRST_DRAFT_WAVE`/`SURVIVAL_DRAFT_INTERVAL`,
+      `isSurvivalDraftWave`, `describeSurvivalMilestone` (one source of truth;
+      `SurvivalUI` had a duplicate milestone formatter)
+- [x] `SurvivalController.js` — drafts on wave 2 then every fifth
+- [x] Tests: 4 new cases (dps band, Primary Power legibility, draft cadence,
+      milestone labels) — `node --test tests/Survival*.test.js` → 43 pass
+- [x] `SurvivalMode.md` tuning tables updated
+- [ ] Manually verify in browser: wave 1 clear time, the wave 2 draft, and that
+      each weapon path still feels distinct
+- [ ] Revisit boss HP (`hpPerIndex: 0.55`) after playing wave 10 — bosses now die
+      ~3× faster than before this pass
+
+---
+## Survival Mode — Endless Echoes portal + immediate-unlock config
+
+Plan: `_partials/implementation_plan_survival_portal.md`
+
+- [x] `CONFIG.DEBUG_SURVIVAL_UNLOCKED` — opens the arch on the first hub visit so
+      Survival can be tested without playing to the ending
+- [x] `MUSEUM.SURVIVAL_PORTAL` — placement block. The -Z wall is FULL (3 doorways
+      at x=-4.8/0/4.8, DOOR_HALF 1.5) and the other three walls each belong to a
+      gallery, so this is a free-standing arch IN the lobby, not a 4th doorway
+- [x] New `src/museum/_partials/SurvivalPortal.js` — the arch (posts, lintel,
+      emissive panel, violet vortex, plaque). Sealed/open differ only in material
+      and plaque text, never a transform, so it survives `_freezeStatic`
+- [x] `RoomShell.js` — extracted `plaqueTexture(title, subtitle, dim, ...)`;
+      `signTexture` now delegates (it hardcoded "ZONE N", unusable for the arch)
+- [x] `Museum.js` — build/show/collide/update/dispose the arch; `setEpilogueMode`
+      deliberately does NOT seal it (documented as the exception)
+- [x] `SurvivalEntryPolicy.js` — replaced the credits policy with
+      `isSurvivalPortalOpen` + `canEnterSurvivalFromHub` (museum phase only)
+- [x] `SurvivalFlow.js` — `_enterSurvivalFromHub`, `_syncSurvivalPortal`, and
+      `_returnFromSurvival` (before the ending, returns to the ORDINARY hub —
+      forcing epilogue mode would seal an unfinished campaign's zone portals)
+- [x] `Game.js` — arch proximity check in the hub loop, outside the zone-portal
+      sweep since it stays open in epilogue mode
+- [x] Credits button removed: `#ending-survival`, `onEnterSurvival`,
+      `enterButton`, `setCreditsEntryEnabled`. Credits now offer only Return.
+- [x] Fixed a world leak found on the way: the hub keeps the last zone's world
+      alive, so entering Survival from it leaked one. Extracted
+      `Game._detachActiveZone()` (shared with `_loadZone`) and null-guarded the
+      `oldWorld.dispose()` calls, since `this.world` is now null during the hub.
+- [x] Tests: 51 pass. New cases for the open/sealed policy, hub-only phase gate,
+      arch clearance vs. the Zone 1 doorway and the intro camera path, and the
+      epilogue-seal exception.
+- [x] Docs: `SurvivalMode.md` entry section + `CLAUDE.md` museum paragraph
+- [ ] Manually verify in browser: the sealed arch reads as sealed, the open one is
+      findable from the spawn point, walking in starts a run, and returning lands
+      in the right museum (ordinary vs. epilogue) for each route
+- [ ] Ship check: `DEBUG_SURVIVAL_UNLOCKED` must be false for a real release
+
+---
+## Survival: boss duels, laser hit bug, thicker beam
+
+Plan: `_partials/implementation_plan_survival_duel_laser.md`
+
+- [x] `allowSummons` constructor option on `ArenaBoss` (defaults to on, so the
+      campaign is untouched); `SurvivalBossDirector` passes `false` for all three
+- [x] Gated every add-spawning call: Feastkeeper `_summon` (the funnel — see the
+      follow-up fix below), Reveler
+      `_updateSummons` + the two hardcoded `spawnRandomGroup` calls in `begin()`
+      and `_onPhaseChanged()`, Keeper `_tickSummons` + `SUMMON_ON_ENRAGE`
+- [x] Fixed the laser-vs-Reveler bug. Root cause was NOT the beam: the shared
+      `_playerAttackTargets` array was truncated to length 1 rather than rebuilt,
+      while `RevelerBoss` composed its pattern targets into that same array — so
+      slot 0 stopped being the boss and, after an Overload channel, held a dead
+      node. Base now rebuilds; the Reveler owns its own array (defence in depth).
+      Affects the campaign Reveler too, wherever hits route through target records.
+- [x] Beam redrawn as core + additive sleeve (two aimed unit cylinders sharing one
+      geometry), width from Path Mastery, swelling with heat and sputtering before
+      overheat lockout
+- [x] Tests: 50 pass. New: the summon gates, the target-array regression (both the
+      rebuild and "no `length = 1`"), and the beam construction.
+- [ ] Manually verify in browser: a boss wave spawns no adds; the laser keeps
+      damaging the Reveler after severing an Overload channel and after each
+      enrage; the beam reads thicker and its overheat sputter is legible
+- [ ] Decide on the pre-existing `gargoyle` unlock wave (see below)
+
+### Not mine — needs your call
+
+`SURVIVAL_ROLE_UNLOCKS` in `SurvivalRules.js` now has `gargoyle` at `wave: 0`
+(was 6), so gargoyles spawn from wave 1. `tests/SurvivalRules.test.js` still
+asserts wave 6 and fails. I left both alone rather than guess: if wave 0 is
+intentional, the test's expectation table needs updating; if it was a stray edit,
+restore `wave: 6`.
+
+---
+## Survival: descriptive weapon + Path Mastery cards
+
+- [x] New pure module `src/core/survival/SurvivalUpgradeCopy.js` —
+      `describeSurvivalCard(card, build)` derived from `SURVIVAL_WEAPON_PATHS` /
+      `SURVIVAL_LIGHT_BOLT`, so card copy cannot drift from the real tuning
+- [x] Weapon cards now state damage, cadence, dps and the trade against the Light
+      Bolt they replace (plus "hitscan" for the beam, its actual selling point)
+- [x] Path Mastery is weapon- and rank-aware: "Rapid Weave · rank 2 of 3: bolts
+      pierce 3 targets (up from 2)". Also says outright that the Laser's ranks buy
+      uptime, not damage — the thing that made it feel like a dead pick.
+- [x] Deleted `CARD_DESCRIPTIONS` from `SurvivalUI.js`; the UI now calls the copy
+      module with the `buildState` it already receives (stored as `_draftBuild`)
+- [x] Tests: 3 new cases asserting the copy against the tuning tables, the
+      rank-3-of-3 ceiling, the no-weapon-chosen fallback, and that every card in
+      `SURVIVAL_UPGRADE_CARDS` (plus the `-echo` fallbacks) resolves to real copy
+- [ ] Manually verify in browser: the longer copy fits the card without clipping
+      (`.survival-card` is `min-height: 268px` with `overflow: hidden`, so it grows
+      rather than clips, but all three cards grow together — check the short-viewport
+      case where the overlay has to scroll)
+
+### Blocked test suite — your WIP
+
+`SURVIVAL_ROLE_UNLOCKS` in `SurvivalRules.js` currently has `sniper`, `gargoyle`
+and `gale` **commented out**, so only chaser/spitter/boarder ever spawn. Two tests
+fail on that (`lesser roles unlock on their authored waves`, and `normal recipes
+mix unlocked roles` — wave 19's `baseCount` is 5 instead of 6). Untouched: it
+looks like a deliberate mid-experiment state. Restore the three lines, or tell me
+the new role set and I will re-baseline both tests.
+
+---
+## Follow-up: `allowSummons` was still letting the Feastkeeper summon
+
+User caught adds still arriving on a boss wave. Two causes, both fixed:
+
+- [x] `FeastkeeperBoss._onPhaseChanged` calls `_summon()` **directly** ("entering a
+      phase opens with the biggest group"), bypassing the gate I had put on
+      `_tickSummons`. Gate moved to `_summon` itself — the funnel every Feastkeeper
+      add passes through, so the clock and the enrage are both covered.
+- [x] Added a choke point so this class of miss cannot recur:
+      `SurvivalCombatManager.spawnExtra` / `spawnRandomGroup` / `spawnBossGroup`
+      now return early when the live boss has `allowSummons === false`. These three
+      methods serve boss summons ONLY (waves enter via `spawnWave`/`_queueRole`),
+      so no normal wave is affected. Suppression reads the boss's own flag rather
+      than duplicating the policy.
+- [x] Tests updated: the Feastkeeper assertion now targets the funnel and pins it
+      to a single `spawnExtra` call; three new assertions cover the manager gate.
+- [ ] Re-verify in browser: reach wave 10 with each Guardian and confirm no adds,
+      including across an enrage (that is the case that was broken)
+
+---
+## Survival pre-run briefing (Endless Echoes)
+
+Plan: `_partials/implementation_plan_survival_briefing.md`. Wave 1 no longer starts
+the moment you step through the arch.
+
+- [x] `src/core/survival/SurvivalBriefing.js` — pure content, every rule derived
+      from `SurvivalRules` (threat cap, first draft wave, draft interval, boss
+      period). Reroll cap deliberately not quoted: `SurvivalController.start` sets
+      `rerolls = 99`, so `SURVIVAL_REROLL_CAP` is not the lived number (flagged in
+      a comment, not changed).
+- [x] `#survival-briefing` overlay in index.html + `_partials/survival-briefing.css`
+      (own file — survival-mode.css was already at 926 lines)
+- [x] `ui/_partials/survivalBriefingView.js` paints it; `SurvivalUI.showBriefing()`
+      / `hideBriefing()` / `onBeginRun`, focus on the confirm button so Enter works
+- [x] `SurvivalFlow`: `_openSurvivalBriefing()` / `_beginSurvivalWaves()`, new
+      `survivalBriefing` phase added to the shared `SURVIVAL_PHASES` list
+- [x] Re-readable mid-run: `pauseModel.lore()` prepends the briefing in the survival
+      context; `PauseCollection` drops the count suffix for a card with no count
+- [x] `tests/SurvivalBriefing.test.js` + briefing contract in `tests/SurvivalUI.test.js`
+- [ ] Verify in browser: enter the arch → briefing reads correctly and nothing moves
+      or damages you behind it → "Enter the tide" starts Wave 1 with pointer locked →
+      Esc mid-run shows the briefing under the Lore tab → defeat → Retry shows it again
+
+---
+## Survival death cinematic (health hits zero)
+
+Plan: addendum in `_partials/implementation_plan_survival_briefing.md`.
+
+- [x] Reuse the campaign `FaintCutscene` verbatim; only new tunable is
+      `SURVIVAL_FAINT.BLACK_HOLD` in config.js (Survival never wakes — no respawn)
+- [x] `_showSurvivalDefeat` is async: hide HUD → `await _survivalFaint()` → ledger
+      over the black, then `#faint` fades out from under the modal
+- [x] New `survivalFaint` phase: in `SURVIVAL_PHASES`, driven by `_updateSurvival`,
+      pausable + pointer-locked like the campaign's `faint`
+- [x] `_restoreCameraAfterSurvivalFaint()` on both exits (retry, teardown)
+- [x] `pauseModel`: every `survival*` phase resolves to the survival controls and
+      the "Endless Memory" location
+- [x] `tests/SurvivalDefeatCutscene.test.js`
+- [x] BUG (found in testing): faded to black and the ledger never appeared. The
+      awaited `faintCutscene.play()` never resolved because `survivalFaint` was a
+      pausable pointer phase — a pointer-lock drop paused `animate()`, which is what
+      drives the cutscene. Now: no awaits (loop-driven countdown +
+      `_presentSurvivalDefeat`), pointer released once up front, `survivalFaint` out
+      of `PAUSABLE_PHASES`/`POINTER_PHASES`, plus a wall-clock `setTimeout` net so
+      the ledger appears even if the loop stalls.
+- [ ] Re-verify in browser: die in Survival → view sinks and fades to black → short
+      dark beat → ledger opens over the sunken arena → Retry and Return both give
+      the view back (no frozen cutscene camera, no lingering black)
+
+---
+
+## Survival — mode title card
+
+Plan: addendum in `_partials/implementation_plan_survival_title.md`.
+
+- [x] `SURVIVAL_TITLE` block in config.js (~3.5s total, `SKIP_AFTER`, `SKIP_FADE`)
+- [x] `#survival-title` markup + `_partials/survival-title.css` (black, z-index 45)
+- [x] `src/ui/_partials/survivalTitleCard.js` — fade/hold/fade driver, Promise,
+      skip after lockout; timing injected by SurvivalFlow (config.js imports
+      `three`, which breaks UI unit tests)
+- [x] `_openSurvivalBriefing` plays the card over the already-painted briefing;
+      `showBriefing(false)` defers focus, `focusBriefingAction()` on resolve
+- [x] Card swallows all input while up so nothing reaches "Enter the tide" behind it
+- [x] `hideAll()` cancels it (retry / return get teardown for free)
+- [ ] Re-verify in browser: walk into the arch → black card fades up with
+      "Beyond the last memory / Endless Echoes" → "Click to skip" appears after a
+      beat → card crossfades into the briefing → Enter the tide starts Wave 1;
+      clicking early skips; retry from the ledger replays the card

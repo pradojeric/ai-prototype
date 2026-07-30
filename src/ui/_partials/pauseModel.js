@@ -4,7 +4,10 @@
 // Pure and DOM-free, exactly like journeyObjectives.js: `collectPauseState`
 // (core/_partials/PauseState.js) reads the Game state machine, this turns it
 // into what the screen shows, and PauseMenu.js only paints it. Nothing here
-// re-derives a gameplay rule — every count arrives in the snapshot.
+// re-derives a gameplay rule — every count arrives in the snapshot. The one
+// import is SurvivalBriefing, itself pure content, so the Survival rite is
+// authored once and read by both the pre-run overlay and this Lore tab.
+import { survivalBriefingLore } from '../../core/survival/SurvivalBriefing.js';
 
 // An objective step's state. `active` is what the player should be doing NOW;
 // there is at most one per list (the first unfinished step in the chain).
@@ -77,6 +80,29 @@ function combatGroup(live) {
   };
 }
 
+function survivalControls() {
+  return [
+    {
+      group: 'Movement',
+      items: [
+        { keys: ['W', 'A', 'S', 'D'], action: 'Move through the Memory arena' },
+        { keys: ['Shift'], action: 'Sprint — spends the stamina tank' },
+        { keys: ['Q'], action: 'Dash — collision-safe and briefly invulnerable' },
+        { keys: ['Space'], action: 'Hop a ground shockwave — costs stamina' },
+      ],
+    },
+    {
+      group: 'Endless Combat',
+      items: [
+        { keys: ['Hold Click'], action: 'Fire the selected primary thread' },
+        { keys: ['F'], action: 'Release Shockwave Resonance' },
+        { keys: ['R'], action: 'Release Alab as weapon-neutral overdrive' },
+      ],
+    },
+    systemGroup(),
+  ];
+}
+
 function systemGroup() {
   return {
     group: 'System',
@@ -90,6 +116,7 @@ function systemGroup() {
 }
 
 function controlsFor(context, options = {}) {
+  if (context === 'survival') return survivalControls();
   if (context === 'arena') {
     return [
       movementGroup({ jumpEnabled: options.jumpEnabled, inArena: true }),
@@ -159,6 +186,23 @@ function normalizeControls(groups) {
 
 function objectivesFor(state) {
   const { phase } = state;
+
+  if (phase === 'survival') {
+    const wave = state.survival?.wave || 1;
+    const remaining = state.survival?.remaining || 0;
+    return [
+      step(
+        `Survive Wave ${wave}`,
+        ACTIVE,
+        remaining > 0 ? `${remaining} threats remain` : 'The next echo is forming',
+      ),
+      step(
+        state.survival?.nextMilestone || 'Reach the next Woven Gift',
+        TODO,
+        'Every fifth wave pauses for a draft',
+      ),
+    ];
+  }
 
   if (phase === 'arena') {
     const total = state.arena?.armorTotal || 0;
@@ -255,6 +299,9 @@ const SUBTITLES = {
   descend: 'The water holds its breath.',
   museum: 'The gallery waits in the quiet.',
   arena: 'The memory holds while you catch your breath.',
+  survival: 'The Endless Memory waits between every heartbeat.',
+  survivalFaint: 'The thread slips.',
+  survivalBriefing: 'The tide has not taken you yet.',
   debug: 'Guardian Debug Zone.',
   faint: 'The darkness waits.',
   complete: 'This memory is ready to come home.',
@@ -268,6 +315,7 @@ function subtitleFor(phase) {
 }
 
 function locationFor(state) {
+  if (state.phase.startsWith('survival')) return 'Endless Memory';
   if (state.phase === 'museum' || state.phase.startsWith('ending')) return 'Aking Museo';
   if (state.phase === 'arena') return state.arena?.label || 'The Memory Arena';
   if (state.phase === 'debug') return 'Guardian Showroom';
@@ -276,6 +324,7 @@ function locationFor(state) {
 
 // `context` picks the control set; it is coarser than `phase` on purpose.
 function contextFor(phase) {
+  if (phase.startsWith('survival')) return 'survival';
   if (phase === 'arena' || phase === 'faint') return 'arena';
   if (phase === 'museum' || phase.startsWith('ending')) return 'museum';
   return 'explore';
@@ -294,6 +343,23 @@ function clockLabel(totalSeconds) {
 }
 
 function runStats(state) {
+  if (state.survival) {
+    const ranks = Object.values(state.survival.build?.ranks || {})
+      .reduce((sum, rank) => sum + Math.max(0, Number(rank) || 0), 0);
+    const weapon = state.survival.weaponName || 'Light Bolt';
+    return [
+      { id: 'time', label: 'Active time', value: clockLabel(state.survival.activeSeconds) },
+      { id: 'wave', label: 'Current wave', value: String(state.survival.wave) },
+      { id: 'echoes', label: 'Echoes dispersed', value: String(state.survival.kills) },
+      {
+        id: 'bosses',
+        label: 'Guardians defeated',
+        value: String(state.survival.bossesDefeated),
+      },
+      { id: 'build', label: 'Primary thread', value: weapon },
+      { id: 'upgrades', label: 'Woven Gift ranks', value: String(ranks) },
+    ];
+  }
   if (!state.run) return [];
   const { bugtongCorrect, bugtongWrong } = state.run;
   const answered = bugtongCorrect + bugtongWrong;
@@ -339,8 +405,14 @@ function collection(state) {
   });
 }
 
+// The Lore tab. Inside a Survival run the mode's briefing leads the tab, so the
+// rite the player confirmed before Wave 1 stays re-readable mid-run (the briefing
+// overlay itself is gone by then) without a second copy of that copy.
 function lore(state) {
-  return (state.lore || []).map((entry) => {
+  const entries = contextFor(state.phase) === 'survival'
+    ? [...survivalBriefingLore(), ...(state.lore || [])]
+    : (state.lore || []);
+  return entries.map((entry) => {
     const zone = state.zones.find((z) => z.id === `zone${entry.zone}`);
     return {
       ...entry,
@@ -397,6 +469,7 @@ export function buildPauseModel(state) {
       controlsFor(contextFor(state.phase), { jumpEnabled: state.jumpEnabled }),
     ),
     run: runStats(state),
+    survival: state.survival || null,
     collection: collection(state),
     lore: lore(state),
   };

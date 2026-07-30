@@ -30,6 +30,7 @@ import { BeaconCharge } from './_partials/BeaconCharge.js';
 import { MemoryStones } from './_partials/MemoryStones.js';
 import { LighthouseSweep } from './_partials/LighthouseSweep.js';
 import { KeeperMeleeCombo } from './_partials/KeeperMeleeCombo.js';
+import { immutableBossTuning } from './_partials/BossTuning.js';
 
 // Per-phase arrays are indexed by phase 0/1/2 (PHASE_THRESHOLDS), so every one of
 // them must have exactly three entries. These live here, beside the mechanics
@@ -116,7 +117,8 @@ export class TowerKeeper extends ArenaBoss {
       combatRadius: 6.8,
     };
     const body = new TowerKeeperBody(scene, bounds);
-    super(body, combat, audio, player, TOWER_KEEPER_TUNING);
+    const tuning = immutableBossTuning(TOWER_KEEPER_TUNING, options.tuning);
+    super(body, combat, audio, player, tuning, options);
 
     this.scene = scene;
     this.body = body;
@@ -393,7 +395,7 @@ export class TowerKeeper extends ArenaBoss {
   // --- summons (independent clock, disabled unless tuned on) -----------------
 
   _tickSummons(dt) {
-    if (!this.tuning.SUMMON_INTERVAL) return;
+    if (!this.tuning.SUMMON_INTERVAL || !this.allowSummons) return;
     this._summonTimer -= dt;
     if (this._summonTimer > 0) return;
     this._summonTimer = this._drawSummonDelay();
@@ -423,7 +425,9 @@ export class TowerKeeper extends ArenaBoss {
     // two dead windows, so the enrage releases straight into an attack.
     this._attackTimer = 0;
     this._summonTimer = this._drawSummonDelay();
-    if (this.tuning.SUMMON_ON_ENRAGE) this.combat.spawnBossGroup?.(this.phase);
+    if (this.tuning.SUMMON_ON_ENRAGE && this.allowSummons) {
+      this.combat.spawnBossGroup?.(this.phase);
+    }
     this.onEvent?.(`Keeper phase ${this.phase + 1} · the tower destabilizes`, 'warning');
   }
 

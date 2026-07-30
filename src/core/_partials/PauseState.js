@@ -75,6 +75,7 @@ export function collectPauseState(game) {
   const arena = game.arena
     ? { label: game.world?.zone?.label || 'The Memory Arena', ...arenaWards(game.arena) }
     : null;
+  const survival = game.survival?.snapshot?.() || null;
 
   return {
     phase: game.phase,
@@ -94,6 +95,7 @@ export function collectPauseState(game) {
     zonesTotal: game.zoneOrder.length,
     endingPlayed: !!game.endingPlayed,
     arena,
+    survival,
     health: game.combat ? { current: game.combat.hp, max: game.combat.maxHp } : null,
     jumpEnabled: !!game.player?.jumpEnabled,
     run: game.runStats?.snapshot() || null,

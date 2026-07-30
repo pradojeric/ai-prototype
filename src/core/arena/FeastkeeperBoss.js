@@ -26,6 +26,7 @@ import { ArenaBoss } from './ArenaBoss.js';
 import { FeastGrenades } from './_partials/FeastGrenades.js';
 import { SpiralVolley } from './_partials/SpiralVolley.js';
 import { OfferingSlam } from './_partials/OfferingSlam.js';
+import { immutableBossTuning } from './_partials/BossTuning.js';
 
 // Per-phase arrays are indexed by phase 0/1/2 (see BOSS_DEFAULTS.PHASE_THRESHOLDS),
 // so every one of them must have exactly three entries.
@@ -37,6 +38,7 @@ export const FEASTKEEPER_TUNING = {
   TELEGRAPH: 0.45,                  // warning pulse before each aimed shot leaves
   SPIT_SPEED: 11,
   SPIT_LIFE: 4,
+  SHOT_DAMAGE: 10,
   SUMMON_INTERVAL: [[7, 10], [5, 8], [3.5, 6]],   // randomized [min, max] per phase
   SUMMON_SIZES: [1, 3, 5],          // group size drawn per summon, weighted by phase
   SUMMON_RANGED_SHARE: 3,           // one spitter per this many summoned echoes
@@ -70,8 +72,10 @@ export const FEASTKEEPER_TUNING = {
 };
 
 export class FeastkeeperBoss extends ArenaBoss {
-  constructor(guardian, combat, audio, player) {
-    super(guardian, combat, audio, player, FEASTKEEPER_TUNING);
+  constructor(guardian, combat, audio, player, options = {}) {
+    const tuning = immutableBossTuning(FEASTKEEPER_TUNING, options.tuning);
+    super(guardian, combat, audio, player, tuning, options);
+    this._rng = options.rng || Math.random;
     this._summonTimer = this._drawSummonDelay();
 
     this._grenades = new FeastGrenades(
@@ -115,7 +119,7 @@ export class FeastkeeperBoss extends ArenaBoss {
     const names = Object.keys(weights).filter((n) => n !== this._lastPattern);
     let total = 0;
     for (const n of names) total += weights[n];
-    let roll = Math.random() * total;
+    let roll = this._rng() * total;
     for (const n of names) {
       roll -= weights[n];
       if (roll <= 0) return n;
@@ -213,7 +217,7 @@ export class FeastkeeperBoss extends ArenaBoss {
 
   _drawAttackDelay() {
     const [min, max] = this.tuning.ATTACK_INTERVAL[this.phase];
-    return min + Math.random() * (max - min);
+    return min + this._rng() * (max - min);
   }
 
   // Entering a phase opens with the biggest group, so the enrage is felt as a
@@ -245,7 +249,13 @@ export class FeastkeeperBoss extends ArenaBoss {
   // boss needs no damage path of its own.
   _fire(playerPos) {
     const dir = this.aimAt(playerPos);
-    this.combat.spits.fire(this._center, dir, this.tuning.SPIT_SPEED, this.tuning.SPIT_LIFE);
+    this.combat.spits.fire(
+      this._center,
+      dir,
+      this.tuning.SPIT_SPEED,
+      this.tuning.SPIT_LIFE,
+      { damage: this.tuning.SHOT_DAMAGE },
+    );
   }
 
   // --- summons (independent clock, unchanged) --------------------------------
@@ -259,14 +269,14 @@ export class FeastkeeperBoss extends ArenaBoss {
 
   _drawSummonDelay() {
     const [min, max] = this.tuning.SUMMON_INTERVAL[this.phase];
-    return min + Math.random() * (max - min);
+    return min + this._rng() * (max - min);
   }
 
   // Group size for one summon. Later phases weight the draw toward the big
   // groups, so a 5-echo burst is rare early and routine at low HP.
   _drawSummonSize() {
     const sizes = this.tuning.SUMMON_SIZES;
-    const roll = Math.random();
+    const roll = this._rng();
     if (this.phase === 0) return roll < 0.7 ? sizes[0] : sizes[1];
     if (this.phase === 1) return roll < 0.45 ? sizes[0] : roll < 0.9 ? sizes[1] : sizes[2];
     return roll < 0.35 ? sizes[1] : sizes[2];
@@ -277,6 +287,9 @@ export class FeastkeeperBoss extends ArenaBoss {
   // group is trimmed to the room left under MAX_ADDS so the live count never
   // overshoots the cap, even when a big draw lands on an already-busy field.
   _summon(count) {
+    // Gated at the funnel, not at the clock: the enrage summons directly too, so
+    // gating `_tickSummons` alone left the phase-change crowd still arriving.
+    if (!this.allowSummons) return;
     const room = this.tuning.MAX_ADDS - this.combat.aliveCount();
     if (room <= 0) return;
     const n = Math.min(count, room);

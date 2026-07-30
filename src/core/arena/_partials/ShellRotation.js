@@ -10,13 +10,14 @@
 // with a texture, so what the player reads is exactly what the hit test uses —
 // the same honesty rule OfferingSlam follows in Zone 1.
 //
-// The disc faces +Z, straight down the lane at the boat, because a shell spinning
-// around the vertical axis would hide its gap behind the guardian for half of
-// every rotation. Facing the player it reads like a clock hand.
+// In Arena 2 the disc faces +Z, straight down the lane at the boat. Survival may
+// instead supply the live player target, rotating both the visible plate and its
+// hit plane together so circling the Guardian never makes the tell dishonest.
 // ============================================================
 import * as THREE from 'three';
 
 const TWO_PI = Math.PI * 2;
+const FORWARD = new THREE.Vector3(0, 0, 1);
 const INNER_RADIUS = 0.3;    // hub; bolts landing here count as shell, not gap
 const OUTER_RADIUS = 2.6;    // must cover BOSS_DEFAULTS.HIT_RADIUS (2.3)
 const FRONT_OFFSET = 0.9;    // sits in front of the chest so it intercepts first
@@ -60,9 +61,17 @@ export class ShellRotation {
     scene.add(this.group);
 
     this._center = new THREE.Vector3();
+    this._normal = new THREE.Vector3(0, 0, 1);
+    this._localHit = new THREE.Vector3();
+    this._facingQuaternion = new THREE.Quaternion();
+    this._liveFacing = false;
   }
 
   get busy() { return this.remaining > 0; }
+
+  get center() { return this._center; }
+
+  get attackRadius() { return OUTER_RADIUS * this._scale; }
 
   /**
    * Close the shell for `duration` seconds.
@@ -71,7 +80,7 @@ export class ShellRotation {
    * @param {THREE.Vector3} bossCenter
    * @param {() => number} rng
    */
-  start(duration, spinRate, bossCenter, rng = Math.random) {
+  start(duration, spinRate, bossCenter, rng = Math.random, faceTarget = null) {
     this.remaining = duration;
     this._spinRate = spinRate;
     this._spin = -this._spin;
@@ -79,26 +88,22 @@ export class ShellRotation {
     this._age = 0;
     // Seed the plane now: the boss tests bolts against it later in the very frame
     // the shell opens, before update() has had a chance to place it.
-    this._center.copy(bossCenter);
-    this._center.z += FRONT_OFFSET;
-    this.group.position.copy(this._center);
-    this.group.rotation.z = this._angle;
+    this._liveFacing = !!faceTarget;
+    this._place(bossCenter, faceTarget);
     this._scale = 0.25;
     this.group.scale.setScalar(this._scale);
     this.group.visible = true;
+    this.group.updateMatrixWorld(true);
   }
 
   /** @param {THREE.Vector3} bossCenter */
-  update(dt, bossCenter) {
+  update(dt, bossCenter, faceTarget = null) {
     if (this.remaining <= 0) return;
     this.remaining -= dt;
     this._age += dt;
     this._angle += this._spinRate * this._spin * dt;
 
-    this._center.copy(bossCenter);
-    this._center.z += FRONT_OFFSET;
-    this.group.position.copy(this._center);
-    this.group.rotation.z = this._angle;
+    this._place(bossCenter, faceTarget);
 
     // Petals snap shut over ~0.25s and iris back open as the pattern expires, so
     // the window's start and end are both legible from the shell itself. The hit
@@ -106,8 +111,29 @@ export class ShellRotation {
     const open = Math.max(0, Math.min(1, this._age / 0.25) * Math.min(1, this.remaining / 0.3));
     this._scale = 0.25 + open * 0.75;
     this.group.scale.setScalar(this._scale);
+    this.group.updateMatrixWorld(true);
 
     if (this.remaining <= 0) this.clear();
+  }
+
+  _place(bossCenter, faceTarget) {
+    if (!this._liveFacing || !faceTarget) {
+      this._center.copy(bossCenter);
+      this._center.z += FRONT_OFFSET;
+      this.group.position.copy(this._center);
+      this.group.rotation.set(0, 0, this._angle);
+      this._normal.copy(FORWARD);
+      return;
+    }
+    this._normal.copy(faceTarget).sub(bossCenter);
+    this._normal.y = 0;
+    if (this._normal.lengthSq() < 0.0001) this._normal.copy(FORWARD);
+    else this._normal.normalize();
+    this._center.copy(bossCenter).addScaledVector(this._normal, FRONT_OFFSET);
+    this.group.position.copy(this._center);
+    this._facingQuaternion.setFromUnitVectors(FORWARD, this._normal);
+    this.group.quaternion.copy(this._facingQuaternion);
+    this.group.rotateZ(this._angle);
   }
 
   /**
@@ -117,6 +143,7 @@ export class ShellRotation {
    */
   testBolt(position) {
     if (this.remaining <= 0) return 'miss';
+    if (this._liveFacing) return this._testLiveBolt(position);
     if (Math.abs(position.z - this._center.z) > DEPTH) return 'miss';
     const dx = position.x - this._center.x;
     const dy = position.y - this._center.y;
@@ -132,6 +159,29 @@ export class ShellRotation {
     let bearing = this._angle - Math.atan2(dy, dx);
     bearing = ((bearing % TWO_PI) + TWO_PI) % TWO_PI;
     return bearing <= this.tuning.GAP_ARC ? 'gap' : 'blocked';
+  }
+
+  _testLiveBolt(position) {
+    this._localHit.copy(position);
+    this.group.worldToLocal(this._localHit);
+    if (Math.abs(this._localHit.z) > DEPTH / this._scale) return 'miss';
+    const distSq =
+      this._localHit.x * this._localHit.x + this._localHit.y * this._localHit.y;
+    if (distSq > OUTER_RADIUS * OUTER_RADIUS) return 'miss';
+    if (distSq < INNER_RADIUS * INNER_RADIUS) return 'blocked';
+    let bearing = -Math.atan2(this._localHit.y, this._localHit.x);
+    bearing = ((bearing % TWO_PI) + TWO_PI) % TWO_PI;
+    return bearing <= this.tuning.GAP_ARC ? 'gap' : 'blocked';
+  }
+
+  intersectRay(origin, direction, out, maxDistance = Infinity) {
+    if (!this.busy) return null;
+    const denominator = direction.dot(this._normal);
+    if (Math.abs(denominator) < 0.0001) return null;
+    const distance = this._localHit.copy(this._center).sub(origin)
+      .dot(this._normal) / denominator;
+    if (distance < 0 || distance > maxDistance) return null;
+    return out.copy(origin).addScaledVector(direction, distance);
   }
 
   clear() {

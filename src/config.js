@@ -25,12 +25,19 @@ export const CONFIG = {
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
   DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
-  DEBUG_UNLOCK_ALL_ZONES: true, // true → all 3 museum portals start unlocked (walk the hub into
+  DEBUG_UNLOCK_ALL_ZONES: false, // true → all 3 museum portals start unlocked (walk the hub into
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
   DEBUG_SKIP_MUSEUM_BUTTON: true, // true → show the title shortcut into the walkable museum hub
   DEBUG_TEST_ENDING_BUTTON: false, // true → show a title-menu shortcut for the full final cutscene
-  DEBUG_GUARDIAN_ZONE_BUTTON: true, // true → show the title shortcut to the Guardian showroom
+  // With the debug ending enabled, set one of: feastkeeper, reveler, keeper.
+  // Null preserves seeded random boss order for every ordinary run.
+  DEBUG_SURVIVAL_BOSS: null,
+  DEBUG_GUARDIAN_ZONE_BUTTON: false, // true → show the title shortcut to the Guardian showroom
+  // true → the Endless Echoes arch in the museum lobby is open on the first hub
+  // visit, so Survival can be tested without playing through to the ending.
+  // Normally the arch stays sealed until the ending cutscene has been seen.
+  DEBUG_SURVIVAL_UNLOCKED: true,
 };
 
 // PRESENTER SKIP — the hidden "magic key" for live demos in front of a crowd.
@@ -111,6 +118,24 @@ export const FAINT = {
   DROOP: 0.9,        // camera sinks/tilts as vision goes (under the black fade)
   SINK: 1.2,         // how far the camera drops while fainting (world units)
   BLACK_HOLD: 1.0,   // unconscious in the dark before waking (user: ~1s)
+};
+
+// Survival reuses FaintCutscene's droop verbatim (same collapse, same SINK) but
+// never wakes up: the run is over, so the black holds and the defeat ledger opens
+// on top of it instead of a respawn.
+export const SURVIVAL_FAINT = {
+  BLACK_HOLD: 1.1,   // dark beat between the collapse and the ledger
+};
+
+// The mode's title card: black, the kicker, the name, then the briefing. Plays on
+// every entry through the arch, so it is skippable — but only after SKIP_AFTER,
+// or the click that walked the player into the portal would eat its own card.
+export const SURVIVAL_TITLE = {
+  FADE_IN: 0.9,
+  HOLD: 1.7,
+  FADE_OUT: 0.9,
+  SKIP_AFTER: 0.45,
+  SKIP_FADE: 0.25,   // a skipped card still fades, just briskly
 };
 
 // Final sequence — portal pull, completed-museum reveal, and restored province.
@@ -247,6 +272,25 @@ export const MUSEUM = {
     Z: 0,
     RADIUS: 1.58,
     ACTIVATE_RANGE: 2.7,
+  },
+  // The Endless Echoes arch: a free-standing portal in the lobby leading to
+  // Survival. The -Z wall is fully consumed by the three zone doorways (see
+  // PORTAL_X + DOOR_HALF) and the other three walls belong to galleries, so this
+  // is an arch standing IN the room rather than an opening cut into a wall.
+  //
+  // X is off-center on the -X side: it clears Zone 1's +Z gallery doorway
+  // (|x| <= GALLERY.DOOR_HALF), the -X wall, and the intro cutscene's x=0 camera
+  // path. Z is derived from ROOM_HALF in SurvivalPortal.js (a literal cannot
+  // reference its own MUSEUM.ROOM_HALF).
+  SURVIVAL_PORTAL: {
+    X: -5.0,
+    INSET: 0.55,           // distance the arch stands off the +Z wall
+    WIDTH: 2.2,            // outer post-to-post span
+    HEIGHT: 3.0,           // opening height (matches GALLERY.DOOR_H)
+    POST_R: 0.16,          // post radius, also its collision radius
+    ENTRY_OFFSET: 0.9,     // how far into the lobby the trigger point sits
+    OPEN_COLOR: 0xb76cff,  // violet — distinct from the zones' warm portals
+    SEALED_COLOR: 0x1a2730, // reuses the locked-portal cold grey
   },
 };
 

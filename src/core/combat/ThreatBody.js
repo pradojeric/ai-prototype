@@ -145,6 +145,34 @@ export class ThreatBody {
   // the spawn rise has settled).
   get emergeOffset() { return this.rig.position.y; }
 
+  // Survival elites reuse campaign bodies but need an unmistakable, persistent
+  // tell. The optional ring is instance-owned and only exists when a profile
+  // asks for it; campaign constructors never call this method.
+  applyPresentation({ eliteType = null, color = null } = {}) {
+    if (!eliteType || !Number.isFinite(color)) return;
+    this.eliteType = eliteType;
+    this.group.userData.eliteType = eliteType;
+    for (const [material] of this._flashMats) {
+      material.color?.setHex?.(color);
+      material.emissive?.setHex?.(color);
+    }
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.82,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this._own(material);
+    this._eliteRing = new THREE.Mesh(
+      new THREE.TorusGeometry(Math.max(0.55, this.radius * 1.35), 0.045, 5, 28),
+      material,
+    );
+    this._eliteRing.rotation.x = Math.PI / 2;
+    this._eliteRing.position.y = 0.12;
+    this.rig.add(this._eliteRing);
+  }
+
   // ---- death puff -------------------------------------------------------
 
   // One pre-allocated points cloud per threat, built at spawn: only per-frame
@@ -229,6 +257,11 @@ export class ThreatBody {
     const extra = this._extraGlow();
     for (const [material, base] of this._flashMats) {
       material.emissiveIntensity = base * boost + extra;
+    }
+    if (this._eliteRing) {
+      this._eliteRing.rotation.z += dt * 0.9;
+      this._eliteRing.material.opacity = (0.58 + Math.sin(this._poofLife + this._fade * 5) * 0.16)
+        * this._fade;
     }
 
     return this.alive && this._fade >= this._actThreshold;

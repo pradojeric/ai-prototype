@@ -27,13 +27,14 @@ const smooth = (f) => f * f * (3 - 2 * f);          // smoothstep ease
 const ramp = (x, a, b) => smooth(Math.max(0, Math.min(1, (x - a) / (b - a))));
 
 export class ThreadTear {
-  constructor(scene, color) {
+  constructor(scene, color, poolSize = VFX.TEAR.POOL) {
     this.scene = scene;
     this.color = new THREE.Color(color);
+    this.poolSize = Math.max(1, Math.floor(Number(poolSize) || VFX.TEAR.POOL));
 
-    const { POOL, STRANDS, SAMPLES } = VFX.TEAR;
+    const { STRANDS, SAMPLES } = VFX.TEAR;
     this._segmentsPerTear = STRANDS * (SAMPLES - 1);
-    const segments = POOL * this._segmentsPerTear;
+    const segments = this.poolSize * this._segmentsPerTear;
 
     // ---- strands: one LineSegments2 for the entire pool -------------------
     // setPositions/setColors allocate, so they run once here; from then on we
@@ -71,7 +72,11 @@ export class ThreadTear {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    this.seamMesh = new THREE.InstancedMesh(this._seamGeometry, this._seamMaterial, POOL);
+    this.seamMesh = new THREE.InstancedMesh(
+      this._seamGeometry,
+      this._seamMaterial,
+      this.poolSize,
+    );
     this.seamMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.seamMesh.frustumCulled = false;
     scene.add(this.seamMesh);
@@ -81,7 +86,7 @@ export class ThreadTear {
     this._dirty = false;        // one final upload is owed after the last tear closes
 
     this.tears = [];
-    for (let i = 0; i < POOL; i++) {
+    for (let i = 0; i < this.poolSize; i++) {
       this.tears.push({
         active: false,
         closing: false,
@@ -139,16 +144,16 @@ export class ThreadTear {
     // stale id (its tear was recycled by a bigger wave) cannot close someone
     // else's rift.
     tear.serial = (tear.serial + 1) % SERIAL_WRAP;
-    return index + tear.serial * VFX.TEAR.POOL;
+    return index + tear.serial * this.poolSize;
   }
 
   // The body is through: snap the seam shut and let the strands recoil.
   close(id) {
     if (id < 0) return;
-    const index = id % VFX.TEAR.POOL;
+    const index = id % this.poolSize;
     const tear = this.tears[index];
     if (!tear || !tear.active || tear.closing) return;
-    if (tear.serial !== Math.floor(id / VFX.TEAR.POOL)) return;   // recycled slot
+    if (tear.serial !== Math.floor(id / this.poolSize)) return;   // recycled slot
     tear.closing = true;
     tear.closeLife = VFX.TEAR.CLOSE_TIME;
   }

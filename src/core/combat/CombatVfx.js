@@ -68,14 +68,18 @@ function bossPaletteFor(style) {
 export class CombatVfx {
   // `camera` is only read when a tear opens, to freeze its facing toward the
   // player; the effects layer never drives the camera.
-  constructor(scene, camera = null) {
+  constructor(scene, camera = null, options = {}) {
     this.scene = scene;
     this.camera = camera;
     this._dummy = new THREE.Object3D();
     this._scratchColor = new THREE.Color();
 
     // The spawn portal itself. Pooled and additive like everything else here.
-    this.tears = new ThreadTear(scene, VFX_COLORS.memory);
+    this.tears = new ThreadTear(
+      scene,
+      VFX_COLORS.memory,
+      options.tearPoolSize,
+    );
 
     this._ringGeometry = new THREE.TorusGeometry(0.55, 0.035, 5, 28);
     this._ringMaterial = new THREE.MeshBasicMaterial({

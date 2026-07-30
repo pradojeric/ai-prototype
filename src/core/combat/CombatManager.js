@@ -32,7 +32,9 @@ export class CombatManager {
     });
 
     // Pooled spawn/impact/death effects, shared by every arena subclass.
-    this.vfx = new CombatVfx(scene, camera);
+    this.vfx = new CombatVfx(scene, camera, {
+      tearPoolSize: options.tearPoolSize,
+    });
 
     // Pathfinding: walkability grid baked once per zone; the BFS flow field
     // toward the player is rebuilt on a timer only while a fight is active.

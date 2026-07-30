@@ -3,7 +3,13 @@
 State machine lives in `Game.js` via `this.phase`:
 
 ```
-title → cutscene → descend → playing → encounter → defeat/faint → playing → complete → museum → (next zone) descend → ...
+title → cutscene → descend → playing → arena/faint → playing → complete
+→ museum → (next zone) descend → ... → endingPortal → endingMuseum
+→ endingRestored → endingCredits → epilogue museum
+                              ↘ survival ↔ survivalUpgrade
+                                         → survivalDefeat
+                                           ↙             ↘
+                                      survival      epilogue museum
 ```
 
 ## 1. Title → Intro Cutscene
@@ -45,13 +51,53 @@ title → cutscene → descend → playing → encounter → defeat/faint → pl
 - **Player action:** free-roam the walkable `Museum` (`src/museum/Museum.js`), which is `populate()`d with frames of all collected artifacts (re-readable via E), and has portals to each zone (locked/dimmed until unlocked).
 - **Transition:** walking into an unlocked portal's corridor (`museum.portals`, radius check) triggers `_enterZoneFromHub(zoneId)` → `_loadZone` tears down old World, builds new zone (`createWorld` in `src/core/zones/index.js`), resets Guardian/ArtifactManager/state, spawns at dock, shows Descend screen — loop restarts at stage 2 for the next zone.
 
-## 6. End of game
+## 6. Final Memory and Credits
 
-- Zone order is `['zone1','zone2','zone3']` (`this.zoneOrder`). Completing zone3 unlocks nothing further (no zone4) — the loop ends with all three portals unlocked and the museum fully populated as the final "collection display" state. There is no separate scripted ending beyond this — the Museum hub itself serves as the endgame/collection showcase.
+- **Campaign completion:** recover all 27 artifacts and place all three Guardian
+  Souls in Aking Museo. The central altar then exposes the Final Memory.
+- **Trigger:** hold `E` at the altar for 2.5 seconds.
+- **Sequence:** the ending rift, completed-museum reveal, restored-province
+  tableau, bilingual subtitles, and credits play in order.
+- **Credits choice:**
+  - `Return to Aking Museo` enters the peaceful epilogue museum with its exits
+    sealed.
+  - `Enter Endless Memory` starts a new Survival run at Wave 1.
+- **Access contract:** Survival is reachable only from these credits. It does not
+  add a title unlock, museum portal, or `localStorage` access flag. Debug ending
+  playback may expose the choice for testing without becoming eligible for the
+  legitimate-ending GameOn reward.
+
+## 7. Endless Memory Survival
+
+- **Arena:** load the dedicated 32m-radius `survival` zone, reset the build and
+  statistics, enable Q dash, and begin Wave 1.
+- **Normal waves:** mix the six campaign lesser-threat roles as they unlock,
+  apply five-wave stat tiers, and keep live plus pending threats at or below ten.
+- **Upgrade waves:** every fifth cleared wave changes to
+  `phase='survivalUpgrade'`, releases pointer lock, and offers one smart choice
+  from three cards. `1`–`3` select; `R` spends a boss-earned reroll.
+- **Boss waves:** every tenth wave clears normal hazards, plays a 1.5-second
+  stationary-camera portal/name stinger, and spawns one seeded random Guardian
+  with no immediate repeat. The wave contains no normal recipe beyond that
+  Guardian's authored summons.
+- **Boss reward order:** clean up hazards and adds, heal 25% of maximum health,
+  award one reroll up to the cap of two, then open the fifth-wave draft.
+- **Defeat:** `phase='survivalDefeat'` displays wave, active time, kills,
+  Guardians defeated, weapon, and upgrade ranks. The player can retry from Wave
+  1 or return to the epilogue museum.
+- **Persistence:** the build always resets. Only the best result for the current
+  page session is retained; refresh clears it.
+
+Active `survival` is pointer-lock pausable. The upgrade and defeat phases
+intentionally keep input unlocked and own their overlays. See
+[`SurvivalMode.md`](SurvivalMode.md) for exact scaling, weapons, elites, and
+upgrade effects.
 
 ## Key files
 
 - `src/core/Game.js`
+- `src/core/_partials/SurvivalFlow.js`
+- `src/core/survival/*.js`
 - `src/core/combat/CombatManager.js` (+ `Enemy.js`, `ProjectilePool.js`)
 - `src/core/ArtifactManager.js`
 - `src/core/Guardian.js`
@@ -59,3 +105,4 @@ title → cutscene → descend → playing → encounter → defeat/faint → pl
 - `src/museum/Museum.js`
 - `src/data.js`
 - `src/core/zones/*.js`
+- `src/ui/SurvivalUI.js`

@@ -156,7 +156,10 @@ export class PauseCollection {
     entries.forEach((entry, index) => {
       const card = cards[index];
       card.className = `pause-lore-card${entry.restored ? ' is-restored' : ''}`;
-      card._name.textContent = `${entry.name} — ${entry.countLabel}`;
+      // A briefing card has nothing to restore, so it carries no count.
+      card._name.textContent = entry.countLabel
+        ? `${entry.name} — ${entry.countLabel}`
+        : entry.name;
       card._subtitle.textContent = entry.subtitle;
       card._body.textContent = entry.body;
       card._fil.textContent = entry.line;

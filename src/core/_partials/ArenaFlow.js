@@ -74,7 +74,7 @@ export const arenaFlowMethods = {
     this.world = createWorld(arenaId);
     this.currentZone = arenaId;
     this.world.scene.add(this.player.controls.getObject());
-    oldWorld.dispose();
+    oldWorld?.dispose();
 
     this.player.setCollider((x, z, y) => this.world.collidesAt(x, z, PLAYER_RADIUS, y) || this.arena?.collidesPlayerAt?.(x, z, PLAYER_RADIUS, y));
     this.player.setGroundHeight((x, z, y) => this.world.groundHeightAt(x, z, y));
@@ -226,7 +226,7 @@ export const arenaFlowMethods = {
     this.world = createWorld(this._returnZone);
     this.currentZone = this._returnZone;
     this.world.scene.add(this.player.controls.getObject());
-    oldWorld.dispose();
+    oldWorld?.dispose();
 
     this.player.setCollider((x, z, y) => this.world.collidesAt(x, z, PLAYER_RADIUS, y));
     this.player.setGroundHeight((x, z, y) => this.world.groundHeightAt(x, z, y));

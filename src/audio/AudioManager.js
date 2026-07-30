@@ -13,6 +13,7 @@ import { ECHO, ENDING, MUSIC_SWELL_RANGE, COMBAT, clamp01, mulberry32 } from '..
 import { EchoVoice } from './EchoVoice.js';
 import { BGM_BPM, BGM_LOOP_BEATS, BGM_SCORE } from './BgmScore.js';
 import { CombatSfx } from './_partials/CombatSfx.js';
+import { SurvivalSfx } from './_partials/SurvivalSfx.js';
 
 // Fixed headroom on the master bus; user music/SFX volumes scale their buses.
 const MASTER_BASE_GAIN = 0.9;
@@ -619,3 +620,4 @@ export class AudioManager {
 // but are part of this class's surface. Mixing them onto the prototype keeps
 // every existing call site — audio.playShoot(), audio.playHit(), … — unchanged.
 Object.assign(AudioManager.prototype, CombatSfx);
+Object.assign(AudioManager.prototype, SurvivalSfx);

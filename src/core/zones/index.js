@@ -15,6 +15,7 @@ import { arena1 } from './arena1.js';
 import { arena2 } from './arena2.js';
 import { arena3 } from './arena3.js';
 import { arena3boss } from './arena3boss.js';
+import { survival } from './survival.js';
 
 export const ZONES = {
   zone1,
@@ -29,6 +30,9 @@ export const ZONES = {
   // Entered from arena3's summit portal rather than from a zone's Rift; the
   // return still targets Zone 3 (see Game._transferArena).
   arena3boss,
+  // Credits-only run mode. Registration makes the authored arena available to
+  // SurvivalFlow without adding a campaign portal or title-screen route.
+  survival,
 };
 
 export function createWorld(zoneId = 'zone1') {

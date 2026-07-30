@@ -4,6 +4,12 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { CONFIG, wrapAngle } from '../config.js';
+import { moveDashWithCollision } from './survival/DashMotion.js';
+import {
+  SURVIVAL_DASH_DEFAULTS,
+  advanceDashInvulnerability,
+  beginDashInvulnerability,
+} from './survival/SurvivalDashRules.js';
 
 export class PlayerController {
   constructor(camera, domElement) {
@@ -26,6 +32,19 @@ export class PlayerController {
     this.jumpOffset = 0;             // metres above the current support
     this.jumpVel = 0;
     this._jumpRequested = false;
+    // Survival-only dash. Disabled everywhere else, so campaign movement and
+    // stamina remain exactly on their existing path.
+    this.dashEnabled = false;
+    this._dashConfig = { ...SURVIVAL_DASH_DEFAULTS };
+    this._dashCharges = 0;
+    this._dashRecharge = 0;
+    this._dashRequested = false;
+    this._dashRemaining = 0;
+    this._dashInvulnerability = 0;
+    this._dashDirection = new THREE.Vector3();
+    this._dashForward = new THREE.Vector3();
+    this._dashRight = new THREE.Vector3();
+    this._dashStarted = null;
     this.movementLocked = false;     // rail encounters keep aim but suppress WASD movement
     this.movementAnchor = new THREE.Vector3();
     this.yawLimit = null;            // {center, range} aim cone; null = free look
@@ -60,6 +79,87 @@ export class PlayerController {
     this._jumpRequested = false;
   }
 
+  // Survival arms the dash on entry and disarms it on every exit. `onStart`
+  // is an event hook for audio/UI; movement remains authoritative here.
+  enableDash(options = {}, onStart = null) {
+    this._dashConfig = this._normalizeDashConfig(options);
+    this.dashEnabled = true;
+    this._dashCharges = this._dashConfig.charges;
+    this._dashRecharge = 0;
+    this._dashRequested = false;
+    this._dashRemaining = 0;
+    this._dashInvulnerability = 0;
+    this._dashStarted = onStart;
+  }
+
+  // Upgrade ranks can change capacity/cooldown/distance without refilling the
+  // whole run. A newly-earned second charge is granted immediately.
+  updateDashConfig(options = {}) {
+    const previousMax = this._dashConfig.charges;
+    this._dashConfig = this._normalizeDashConfig({ ...this._dashConfig, ...options });
+    if (!this.dashEnabled) return;
+    if (this._dashConfig.charges > previousMax) {
+      this._dashCharges += this._dashConfig.charges - previousMax;
+    }
+    this._dashCharges = Math.min(this._dashCharges, this._dashConfig.charges);
+    if (this._dashCharges >= this._dashConfig.charges) this._dashRecharge = 0;
+    else this._dashRecharge = Math.min(this._dashRecharge, this._dashConfig.recharge);
+  }
+
+  requestDash() {
+    if (!this.dashEnabled) return false;
+    this._dashRequested = true;
+    return true;
+  }
+
+  clearDashInput({ stop = false } = {}) {
+    this._dashRequested = false;
+    if (!stop) return;
+    this._dashRemaining = 0;
+    this._dashInvulnerability = 0;
+  }
+
+  disableDash() {
+    this.dashEnabled = false;
+    this._dashCharges = 0;
+    this._dashRecharge = 0;
+    this.clearDashInput({ stop: true });
+    this._dashStarted = null;
+  }
+
+  get invulnerable() { return this._dashInvulnerability > 0; }
+
+  get dashState() {
+    const recharging = this._dashCharges < this._dashConfig.charges;
+    return {
+      enabled: this.dashEnabled,
+      charges: this._dashCharges,
+      maxCharges: this._dashConfig.charges,
+      rechargeProgress: recharging
+        ? 1 - this._dashRecharge / this._dashConfig.recharge
+        : 1,
+      active: this._dashRemaining > 0,
+      invulnerable: this.invulnerable,
+    };
+  }
+
+  _normalizeDashConfig(options) {
+    return {
+      charges: Math.max(1, Math.floor(options.charges ?? SURVIVAL_DASH_DEFAULTS.charges)),
+      recharge: Math.max(0.1, options.recharge ?? SURVIVAL_DASH_DEFAULTS.recharge),
+      distance: Math.max(0.1, options.distance ?? SURVIVAL_DASH_DEFAULTS.distance),
+      duration: Math.max(0.05, options.duration ?? SURVIVAL_DASH_DEFAULTS.duration),
+      invulnerability: Math.max(
+        0,
+        options.invulnerability ?? SURVIVAL_DASH_DEFAULTS.invulnerability,
+      ),
+      collisionStep: Math.max(
+        0.05,
+        options.collisionStep ?? SURVIVAL_DASH_DEFAULTS.collisionStep,
+      ),
+    };
+  }
+
   // Game wires the world's collision test in after both exist.
   setCollider(fn) { this.collide = fn; }
 
@@ -73,6 +173,7 @@ export class PlayerController {
     this.jumpOffset = 0;             // a rail encounter must never leave them floating
     this.jumpVel = 0;
     this._jumpRequested = false;
+    this.clearDashInput({ stop: true });
     this.moving = false;
     this.sprinting = false;
     if (this.elStaminaWrap) this.elStaminaWrap.classList.toggle('rail-hidden', locked);
@@ -129,8 +230,22 @@ export class PlayerController {
     this.keys = {};
     this.velocity.set(0, 0, 0);
     this._jumpRequested = false;   // a Space held across a pause must not fire on resume
+    this.clearDashInput({ stop: true });
     this.moving = false;
     this.sprinting = false;
+  }
+
+  // Survival retries are full runs, not arena checkpoints. Reset every
+  // player-owned resource and motion channel that could otherwise cross the
+  // death boundary before the new run re-enables hop and dash.
+  resetSurvivalRunMobility() {
+    this.resetInput();
+    this.clearExternalMotion();
+    this.setJumpEnabled(false);
+    this.disableDash();
+    this.stamina = CONFIG.STAMINA_MAX;
+    this.setZephyr(false);
+    this._updateStaminaUi();
   }
 
   applyKnockback(dx, dz, strength) {
@@ -147,6 +262,7 @@ export class PlayerController {
   update(dt) {
     if (!this.controls.isLocked) return false;
     this._clampYaw();
+    this._updateDashRecovery(dt);
     if (this.movementLocked) {
       const obj = this.controls.getObject();
       obj.position.copy(this.movementAnchor);
@@ -162,11 +278,15 @@ export class PlayerController {
     const f = (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0);
     const s = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] ? 1 : 0);
     const moveInput = Math.abs(f) + Math.abs(s) > 0;
+    this._consumeDashRequest(f, s);
+    const dashing = this._dashRemaining > 0;
 
     // Sprint: Shift while moving, as long as the tank isn't empty. Drains only
-    // while actually sprinting; otherwise the tank regenerates (GDD §4).
+    // while actually sprinting; a dash replaces normal movement and never
+    // spends stamina even if Shift remains held.
     const wantSprint = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && moveInput;
-    this.sprinting = moveInput && (this.zephyrActive || (wantSprint && this.stamina > 0));
+    this.sprinting = !dashing && moveInput &&
+      (this.zephyrActive || (wantSprint && this.stamina > 0));
     if (this.zephyrActive) {
       this.stamina = Math.min(CONFIG.STAMINA_MAX, this.stamina + CONFIG.STAMINA_REGEN * dt);
     } else if (this.sprinting) {
@@ -187,26 +307,43 @@ export class PlayerController {
     const obj = this.controls.getObject();
     const beforeX = obj.position.x, beforeZ = obj.position.z;
 
-    // Apply full intended move, then read the resulting horizontal delta.
-    this.controls.moveRight(this.velocity.x * dt);
-    this.controls.moveForward(this.velocity.z * dt);
-    const dx = obj.position.x - beforeX + this.knockback.x * dt;
-    const dz = obj.position.z - beforeZ + this.knockback.z * dt;
-    this.knockback.multiplyScalar(Math.exp(-dt * 7));
+    if (dashing) {
+      const dashDt = Math.min(dt, this._dashRemaining);
+      const dashDistance = this._dashConfig.distance *
+        (dashDt / this._dashConfig.duration);
+      moveDashWithCollision(
+        obj.position,
+        this._dashDirection,
+        dashDistance,
+        this.collide,
+        this.eyeBase,
+        this._dashConfig.collisionStep,
+      );
+      this._dashRemaining = Math.max(0, this._dashRemaining - dashDt);
+      this.velocity.set(0, 0, 0);
+      this.knockback.set(0, 0, 0);
+    } else {
+      // Apply full intended move, then read the resulting horizontal delta.
+      this.controls.moveRight(this.velocity.x * dt);
+      this.controls.moveForward(this.velocity.z * dt);
+      const dx = obj.position.x - beforeX + this.knockback.x * dt;
+      const dz = obj.position.z - beforeZ + this.knockback.z * dt;
+      this.knockback.multiplyScalar(Math.exp(-dt * 7));
 
-    // Axis-separated resolution so the player SLIDES along obstacles instead of
-    // stopping dead: reject each axis independently if it would enter a collider.
-    obj.position.x = beforeX;
-    obj.position.z = beforeZ;
-    if (!this.collide || !this.collide(beforeX + dx, beforeZ, this.eyeBase)) {
-      obj.position.x = beforeX + dx;
-    } else {
-      this.knockback.x = 0;
-    }
-    if (!this.collide || !this.collide(obj.position.x, beforeZ + dz, this.eyeBase)) {
-      obj.position.z = beforeZ + dz;
-    } else {
-      this.knockback.z = 0;
+      // Axis-separated resolution so the player SLIDES along obstacles instead
+      // of stopping dead: reject each axis independently on collision.
+      obj.position.x = beforeX;
+      obj.position.z = beforeZ;
+      if (!this.collide || !this.collide(beforeX + dx, beforeZ, this.eyeBase)) {
+        obj.position.x = beforeX + dx;
+      } else {
+        this.knockback.x = 0;
+      }
+      if (!this.collide || !this.collide(obj.position.x, beforeZ + dz, this.eyeBase)) {
+        obj.position.z = beforeZ + dz;
+      } else {
+        this.knockback.z = 0;
+      }
     }
 
     // hard clamp to the zone as a safety net (perimeter buildings also block)
@@ -215,7 +352,7 @@ export class PlayerController {
     obj.position.z = Math.max(-L, Math.min(L, obj.position.z));
 
     // head bob + breathing sway (faster cadence while sprinting)
-    const moving = moveInput;
+    const moving = moveInput || dashing;
     this.moving = moving;
     this.bobT += dt * (moving ? (this.sprinting ? 9 : 6) : 1.4);
     const breath = Math.sin(this.bobT) * (moving ? 0.05 : 0.018);
@@ -249,6 +386,47 @@ export class PlayerController {
     obj.position.y = this.eyeBase + this.jumpOffset + CONFIG.EYE_HEIGHT + breath;
 
     return true;
+  }
+
+  _updateDashRecovery(dt) {
+    this._dashInvulnerability = advanceDashInvulnerability(
+      this._dashInvulnerability,
+      dt,
+    );
+    if (!this.dashEnabled || this._dashCharges >= this._dashConfig.charges) {
+      this._dashRecharge = 0;
+      return;
+    }
+    if (this._dashRecharge <= 0) this._dashRecharge = this._dashConfig.recharge;
+    this._dashRecharge -= dt;
+    if (this._dashRecharge > 0) return;
+    this._dashCharges++;
+    this._dashRecharge = this._dashCharges < this._dashConfig.charges
+      ? this._dashConfig.recharge
+      : 0;
+  }
+
+  _consumeDashRequest(forwardInput, strafeInput) {
+    if (!this._dashRequested) return;
+    this._dashRequested = false;
+    if (!this.dashEnabled || this.movementLocked || this._dashRemaining > 0 ||
+        this._dashCharges <= 0) return;
+
+    this.camera.getWorldDirection(this._dashForward);
+    this._dashForward.y = 0;
+    if (this._dashForward.lengthSq() < 0.0001) this._dashForward.set(0, 0, -1);
+    else this._dashForward.normalize();
+    this._dashRight.crossVectors(this._dashForward, this.camera.up).normalize();
+    this._dashDirection.copy(this._dashForward).multiplyScalar(forwardInput)
+      .addScaledVector(this._dashRight, strafeInput);
+    if (this._dashDirection.lengthSq() < 0.0001) this._dashDirection.copy(this._dashForward);
+    else this._dashDirection.normalize();
+
+    this._dashCharges--;
+    if (this._dashRecharge <= 0) this._dashRecharge = this._dashConfig.recharge;
+    this._dashRemaining = this._dashConfig.duration;
+    this._dashInvulnerability = beginDashInvulnerability(this._dashConfig);
+    this._dashStarted?.(this.dashState);
   }
 
   // Reflect stamina onto the HUD bar: width tracks the tank; it fades in while

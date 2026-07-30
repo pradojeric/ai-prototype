@@ -23,6 +23,7 @@ import { debugZoneFlowMethods } from './_partials/DebugZoneFlow.js';
 import { gameGuidanceMethods } from './_partials/GameGuidance.js';
 import { presenterSkipMethods } from './_partials/PresenterSkip.js';
 import { sessionFlowMethods } from './_partials/SessionFlow.js';
+import { survivalFlowMethods } from './_partials/SurvivalFlow.js';
 import { RunStats } from './_partials/RunStats.js';
 import { queuePlatformArtifactForCampaign } from './_partials/PlatformProgress.js';
 import { AudioManager } from '../audio/AudioManager.js';
@@ -127,6 +128,7 @@ export class Game {
       this.elEndingSubtitle, this.elEndingSubtitleEn, this.elEndingSubtitleFil,
     );
     wireGameEvents(this);
+    this._initializeSurvival();
     this._syncJourneyGuide(false);
 
     document.getElementById('loading').style.display = 'none';
@@ -488,44 +490,7 @@ export class Game {
     this.elEndingBlack.classList.add('active');
     await this.pause.wait(1450);
     this.phase = 'endingCredits';
-    this.elEndingCredits.classList.add('active');
-  }
-
-  // Credits button destination: a peaceful, fully populated museum with solid
-  // portal boundaries. The button click itself supplies the pointer-lock gesture.
-  _enterEpilogueMuseum() {
-    this.elEndingBlack.classList.add('active');
-    this.elEndingCredits.classList.remove('active');
-    this.restoredProvince.dispose();
-    if (this._gameplayBloom) {
-      this.bloom.strength = this._gameplayBloom.strength;
-      this.bloom.radius = this._gameplayBloom.radius;
-      this.bloom.threshold = this._gameplayBloom.threshold;
-      this._gameplayBloom = null;
-    }
-    this.audio.restoreAfterEnding();
-    this.museum.setHubLighting(true);
-    this.museum.populate(this._collectedArtifacts());
-    this._syncMuseumSouls();
-    this.museum.setEpilogueMode(true);
-    this.museum.scene.add(this.player.controls.getObject());
-    this.renderPass.scene = this.museum.scene;
-    this.renderPass.camera = this.camera;
-    this.player.setCollider((x, z) => this.museum.collidesAt(x, z, PLAYER_RADIUS));
-    this.player.setGroundHeight((x, z) => this.museum.groundHeightAt(x, z));
-    const sp = this.museum.spawnPoint;
-    const obj = this.player.controls.getObject();
-    obj.position.set(sp.x, CONFIG.EYE_HEIGHT, sp.z);
-    this.camera.rotation.set(0, 0, 0);
-    this.player.velocity.set(0, 0, 0);
-    this.player.eyeBase = 0;
-    this.viewmodel.group.visible = true;
-    this.busy = false;
-    this._loadingZone = false;
-    this._ePressed = false;
-    this.phase = 'museum';
-    this.player.controls.lock();
-    this.pause.nextFrame(() => this.elEndingBlack.classList.remove('active'));
+    this._showEndingCreditsActions();
   }
 
   _zoneComplete() {
@@ -614,6 +579,7 @@ export class Game {
     this.museum.populate(this._collectedArtifacts());
     this._syncMuseumSouls();
     this._syncJourneyGuide();
+    this._syncSurvivalPortal();   // open the Endless Echoes arch if it has earned it
 
     // Move the player (camera + its hand mesh) into the museum scene so its world
     // matrix updates when we render museum.scene, and point physics at the museum.
@@ -649,12 +615,7 @@ export class Game {
     void this.elFlash.offsetHeight;
     this.elFlash.style.transition = '';
     // Restore the gameplay bloom the hub swapped out (see _enterMuseum).
-    if (this._preHubBloom) {
-      this.bloom.strength = this._preHubBloom.strength;
-      this.bloom.radius = this._preHubBloom.radius;
-      this.bloom.threshold = this._preHubBloom.threshold;
-      this._preHubBloom = null;
-    }
+    this._restorePreHubBloom();
     this._loadZone(zoneId);
     this.pause.nextFrame(() => { this.elFlash.style.opacity = '0'; });
   }
@@ -663,13 +624,18 @@ export class Game {
   // the player rig, re-wire physics + rendering, rebuild the artifact + Rift
   // subsystems, reset the loop state, and pause on the Descend screen at the dock.
   // Used both for first-time zone entry from the hub and re-entering a finished one.
-  _loadZone(zoneId) {
-    // Tear down the outgoing zone — arena entities + Rift first so their meshes
-    // leave the scene before the world's disposal walks it.
+  // Detach the outgoing zone's entities from its scene so the world's disposal can
+  // walk it cleanly. Returns the world itself, to be disposed once the player rig
+  // has been re-parented out of it. Shared with the hub -> Survival route.
+  _detachActiveZone() {
     this._disposeArenaEntities();
     if (this.rift) { this.rift.dispose(); this.rift = null; }
     if (this.soul) { this.soul.dispose(); this.soul = null; }
-    const oldWorld = this.world;
+    return this.world;
+  }
+
+  _loadZone(zoneId) {
+    const oldWorld = this._detachActiveZone();
 
     this.world = createWorld(zoneId);
     this.currentZone = zoneId;
@@ -677,7 +643,7 @@ export class Game {
     // Move the player rig into the new scene (this detaches it from the old one),
     // then free the old world's GPU resources.
     this.world.scene.add(this.player.controls.getObject());
-    oldWorld.dispose();
+    oldWorld?.dispose();
 
     // Re-wire physics + rendering at the new world.
     this.player.setCollider((x, z, y) => this.world.collidesAt(x, z, PLAYER_RADIUS, y));
@@ -770,6 +736,8 @@ export class Game {
       return;
     }
 
+    if (this._updateSurvival(dt, t)) return;
+
     // Walkable museum hub: free-roam between zones. Walking into an unlocked
     // portal's corridor loads that zone; locked corridors are sealed off.
     if (this.phase === 'museum') {
@@ -786,17 +754,29 @@ export class Game {
             break;
           }
         }
+        // The Endless Echoes arch (Survival). Checked outside the loop above
+        // because it is not a zone portal and stays open in epilogue mode, where
+        // every zone doorway is deliberately sealed.
+        const arch = this.museum.survivalPortal;
+        if (!entered && arch.enterable &&
+            arch.distanceTo(pos) < MUSEUM.EXIT_RADIUS) {
+          this._enterSurvivalFromHub();
+          entered = true;
+        }
         // The altar takes interaction priority over nearby frames. Recovered
-        // Souls are seated automatically on hub entry; 3/3 enables the hold-E
-        // ritual that begins the existing Final Memory sequence.
+        // Souls are seated automatically on campaign hub entry; 3/3 enables
+        // the hold-E ritual. Epilogue free-roam keeps that ending gate closed.
         if (!entered) {
           const nearAltar = this.museum.soulPedestalDistance(pos) <= MUSEUM.SOUL_ALTAR.ACTIVATE_RANGE;
           if (nearAltar) {
             this.museum.clearAim();
-            const ready = this.museum.allSoulsPlaced;
-            this._setPrompt(ready
-              ? 'Hold <b>E</b> to awaken the Final Memory'
-              : `Guardian Souls: ${this.museum.placedSoulCount} / 3`);
+            const epilogue = this.museum.epilogueMode;
+            const ready = !epilogue && this.museum.allSoulsPlaced;
+            this._setPrompt(epilogue
+              ? 'The Final Memory is restored'
+              : ready
+                ? 'Hold <b>E</b> to awaken the Final Memory'
+                : `Guardian Souls: ${this.museum.placedSoulCount} / 3`);
             this.elPrompt.classList.add('active');
             this._updatePedestalHold(dt, ready);
           } else {
@@ -972,3 +952,4 @@ Object.assign(Game.prototype, debugZoneFlowMethods);
 Object.assign(Game.prototype, gameGuidanceMethods);
 Object.assign(Game.prototype, presenterSkipMethods);
 Object.assign(Game.prototype, sessionFlowMethods);
+Object.assign(Game.prototype, survivalFlowMethods);

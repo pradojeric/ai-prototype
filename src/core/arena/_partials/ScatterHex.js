@@ -50,10 +50,17 @@ export class ScatterHex {
       ring.rotation.x = Math.PI / 2;
       group.add(ring);
       scene.add(group);
-      this.slots.push({
+      const slot = {
         active: false, hold: 0, age: 0, life: 0, spin: 0, group,
         velocity: new THREE.Vector3(),
-      });
+      };
+      slot.playerAttackTarget = {
+        kind: 'reveler-scatter',
+        center: group.position,
+        radius: HEX_RADIUS,
+        slot,
+      };
+      this.slots.push(slot);
     }
 
     this._dir = new THREE.Vector3();
@@ -124,7 +131,24 @@ export class ScatterHex {
       this.combat.damage(this.tuning.DAMAGE, slot.group.position);
       this._deactivate(slot);
     }
-    this._checkPlayerBolts();
+    if (!this.combat.boss?.externalHitResolution) this._checkPlayerBolts();
+  }
+
+  appendPlayerAttackTargets(targets) {
+    for (const slot of this.slots) {
+      if (slot.active) targets.push(slot.playerAttackTarget);
+    }
+  }
+
+  receivePlayerAttack(target, attack = {}) {
+    const slot = target?.slot;
+    if (!slot?.active) return { hit: false, defeated: false };
+    const impact = attack.position || slot.group.position;
+    this.combat.vfx.impact(slot.group.position, 'bolt');
+    this.combat.hud.hitMarker();
+    this.audio?.playHit?.();
+    this._deactivate(slot);
+    return { hit: true, defeated: true, applied: 1, position: impact };
   }
 
   // One bolt, one hex. The bolt is spent either way, so a clean sweep still costs

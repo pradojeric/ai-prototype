@@ -20,16 +20,18 @@ import { RevelerProjectilePool } from './RevelerProjectilePool.js';
 import { ShellRotation } from './_partials/ShellRotation.js';
 import { ScatterHex } from './_partials/ScatterHex.js';
 import { OverloadChannel } from './_partials/OverloadChannel.js';
+import { immutableBossTuning } from './_partials/BossTuning.js';
 
 // Per-phase arrays are indexed by phase 0/1/2 (BOSS_DEFAULTS.PHASE_THRESHOLDS),
 // so each must have exactly three entries.
-const REVELER_TUNING = {
+export const REVELER_TUNING = {
   HP: 200,
   ANCHORS: [-5.5, 0, 5.5],
   MOVE_WARNING: 0.45,
   MOVE_DURATION: 0.6,
   MOVE_INTERVAL: [[5, 7], [4, 6], [3, 5]],
   FORMATION_COUNT: [[1, 2], [2, 3], [3, 5]],
+  FORMATION_DAMAGE: 15,
   SUMMON_COUNT: [[1, 2], [1, 3], [2, 3]],
   SUMMON_INTERVAL: [[5, 10], [5, 8], [4, 7]],
   REFLECT_DAMAGE: 4,
@@ -72,9 +74,11 @@ const REVELER_TUNING = {
 };
 
 export class RevelerBoss extends ArenaBoss {
-  constructor(guardian, combat, audio, player, rng) {
-    super(guardian, combat, audio, player, REVELER_TUNING);
+  constructor(guardian, combat, audio, player, rng, options = {}) {
+    const tuning = immutableBossTuning(REVELER_TUNING, options.tuning);
+    super(guardian, combat, audio, player, tuning, options);
     this._rng = rng;
+    this._livePlayerTarget = !!options.livePlayerTarget;
     this._anchorIndex = 1;
     this._moveState = 'idle';
     this._moveTimer = this._draw(this.tuning.MOVE_INTERVAL[0]);
@@ -89,7 +93,12 @@ export class RevelerBoss extends ArenaBoss {
     );
     this._handleReflectedHit = (position) => this._receiveReflectedHit(position);
     this.projectiles = new RevelerProjectilePool(
-      combat.scene, combat, audio, this._handleReflectedHit,
+      combat.scene,
+      combat,
+      audio,
+      this._handleReflectedHit,
+      8,
+      this.tuning.FORMATION_DAMAGE,
     );
     this._shell = new ShellRotation(combat.scene, this.tuning.SHELL);
     this._scatter = new ScatterHex(
@@ -98,6 +107,10 @@ export class RevelerBoss extends ArenaBoss {
     this._overload = new OverloadChannel(
       combat.scene, combat, audio, this.tuning.OVERLOAD,
     );
+
+    // Pattern targets plus the boss, rebuilt per query. Owned here so the base
+    // class's own one-element array is never mutated from under it.
+    this._revelerTargets = [];
 
     this._pattern = 'idle';    // mutual exclusion: only one attack is ever live
     this._lastPattern = null;
@@ -109,18 +122,27 @@ export class RevelerBoss extends ArenaBoss {
   begin() {
     if (this.active || this.defeated) return;
     super.begin();
-    this.combat.spawnRandomGroup(2, 2);
+    if (this.allowSummons) this.combat.spawnRandomGroup(2, 2);
   }
 
-  _act(dt) {
+  _act(dt, playerPos) {
+    if (this._livePlayerTarget && playerPos) this._boatTarget.copy(playerPos);
     const center = this.center();
 
     // Unconditional: orbs, hexes, and the beam all outlive the pattern that threw
     // them and must keep resolving after the scheduler has moved on.
     this.projectiles.update(dt, center, this._boatTarget);
     this._scatter.update(dt, this._boatTarget);
-    this._overload.update(dt, center);
-    this._shell.update(dt, center);
+    this._overload.update(
+      dt,
+      center,
+      this._livePlayerTarget ? this._boatTarget : null,
+    );
+    this._shell.update(
+      dt,
+      center,
+      this._livePlayerTarget ? this._boatTarget : null,
+    );
 
     if (this._pattern === 'idle') this._tickAttackTimer(dt);
     else this._advancePattern(dt);
@@ -169,6 +191,7 @@ export class RevelerBoss extends ArenaBoss {
         this.tuning.SHELL.SPIN[this.phase],
         this.center(),
         this._rng,
+        this._livePlayerTarget ? this._boatTarget : null,
       );
       this.audio?.playTeleport?.();
       return;
@@ -189,6 +212,7 @@ export class RevelerBoss extends ArenaBoss {
       this.tuning.OVERLOAD.NODE_COUNT,
       this._rng,
       this.center(),
+      this._livePlayerTarget ? this._boatTarget : null,
     );
   }
 
@@ -251,6 +275,67 @@ export class RevelerBoss extends ArenaBoss {
     super._testPlayerBolts();
   }
 
+  receivePlayerAttack(attack = {}) {
+    if (attack.target?.kind === 'reveler-formation') {
+      return this.projectiles.receivePlayerAttack(attack.target, attack);
+    }
+    if (attack.target?.kind === 'reveler-scatter') {
+      return this._scatter.receivePlayerAttack(attack.target, attack);
+    }
+    if (attack.target?.kind === 'reveler-overload') {
+      return this._overload.receivePlayerAttack(attack.target, attack);
+    }
+    if (!this._shell.busy) return super.receivePlayerAttack(attack);
+    const position = attack.position || this.center();
+    const result = this._shell.testBolt(position);
+    if (result === 'miss') {
+      const center = this.center();
+      if (position.distanceToSquared(center) > this.tuning.HIT_RADIUS ** 2) {
+        return { hit: false, defeated: false };
+      }
+      return super.receivePlayerAttack(attack);
+    }
+    if (result === 'blocked' || this._invuln > 0) {
+      this.pingArmored(position);
+      return { hit: true, blocked: true, defeated: false };
+    }
+    return super.receivePlayerAttack({
+      ...attack,
+      position,
+      damage: (attack.damage || 0) * this.tuning.SHELL.GAP_MULT,
+    });
+  }
+
+  // Composed into this boss's own list, never the base class's — the shared array
+  // is read for the boss record and left alone, so no subclass can corrupt the
+  // slot the base class rebuilds from.
+  getPlayerAttackTargets() {
+    const bossTarget = super.getPlayerAttackTargets()[0];
+    bossTarget.radius = this._shell.busy
+      ? Math.max(this.tuning.HIT_RADIUS, this._shell.attackRadius)
+      : this.tuning.HIT_RADIUS;
+    const targets = this._revelerTargets;
+    targets.length = 0;
+    this.projectiles.appendPlayerAttackTargets(targets);
+    this._scatter.appendPlayerAttackTargets(targets);
+    this._overload.appendPlayerAttackTargets(targets);
+    targets.push(bossTarget);
+    return targets;
+  }
+
+  resolvePlayerAttackImpact(
+    origin,
+    direction,
+    out,
+    maxDistance = Infinity,
+    target = null,
+  ) {
+    if (target?.kind !== 'boss' || !this._livePlayerTarget || !this._shell.busy) {
+      return null;
+    }
+    return this._shell.intersectRay(origin, direction, out, maxDistance);
+  }
+
   // --- movement --------------------------------------------------------------
 
   _updateMovement(dt) {
@@ -304,6 +389,7 @@ export class RevelerBoss extends ArenaBoss {
   // already takes every shot the player has; adds spawning into it would put the
   // cancel out of reach and turn the pattern into a scripted 35 damage.
   _updateSummons(dt) {
+    if (!this.allowSummons) return;
     if (this._pattern === 'overload') return;
     this._summonTimer -= dt;
     if (this._summonTimer > 0) return;
@@ -327,7 +413,7 @@ export class RevelerBoss extends ArenaBoss {
   _onPhaseChanged() {
     this._clearPatterns();
     this._attackTimer = this.tuning.ENRAGE_INVULN;
-    this.combat.spawnRandomGroup(3, 3);
+    if (this.allowSummons) this.combat.spawnRandomGroup(3, 3);
     this._summonTimer = this._draw(this.tuning.SUMMON_INTERVAL[this.phase]);
     this._moveTimer = Math.min(this._moveTimer, 1.2);
   }

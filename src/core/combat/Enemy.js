@@ -14,8 +14,9 @@ import { attachAquaticSpiritVisual } from './AquaticSpiritVisual.js';
 import { ThreatBody } from './ThreatBody.js';
 
 export class Enemy extends ThreatBody {
-  constructor(scene, world, type, x, z, hpBonus = 0, dropMultiplier = 1) {
-    const cfg = type === 'chaser' ? COMBAT.CHASER : COMBAT.SPITTER;
+  constructor(scene, world, type, x, z, hpBonus = 0, dropMultiplier = 1, options = {}) {
+    const baseCfg = type === 'chaser' ? COMBAT.CHASER : COMBAT.SPITTER;
+    const cfg = { ...baseCfg, ...(options.profile || {}) };
     super(scene, type, {
       hp: cfg.HP + hpBonus,
       radius: cfg.RADIUS,
@@ -24,12 +25,13 @@ export class Enemy extends ThreatBody {
     this.world = world;
     this.cfg = cfg;
     this.dropMultiplier = dropMultiplier;
+    this._rng = options.rng || Math.random;
 
     this._attackTimer = 0;
-    this._spitTimer = cfg.SPIT_INTERVAL ? cfg.SPIT_INTERVAL * (0.5 + Math.random() * 0.5) : 0;
+    this._spitTimer = cfg.SPIT_INTERVAL ? cfg.SPIT_INTERVAL * (0.5 + this._rng() * 0.5) : 0;
     this._windup = 0;             // >0 while the spitter telegraphs its shot
-    this._bobPhase = Math.random() * Math.PI * 2;
-    this._strafeDir = Math.random() < 0.5 ? 1 : -1;
+    this._bobPhase = this._rng() * Math.PI * 2;
+    this._strafeDir = this._rng() < 0.5 ? 1 : -1;
 
     // Line-of-sight state: re-checked on a staggered timer (phase-offset so a
     // whole wave doesn't test on the same frame). While blocked, movement
@@ -41,6 +43,7 @@ export class Enemy extends ThreatBody {
     this.group.position.set(x, 0, z);
     this._buildBody();
     attachAquaticSpiritVisual(this);
+    this.applyPresentation(options.presentation);
   }
 
   // Distinct silhouettes per archetype so threats read at a glance:
@@ -199,7 +202,7 @@ export class Enemy extends ThreatBody {
         this._spitTimer -= dt;
         if (this._spitTimer <= 0) {
           this._spitTimer = this.cfg.SPIT_INTERVAL;
-          this._windup = COMBAT.SPIT_WINDUP;
+          this._windup = this.cfg.SPIT_WINDUP ?? COMBAT.SPIT_WINDUP;
         }
       }
     }
@@ -208,7 +211,7 @@ export class Enemy extends ThreatBody {
   // Extra emissive during the spit wind-up — the readable "about to fire" tell.
   _extraGlow() {
     if (this._windup <= 0) return 0;
-    return (1 - this._windup / COMBAT.SPIT_WINDUP) * 3;
+    return (1 - this._windup / (this.cfg.SPIT_WINDUP ?? COMBAT.SPIT_WINDUP)) * 3;
   }
 
   // Muzzle for the spit: the glowing mouth's world position.

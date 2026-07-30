@@ -11,9 +11,13 @@ import { fadeMat, angDelta } from '../guardians/primitives.js';
 import { attachAquaticSpiritVisual } from '../combat/AquaticSpiritVisual.js';
 import { ThreatBody } from '../combat/ThreatBody.js';
 
+const BOARD_ATTACK_RANGE = 2.1;
+const BOARD_REENGAGE_RANGE = 2.7;
+
 export class RailThreat extends ThreatBody {
-  constructor(scene, type, x, z, rng) {
-    const cfg = type === 'sniper' ? RAIL_ARENA.SNIPER : RAIL_ARENA.BOARDER;
+  constructor(scene, type, x, z, rng = Math.random, options = {}) {
+    const baseCfg = type === 'sniper' ? RAIL_ARENA.SNIPER : RAIL_ARENA.BOARDER;
+    const cfg = { ...baseCfg, ...(options.profile || {}) };
     super(scene, type, {
       hp: cfg.HP,
       radius: cfg.RADIUS,
@@ -23,6 +27,8 @@ export class RailThreat extends ThreatBody {
       poofColor: type === 'sniper' ? 0x7fe8ff : 0xff765f,
     });
     this.cfg = cfg;
+    this.world = options.world || null;
+    this.mobileTarget = !!options.mobileTarget;
     this.shotRequested = false;
     this._phase = rng() * Math.PI * 2;
     this._timer = type === 'sniper' ? cfg.SHOT_INTERVAL * (0.45 + rng() * 0.35) : 0;
@@ -41,6 +47,7 @@ export class RailThreat extends ThreatBody {
     ));
     this._buildBody(isSniper);
     attachAquaticSpiritVisual(this);
+    this.applyPresentation(options.presentation);
 
     this._center = new THREE.Vector3();
   }
@@ -97,6 +104,17 @@ export class RailThreat extends ThreatBody {
 
   muzzle(out) { return this.muzzleNode.getWorldPosition(out); }
 
+  _move(dx, dz) {
+    const position = this.group.position;
+    if (!this.world) {
+      position.x += dx;
+      position.z += dz;
+      return;
+    }
+    if (!this.world.collidesAt(position.x + dx, position.z, this.radius)) position.x += dx;
+    if (!this.world.collidesAt(position.x, position.z + dz, this.radius)) position.z += dz;
+  }
+
   update(dt, t, target) {
     if (!this.updateLifecycle(dt)) return;
 
@@ -119,11 +137,17 @@ export class RailThreat extends ThreatBody {
     }
 
     const distance = Math.hypot(dx, dz);
+    if (this.mobileTarget && this._boardState !== 'approach' &&
+        distance > BOARD_REENGAGE_RANGE) {
+      this._boardState = 'approach';
+      this._timer = 0;
+      this.attackReady = false;
+      this.figure.scale.setScalar(1);
+    }
     if (this._boardState === 'approach') {
-      if (distance > 2.1) {
+      if (distance > BOARD_ATTACK_RANGE) {
         const inv = 1 / Math.max(0.001, distance);
-        this.group.position.x += dx * inv * this.cfg.SPEED * dt;
-        this.group.position.z += dz * inv * this.cfg.SPEED * dt;
+        this._move(dx * inv * this.cfg.SPEED * dt, dz * inv * this.cfg.SPEED * dt);
       } else {
         this._boardState = 'telegraph';
         this._timer = this.cfg.TELEGRAPH;

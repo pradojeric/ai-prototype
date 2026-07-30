@@ -19,8 +19,10 @@ export class LuminaManager {
     this.profile = {
       autoCollect: false,
       collectTime: LUMINA.COLLECT_TIME,
+      dropChance: LUMINA.DROP_CHANCE,
       heal: LUMINA.HEAL,
       zephyrDuration: LUMINA.ZEPHYR_DURATION,
+      overchargeDuration: LUMINA.OVERCHARGE_DURATION,
       onZephyr: null,
       preserveDropHeight: false,
       walkVerticalRadius: Infinity,
@@ -92,10 +94,14 @@ export class LuminaManager {
     this.combat = combat;
   }
 
+  configure(profile = {}) {
+    Object.assign(this.profile, profile);
+  }
+
   // One call per genuine enemy kill. The drop multiplier distinguishes normal
   // scheduled waves (1.0) from wrong-answer penalty waves (0.5).
   tryDrop(position, dropMultiplier = 1) {
-    if (!this.combat || this._rng() >= LUMINA.DROP_CHANCE * dropMultiplier) return false;
+    if (!this.combat || this._rng() >= this.profile.dropChance * dropMultiplier) return false;
     return this.drop(position);
   }
 
@@ -228,7 +234,7 @@ export class LuminaManager {
       if (this.profile.onZephyr) this.profile.onZephyr(true);
       else this.player.setZephyr(true, LUMINA.ZEPHYR_SPEED_MULT);
     } else {
-      this._overchargeRemaining = LUMINA.OVERCHARGE_DURATION;
+      this._overchargeRemaining = this.profile.overchargeDuration;
       this.combat.setOvercharge(true, LUMINA.OVERCHARGE_DAMAGE_MULT);
     }
     this.audio.playLuminaPickup();

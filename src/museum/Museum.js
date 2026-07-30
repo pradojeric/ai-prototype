@@ -14,6 +14,7 @@ import { MUSEUM } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { createVortexMaterial } from './PortalVortex.js';
 import { SoulPedestal } from './_partials/SoulPedestal.js';
+import { SurvivalPortal } from './_partials/SurvivalPortal.js';
 import { GalleryRing, createPedestalKit } from './_partials/GalleryRing.js';
 import {
   Tracker, tilePlane, wall, loadTextureSet, applyTextureSet, signTexture,
@@ -67,6 +68,9 @@ export class Museum {
     // its camera directly along x=0, so keeping the altar out of that scene beat
     // prevents clipping while preserving the authored wake-to-hallway path.
     this.soulPedestal = new SoulPedestal(this.scene);
+    // The Endless Echoes arch (Survival). Built here so _freezeStatic bakes it;
+    // it only ever changes material/visibility afterwards, never a transform.
+    this.survivalPortal = new SurvivalPortal(this.scene, this.track);
     this._hallway();
     this._hubLights();    // built but kept off-scene until the hub visit
     this._freezeStatic(); // bake transforms — nothing built here ever moves
@@ -399,6 +403,7 @@ export class Museum {
       // Hub: the vortices carry the portal look — just spin them — and the
       // recovered memories bob and turn in their cases.
       if (this._vortexMat) this._vortexMat.uniforms.uTime.value = t;
+      this.survivalPortal.update(t);
       for (const ring of this.galleries) ring.update(t);
       return;
     }
@@ -458,6 +463,9 @@ export class Museum {
   setHubLighting(on) {
     this.hubMode = on;
     this.soulPedestal.setVisible(on);
+    // Present in the hub, but whether it is OPEN is game policy (ending seen or
+    // the debug unlock), decided by Game — this class stays geometry-only.
+    this.survivalPortal.setVisible(on);
     // Hub: open portals trade the warm emissive panel for the blue vortex;
     // leaving the hub restores the intro's warm panels. Locked corridors keep
     // their dim cold panel either way.
@@ -517,6 +525,9 @@ export class Museum {
 
   // Final-state museum: keep the completed gallery walkable and readable, but
   // turn every zone doorway into a sealed boundary so the ending cannot loop.
+  // The Endless Echoes arch is the deliberate exception — it is not in
+  // `this.portals`, opens *because* the ending played, and leads out to Survival
+  // rather than back into a zone.
   // Idempotent because the credits button may only enter this state once, while
   // resize/pointer-lock events continue to reuse the ordinary hub APIs.
   setEpilogueMode(on = true) {
@@ -547,6 +558,7 @@ export class Museum {
     const d = MUSEUM.DOOR_HALF;
 
     if (this.soulPedestal.collidesAt(x, z, r)) return true;
+    if (this.survivalPortal.collidesAt(x, z, r)) return true;
     for (const ring of this.galleries) if (ring.blocksFurniture(x, z, r)) return true;
 
     // Is x within some open -Z doorway's opening?
@@ -645,6 +657,7 @@ export class Museum {
   dispose() {
     this.clear();                 // free any pedestal-owned art mat/tex first
     this.soulPedestal.dispose();
+    this.survivalPortal.dispose();
     for (const ring of this.galleries) ring.dispose();
     this.galleries.length = 0;
     this.galleryByZone = {};

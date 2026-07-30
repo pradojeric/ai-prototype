@@ -1,5 +1,19 @@
 # Implementation Plan Index
 
+Current persistence task:
+
+- `_partials/implementation_plan_firebase_progress.md` — Firebase **anonymous**
+  cloud save for campaign progress (GameOn returns no email/user id, so it
+  cannot key a save); `saveState` → `SaveManager` → Firestore `progress/{uid}`,
+  with GameOn left untouched as the optional reward path (awaiting user review)
+
+Current Survival mode task:
+
+- `_partials/implementation_plan_survival_mode.md` — Endless Memory: a desktop
+  run-based arena with endless scaled waves, upgrade drafts, tenth-wave remixed
+  Guardians, weapon paths, elites, dash, and full reset on defeat. Entry and
+  draft cadence have since moved on — see the balance and portal plans below.
+
 Current pause menu task:
 
 - `_partials/implementation_plan_pause_menu.md` — the two-line resume overlay
@@ -113,6 +127,15 @@ Prior task:
   (awaiting user review)
 - `_partials/implementation_plan_presenter_skip.md` — hidden Shift+P presenter
   key that fast-forwards fights, riddles, cutscenes and collection for live demos
+- `_partials/implementation_plan_survival_balance.md` — Survival Mode early-game
+  balance (Survival-specific bolt damage, dps band, wave-2 draft)
+- `_partials/implementation_plan_survival_portal.md` — Endless Echoes arch in the
+  museum lobby + `DEBUG_SURVIVAL_UNLOCKED` (replaces the credits entry button)
+- `_partials/implementation_plan_survival_duel_laser.md` — Survival boss waves
+  become duels (`allowSummons`), the stale shared attack-target array that made
+  the laser stop damaging the Reveler, and a core+sleeve beam that reacts to heat
+- `_partials/implementation_plan_survival_briefing.md` — the pre-run briefing that
+  explains Endless Echoes before Wave 1, plus its pause-menu Lore re-read
 
 Prior plans:
 

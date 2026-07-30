@@ -689,6 +689,8 @@
   #health.low .fill,
   #health.low::after,
   #health.lumina-heal .fill,
+  #meleering.ready .prog,
+  #alab.firing .fill,
   #boss-bar .pips i.breaking {
     animation: none;
   }

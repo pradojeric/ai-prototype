@@ -1,6 +1,6 @@
 # STRINGS — Game Design Document
 
-**Implementation-aligned edition — 24 July 2026**
+**Implementation-aligned edition — 30 July 2026**
 **AI Game On! — “Giving Our History a New Heartbeat through the Intelligence of Tomorrow”**
 
 ---
@@ -91,9 +91,13 @@ central while meaning stays legible to a wider audience.
 | `W A S D` | Move |
 | Mouse | Look |
 | `Shift` | Sprint while moving and stamina remains |
-| Left click | Cast a Light bolt during combat |
+| `Space` | Hop ground-level attacks while a combat encounter enables it |
+| Left click | Fire the current primary thread during combat |
 | `E` | Reach, enter a Memory Rift, recover an artifact, or awaken the Final Memory |
-| `R` | Release Alab when fully charged |
+| `F` | Release the combat shockwave |
+| `Q` | Dash during Endless Memory Survival |
+| `R` | Release Alab when charged; reroll while a Survival draft is open |
+| `1`–`3` | Choose a Survival upgrade card |
 | `Escape` | Release pointer lock and pause |
 
 The current build is desktop-first. No touch-control implementation is shipped.
@@ -114,7 +118,9 @@ The current build is desktop-first. No touch-control implementation is shipped.
 Pointer unlock, focus loss, and visibility loss pause active gameplay and
 cinematics. Gameplay time, DOM animations, combat input, and audio pause together.
 Resume remains on screen until pointer lock succeeds. Music and SFX sliders are
-stored separately in `localStorage`.
+stored separately in `localStorage`. Active Survival follows the same pointer-lock
+pause contract; its upgrade and defeat overlays intentionally own unlocked input
+and cannot be paused as live combat.
 
 ---
 
@@ -158,7 +164,8 @@ for testing. That flag is debug behavior, not a narrative rewrite.
 7. Return to Aking Museo; the collection and Soul are placed on display.
 8. Repeat until all three Souls rest on the central altar.
 9. Hold `E` at the altar to awaken the Final Memory.
-10. Witness the completed museum, restored province, credits, and epilogue museum.
+10. Witness the completed museum, restored province, and credits.
+11. Return to the epilogue museum or begin a credits-only Endless Memory run.
 
 ---
 
@@ -183,9 +190,21 @@ Cast Light → evade threats → build Alab → collect Memory Lumina
 → break Guardian armor or open a seal → defeat the boss
 ```
 
-Each arena changes the pacing and spatial problem while retaining shared rules:
-100 Liwanag, Light bolts, Alab, Lumina, readable telegraphs, three bugtong, a
-three-phase boss, and explicit retry behavior.
+### Endless Memory loop
+
+```text
+Clear escalating waves → draft one upgrade every fifth wave
+→ defeat a remixed Guardian every tenth wave
+→ heal, earn a reroll, and continue
+→ on defeat, retry from Wave 1 or return to Aking Museo
+```
+
+Endless Memory is a separate, desktop-only endgame run. It does not add a
+campaign portal, title unlock, or persistent meta progression.
+
+Each campaign Memory Arena changes the pacing and spatial problem while
+retaining shared rules: 100 Liwanag, Light bolts, Alab, Lumina, readable
+telegraphs, three bugtong, a three-phase boss, and explicit retry behavior.
 
 ### Zone completion rule
 
@@ -202,8 +221,10 @@ Arena victory alone does not complete a zone.
 
 ### Liwanag and Light casting
 
-The player has **100 Liwanag**. Left click fires a pooled Light bolt at a maximum
-cadence of one shot every **0.22 seconds**. A normal bolt deals **1 damage**.
+In the campaign, the player has **100 Liwanag**. Left click fires a pooled Light
+bolt at a maximum cadence of one shot every **0.22 seconds**. A normal bolt deals
+**1 damage**. Survival starts from that default, then may lock the run into Rapid
+Weave, Continuous Laser, or Thread Lance.
 Damage direction arcs, a hurt vignette, health-lag fills, hit markers, FOV punch,
 hitstop, impacts, and enemy markers communicate combat state.
 
@@ -214,8 +235,11 @@ Successful combat builds the Alab meter:
 - normal hit: **+1%**;
 - kill: **+10%**.
 
-When full, pressing `R` releases a **3-second**, **8-shots-per-second** Light
-burst. Shots fired during Alab do not recharge it.
+In the campaign, pressing `R` when full releases a **3-second**,
+**8-shots-per-second** Light burst. Shots fired during Alab do not recharge it.
+In Survival, Alab is weapon-neutral and multiplies primary cadence by **1.75**;
+Alab Reservoir can extend its duration, and Continuous Laser gains no heat while
+it is active.
 
 ### Common lesser enemies
 
@@ -237,7 +261,7 @@ Lumina. Drops expire after **12 seconds**.
 | --- | --- |
 | Vitality | Restores 25 Liwanag |
 | Zephyr | 8 seconds of enhanced movement; slows threats in the stationary rail arena |
-| Overcharge | 10 seconds of double Light-bolt damage |
+| Overcharge | 10 seconds of double primary-thread damage |
 
 Drop selection adapts to player health. Arena 2 auto-collects nearby Lumina;
 standard arena forms may be collected by proximity or shot.
@@ -529,6 +553,9 @@ Combat surfaces include:
 - hit marker, hurt vignette, directional damage arcs, and off-screen threats;
 - Lumina status.
 
+Survival adds wave and remaining-threat counts, the next fifth/tenth-wave
+milestone, primary-thread and Laser heat state, dash charges, and rerolls.
+
 Responsive CSS reduces HUD footprints on narrow screens, but the interaction model
 remains keyboard-and-mouse. Reduced-motion media queries disable selected pulses
 and transitions; they do not currently remove all camera motion or gameplay VFX.
@@ -556,6 +583,8 @@ Audio is synthesized with Web Audio:
 - low ambient drone and underwater delay;
 - spatial artifact Echo bells;
 - Light, impact, enemy, armor, portal, Soul, Lumina, and UI cues;
+- Survival beam, lance, dash, elite-warning, upgrade-selection, and
+  Guardian-arrival cues;
 - separate music and SFX buses.
 
 The restored-province ending is subtitle-led. An optional recorded voiceover path
@@ -574,11 +603,18 @@ for **2.5 seconds** begins the ending:
 4. bilingual subtitles connect food, festivals, landmarks, and returning memory;
 5. the Strings fade as the restored province remains;
 6. credits appear;
-7. the player may enter an epilogue museum with its exits sealed.
+7. the player chooses **Enter Endless Memory** or **Return to Aking Museo**.
 
 The ending is a cinematic restoration of cultural continuity, not a permanent
-online museum publication. A title-menu debug shortcut currently exposes the full
-ending for testing.
+online museum publication. The disabled-by-default
+`DEBUG_TEST_ENDING_BUTTON` flag can expose the full ending for testing. Its
+credits may launch Survival for QA, but debug/presenter progression remains
+ineligible for the legitimate-ending GameOn reward.
+
+**Return to Aking Museo** enters the epilogue museum with its exits sealed.
+**Enter Endless Memory** starts a fresh Wave 1 run in a 32m-radius altar-born
+Memory arena. The route is credits-only: no title access flag or `localStorage`
+unlock is created.
 
 ---
 
@@ -593,6 +629,12 @@ ending for testing.
   geometry from registered zone definitions.
 - Arena controllers own encounter pacing; combat managers own shared firing,
   health, enemies, projectiles, feedback, and HUD integration.
+- `SurvivalFlow` owns credits entry, teardown, retry, epilogue return, and update
+  dispatch without expanding `Game` into a second combat controller.
+- `src/core/survival/` separates deterministic wave and upgrade rules, run
+  statistics, encounter direction, weapon resolution, and Survival combat.
+- `src/core/zones/survival.js` owns the authored arena, while `SurvivalUI` owns
+  its HUD, upgrade draft, Guardian stinger, and defeat ledger.
 - Museum, cutscene, UI, audio, data, and artifact systems remain separate modules.
 
 There is no package manager, bundler, or build step. The game must be served over
@@ -603,6 +645,8 @@ HTTP, and its first load requires network access for the Three.js CDN import.
 - Artifact and riddle content ships locally as JavaScript data.
 - Campaign collections and Souls are in-memory `Set` objects.
 - Settings persist locally in the browser.
+- Survival builds reset on defeat. Only the best result for the current page
+  session is retained, and it is discarded on reload.
 - GameOn Portal authorization stores only its Session Token and pending reward
   flag in `sessionStorage`; credentials remain on the platform sign-in page.
 - There is no production campaign save/load system, database, or cloud museum in
@@ -667,6 +711,31 @@ separately configured proxy.
 Exact balance values live in `src/config.js` and the relevant boss modules. If a
 value changes in code, this table must be updated in the same change.
 
+### Endless Memory tuning
+
+- Normal waves introduce chaser, spitter, boarder, sniper, gargoyle, and gale at
+  Waves **1 / 2 / 3 / 4 / 6 / 8**. Live plus pending threats cap at **10**.
+- For `tier = floor((wave - 1) / 5)`, lesser threats scale health by
+  `1 + 0.30 × tier`, damage by `1 + 0.16 × tier`, speed up to `×1.45`, attack
+  interval down to `×0.68`, and projectile speed up to `×1.35`.
+- Every fifth cleared wave grants a one-of-three draft. Every tenth wave contains
+  a remixed Guardian and authored summons, preceded by a **1.5-second** stationary
+  camera stinger.
+- Survival Guardian base health is Feastkeeper **180**, Reveler **160**, and
+  Keeper **200**. For zero-based boss index `n`, health scales by `1 + 0.55n`,
+  damage by `1 + 0.18n`, and attack interval by
+  `max(0.68, 1 - 0.07n)`.
+- Elites unlock after the first Guardian at **12%** chance, add seven percentage
+  points per later Guardian, and cap at **40%** chance and four elites.
+- Baseline Survival dash is one charge, **4s** recharge, **4.5m** distance,
+  **0.16s** movement, and **0.22s** invulnerability.
+- Rapid Weave is 1 damage at **0.18s** cadence; Continuous Laser is a **28m**
+  hitscan beam with ten **0.55-damage** ticks per second and **2.5s** heat;
+  Thread Lance is 3 damage at **0.65s**, **32m/s**, and three-target piercing.
+
+The complete encounter and upgrade tables are maintained in
+[`SurvivalMode.md`](SurvivalMode.md).
+
 ---
 
 ## 17. Current Limitations and Validation Boundary
@@ -674,8 +743,10 @@ value changes in code, this table must be updated in the same change.
 ### Implemented but configured for development
 
 - all museum portals are unlocked by `DEBUG_UNLOCK_ALL_ZONES`;
-- title shortcuts expose the ending and Guardian showroom;
-- the dedicated debug-zone flag is available but disabled.
+- the Guardian showroom title shortcut is enabled;
+- the ending title shortcut and dedicated debug-zone flag are disabled;
+- `DEBUG_SURVIVAL_BOSS` defaults to `null`; with the debug ending enabled, it
+  can force Feastkeeper, Reveler, or Keeper on Survival boss waves;
 
 Release builds should deliberately review those flags.
 
@@ -684,20 +755,23 @@ Release builds should deliberately review those flags.
 - the GameOn Portal Game ID is still an inert placeholder;
 - ending narration is optional and has no configured asset;
 - campaign progress is not persisted across refreshes;
-- mobile/touch controls are not implemented;
+- Survival has no campaign/meta save; its build resets on defeat and its
+  session-best result resets on page reload;
+- Survival is credits-only and desktop-only, with no title shortcut, mobile,
+  touch, or gamepad route;
+- Survival has no riddles, online leaderboards, external asset pack, arena
+  mutators, or combo scoring;
+- campaign play also has no mobile/touch controls;
 - no live API response, CORS behavior, or deployment environment is verified here.
-- `src/audio/AudioManager.js` is currently 1006 lines and therefore exceeds the
-  repository’s 1000-line source-file rule; correcting that pre-existing structural
-  issue is outside this API integration.
 
 ### Verification status
 
 Static inspection confirms the architecture, data counts, state transitions,
-controls, and tuning recorded above. Focused Node tests cover riddle-label layout,
-global pause behavior, Journey Guide state rendering, the mocked GameOn lifecycle,
-and platform campaign eligibility. This document does not claim browser, WebGL,
-visual, audio, timing, pointer-lock, responsive, CORS, popup, or live-network
-verification.
+controls, and tuning recorded above. Focused Node tests cover campaign contracts
+and deterministic Survival recipes, scaling, elites, boss selection, upgrades,
+dash stepping, result ordering, UI/DOM contracts, and credits-only routing. This
+document does not claim browser, WebGL, visual, audio, timing, pointer-lock,
+responsive, balance, CORS, popup, or live-network verification.
 
 Before release, manually smoke-test:
 
@@ -705,19 +779,33 @@ Before release, manually smoke-test:
 - every arena, riddle presentation, boss, death, and retry checkpoint;
 - artifact scatter, Hibla/Echo navigation, all 27 discovery cards, and museum replay;
 - all three Souls, Final Memory, credits, and epilogue;
+- legitimate and debug-ending Survival entry, Waves 1–10 pacing, all weapons and
+  upgrades, Space hop, six lesser roles, three elite tells, and all remixed
+  Guardians;
+- the 1.5-second stationary-camera portal/name stinger and its pause behavior;
+- Survival boss cleanup/heal/draft ordering, pause/resume twice, pointer-lock
+  recovery, defeat/retry, epilogue return, HUD fit, every new cue and
+  sustained-beam cleanup, reduced motion, and stress performance at the
+  ten-threat cap;
+- Survival active time excluding pauses, wave gaps, drafts, stingers, and defeat;
 - visual readability, audio balance, console errors, asset loading, and real API
   behavior if a production endpoint is supplied.
+
+Browser timing, pointer lock, visuals, audio, performance, and balance remain
+manual runtime gates. Static and mocked checks must not be described as proving
+those behaviors.
 
 ---
 
 ## 18. Repository Design References
 
 - [`README.md`](README.md) — run instructions and project orientation
-- [`GAME_LOOP.md`](GAME_LOOP.md) — older loop summary; defer to this GDD where it conflicts
+- [`GAME_LOOP.md`](GAME_LOOP.md) — legacy loop summary with the current ending branch
 - [`Strings_v2.md`](Strings_v2.md) — transition from prototype to arena-first structure
 - [`Arena1.md`](Arena1.md) — PONSIA encounter detail
 - [`Arena2.md`](Arena2.md) — LIKET encounter detail
 - [`Arena3.md`](Arena3.md) — PANANISIA encounter detail
+- [`SurvivalMode.md`](SurvivalMode.md) — Endless Memory encounter and build guide
 - [`reference/artifact-origin-research.md`](reference/artifact-origin-research.md) —
   cultural-origin editorial ledger
 

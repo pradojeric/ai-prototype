@@ -82,11 +82,12 @@ export function loadTextureSet(loader, name, tracker) {
   return { color, normal, rough };
 }
 
-// Render a two-line zone plaque (number + district name) to a canvas texture.
-// Open plaques glow warm amber, matching the artifact/hall palette; locked ones
-// are muted and read "LOCKED" in place of the hidden name. Shared by the lobby's
-// doorway lintels and each gallery's zone marker so both stay in step.
-export function signTexture(zone, name, locked, tracker) {
+// Render a two-line museum plaque (a bold title over a subtitle) to a canvas
+// texture, at the 3.2:1 aspect every plaque mesh in the museum is built to. `dim`
+// mutes the glow for a sealed destination. Shared by the lobby's doorway lintels,
+// each gallery's zone marker, and the Endless Echoes arch, so every plaque in the
+// building is drawn by one routine.
+export function plaqueTexture(title, subtitle, dim, tracker, accentColor) {
   const c = document.createElement('canvas');
   c.width = 512; c.height = 160;
   const ctx = c.getContext('2d');
@@ -94,22 +95,27 @@ export function signTexture(zone, name, locked, tracker) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const accent = locked ? '#7c8b93' : '#ffe6b0';
+  const accent = dim ? '#7c8b93' : (accentColor || '#ffe6b0');
   ctx.fillStyle = accent;
   ctx.shadowColor = accent;
-  ctx.shadowBlur = locked ? 0 : 18;
+  ctx.shadowBlur = dim ? 0 : 18;
   ctx.font = 'bold 64px Georgia, serif';
-  ctx.fillText(`ZONE ${zone}`, c.width / 2, 54);
+  ctx.fillText(title, c.width / 2, 54);
 
-  ctx.shadowBlur = locked ? 0 : 10;
-  ctx.fillStyle = locked ? '#9c6b6b' : '#d3e8ec';
-  ctx.font = locked ? 'bold 40px Georgia, serif' : '38px Georgia, serif';
-  ctx.fillText(locked ? 'LOCKED' : name, c.width / 2, 120);
+  ctx.shadowBlur = dim ? 0 : 10;
+  ctx.fillStyle = dim ? '#9c6b6b' : '#d3e8ec';
+  ctx.font = dim ? 'bold 40px Georgia, serif' : '38px Georgia, serif';
+  ctx.fillText(subtitle, c.width / 2, 120);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tracker.tex(tex);
+}
+
+// A zone plaque: number + district name, or "LOCKED" in place of a hidden name.
+export function signTexture(zone, name, locked, tracker) {
+  return plaqueTexture(`ZONE ${zone}`, locked ? 'LOCKED' : name, locked, tracker);
 }
 
 // Bind a loaded set to a material. Crucially `.color` is left untouched — the

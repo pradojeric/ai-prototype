@@ -15,11 +15,12 @@ const RETURN_SPEED = 16;
 const ORB_LIFE = 4;
 
 export class RevelerProjectilePool {
-  constructor(scene, combat, audio, onReflectedHit, capacity = 8) {
+  constructor(scene, combat, audio, onReflectedHit, capacity = 8, outboundDamage = 15) {
     this.scene = scene;
     this.combat = combat;
     this.audio = audio;
     this.onReflectedHit = onReflectedHit;
+    this.outboundDamage = outboundDamage;
     this._time = 0;
     this._coreGeometry = new THREE.IcosahedronGeometry(0.28, 1);
     this._ringGeometry = new THREE.TorusGeometry(0.43, 0.045, 6, 18);
@@ -49,7 +50,7 @@ export class RevelerProjectilePool {
       ringB.rotation.y = Math.PI / 2;
       group.add(ringA, ringB);
       scene.add(group);
-      this.slots.push({
+      const slot = {
         active: false,
         state: 'inactive',
         group,
@@ -63,7 +64,14 @@ export class RevelerProjectilePool {
         velocity: new THREE.Vector3(),
         target: new THREE.Vector3(),
         source: new THREE.Vector3(),
-      });
+      };
+      slot.playerAttackTarget = {
+        kind: 'reveler-formation',
+        center: group.position,
+        radius: ORB_RADIUS,
+        slot,
+      };
+      this.slots.push(slot);
     }
   }
 
@@ -106,7 +114,29 @@ export class RevelerProjectilePool {
         this._updateReflected(slot, dt, bossCenter);
       }
     }
-    this._checkPlayerBolts();
+    if (!this.combat.boss?.externalHitResolution) this._checkPlayerBolts();
+  }
+
+  appendPlayerAttackTargets(targets) {
+    for (const slot of this.slots) {
+      if (slot.active && slot.state !== 'reflected') {
+        targets.push(slot.playerAttackTarget);
+      }
+    }
+  }
+
+  receivePlayerAttack(target) {
+    const slot = target?.slot;
+    if (!slot?.active || slot.state === 'reflected') {
+      return { hit: false, defeated: false };
+    }
+    slot.state = 'reflected';
+    slot.life = 2.5;
+    this._setReflectedLook(slot, true);
+    this.combat.vfx.impact(slot.group.position, 'bolt');
+    this.combat.hud.hitMarker();
+    this.audio?.playBoltReflect?.();
+    return { hit: true, defeated: false, reflected: true };
   }
 
   _updateFormationSlot(slot, dt, bossCenter, boatTarget) {
@@ -147,7 +177,7 @@ export class RevelerProjectilePool {
     if (slot.life <= 0) { this._deactivate(slot); return; }
     if (slot.group.position.distanceToSquared(boatTarget) > BOAT_HIT_RADIUS ** 2) return;
     this.combat.vfx.projectileImpact(slot.group.position);
-    this.combat.damage(15, slot.source);
+    this.combat.damage(this.outboundDamage, slot.source);
     this._deactivate(slot);
   }
 

@@ -26,12 +26,17 @@ export class ProjectilePool {
       this.slots.push({
         active: false,
         mesh,
+        previousPosition: new THREE.Vector3(),
         vel: new THREE.Vector3(),
         life: 0,
         owner: null,
         reflected: false,
         source: null,
         damage: null,   // null = the firer's default; set for bespoke shots (boss patterns)
+        pierce: 1,
+        radius: null,
+        weaponKind: null,
+        hitTargets: new Set(),
       });
     }
   }
@@ -44,12 +49,17 @@ export class ProjectilePool {
       s.active = true;
       s.mesh.visible = true;
       s.mesh.position.copy(origin);
+      s.previousPosition.copy(origin);
       s.vel.copy(dir).multiplyScalar(speed);
       s.life = life;
       s.owner = meta.owner ?? null;
       s.reflected = meta.reflected ?? false;
       s.source = meta.source ?? null;
       s.damage = meta.damage ?? null;
+      s.pierce = Math.max(1, Math.floor(meta.pierce ?? 1));
+      s.radius = meta.radius ?? null;
+      s.weaponKind = meta.weaponKind ?? null;
+      s.hitTargets.clear();
       return s;
     }
     return null;
@@ -62,18 +72,28 @@ export class ProjectilePool {
     slot.reflected = false;
     slot.source = null;
     slot.damage = null;
+    slot.pierce = 1;
+    slot.radius = null;
+    slot.weaponKind = null;
+    slot.hitTargets.clear();
   }
 
   // Advance live bolts; kill on expiry, wall hit, or sinking below the seabed.
-  // The caller does enemy/player hit tests against `slots` after this.
-  update(dt, world) {
+  // Survival may defer the world test so it can clip a fast projectile's entire
+  // travelled segment before resolving targets; campaign callers keep the
+  // established endpoint behavior through the default.
+  update(dt, world, deferWorldCollision = false) {
     for (const s of this.slots) {
       if (!s.active) continue;
       s.life -= dt;
       if (s.life <= 0) { this.deactivate(s); continue; }
       const p = s.mesh.position;
+      s.previousPosition.copy(p);
       p.addScaledVector(s.vel, dt);
-      if (p.y < -0.3 || world.collidesAt(p.x, p.z, 0.1, p.y)) this.deactivate(s);
+      if (!deferWorldCollision &&
+          (p.y < -0.3 || world.collidesAt(p.x, p.z, 0.1, p.y))) {
+        this.deactivate(s);
+      }
     }
   }
 

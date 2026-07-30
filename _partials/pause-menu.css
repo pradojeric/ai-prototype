@@ -770,3 +770,7 @@
   letter-spacing: .8px;
   text-align: center;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .pause-shell { animation: none; }
+}

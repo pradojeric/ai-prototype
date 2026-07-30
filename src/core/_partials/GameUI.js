@@ -95,11 +95,11 @@ export function wireGameEvents(game) {
     game.platformAccountUi.dispose();
     game.api.dispose();
   }, { once: true });
+  // Skipping the intro is deliberately presenter-only (hidden Shift+P). A plain
+  // click must never skip it: the very click that starts the cinematic — or a
+  // stray second click while the eyelids are still opening — would land on the
+  // fading overlay and fast-forward the beat the player just asked to see.
   wirePresenterSkip(game);   // hidden Shift+P demo fast-forward
-  // A click during the cutscene skips to the white fade.
-  addEventListener('click', () => {
-    if (!game.pause.isPaused && game.phase === 'cutscene') game.cutscene.skip();
-  });
 
   game.elStart.addEventListener('click', () => {
     game.audio.init();
@@ -115,9 +115,9 @@ export function wireGameEvents(game) {
   });
   game.player.controls.addEventListener('lock', () => {
     game.elStart.style.display = 'none';
-    // Arena/faint phases own their state transitions. Every arena still needs
-    // its aiming reticle restored after the pause controller reacquires lock.
-    if (game.phase === 'arena') {
+    // Combat phases own their state transitions. They only need the aiming
+    // reticle restored after entry or the pause controller reacquires lock.
+    if (game.phase === 'arena' || game.phase === 'survival') {
       game.elCross.classList.add('active');
       return;
     }
@@ -134,13 +134,22 @@ export function wireGameEvents(game) {
   });
   // A combat verb is live only mid-fight, so exploration clicks (and the
   // pointer-lock click itself) never fire a stray shot or shockwave.
-  const combatLive = () => !game.pause.isPaused && game.phase === 'arena' &&
-    !game.busy && game.player.controls.isLocked && !!game.combat?.active;
+  const combatLive = () => !game.pause.isPaused &&
+    (game.phase === 'arena' || game.phase === 'survival') &&
+    !game.busy && game.player.controls.isLocked && !!game.combat?.active &&
+    (game.phase !== 'survival' || !!game.survival?.acceptsCombatInput);
 
   document.addEventListener('keydown', (e) => {
     if (!game.pause.isPaused && e.code === 'KeyR' && !e.repeat &&
-        game.phase === 'arena' && !game.busy && game.combat?.active) {
+        (game.phase === 'arena' || game.phase === 'survival') &&
+        !game.busy && game.combat?.active &&
+        (game.phase !== 'survival' || game.survival?.acceptsCombatInput)) {
       game.combat.activateAlab();
+      return;
+    }
+    if (e.code === 'KeyQ' && !e.repeat && game.phase === 'survival' &&
+        combatLive()) {
+      game.survival?.requestDash();
       return;
     }
     // Melee shockwave. Edge-triggered on !e.repeat: a HELD F must not stream

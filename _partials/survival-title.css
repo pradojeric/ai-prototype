@@ -1,0 +1,123 @@
+/* Endless Memory Survival — the mode title card.
+   A flat black plate that names the mode before the briefing paints. Kept out of
+   survival-mode.css (line budget) and deliberately NOT part of the shared
+   .survival-modal-shell language: this card has no chrome, no panel and nothing
+   to click, so it borrows none of that styling.
+
+   Every duration comes from --survival-title-fade, which SurvivalTitleCard sets
+   per phase from CONFIG's SURVIVAL_TITLE block — the JS timers and these
+   transitions must agree, so only one of them is allowed to own the number. */
+
+#survival-title[hidden] {
+  display: none !important;
+}
+
+#survival-title {
+  position: fixed;
+  inset: 0;
+  /* Above the briefing (40) so the card covers it while the overlay behind is
+     already painted and ready to be revealed underneath. */
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  /* Solid black, not the modals' teal radial wash: the point of the card is that
+     the world is gone. */
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--survival-title-fade, .9s) ease;
+}
+
+#survival-title.active {
+  opacity: 1;
+}
+
+.survival-title-shell {
+  text-align: center;
+  transform: translateY(10px);
+  transition:
+    transform var(--survival-title-fade, .9s) cubic-bezier(.22, .61, .36, 1),
+    letter-spacing var(--survival-title-fade, .9s) ease;
+}
+
+#survival-title.active .survival-title-shell {
+  transform: translateY(0);
+}
+
+.survival-title-kicker {
+  margin: 0;
+  color: rgba(111, 216, 208, .62);
+  font-size: 12px;
+  letter-spacing: 4.4px;
+  text-transform: uppercase;
+}
+
+.survival-title-name {
+  margin: 14px 0 0;
+  color: #dffffb;
+  font-size: clamp(34px, 5.4vw, 72px);
+  font-weight: normal;
+  letter-spacing: 3px;
+  text-shadow: 0 0 34px rgba(111, 216, 208, .3);
+}
+
+/* The hairline under the name draws itself as the card settles. */
+.survival-title-name::after {
+  content: '';
+  display: block;
+  width: 0;
+  height: 1px;
+  margin: 20px auto 0;
+  background: linear-gradient(90deg, transparent, rgba(111, 216, 208, .5), transparent);
+  transition: width calc(var(--survival-title-fade, .9s) * 1.6) ease;
+}
+
+#survival-title.active .survival-title-name::after {
+  width: min(340px, 62vw);
+}
+
+.survival-title-skip {
+  position: absolute;
+  bottom: 34px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  color: rgba(234, 246, 244, .3);
+  font-size: 11px;
+  letter-spacing: 2.6px;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity .5s ease;
+}
+
+/* Only offered once the card will actually honour a skip (SKIP_AFTER). Input is
+   swallowed by the card for its whole life either way — SurvivalTitleCard flips
+   pointer-events on the element — so the hint never invites a dead press. */
+#survival-title.can-skip .survival-title-skip {
+  opacity: 1;
+}
+
+@media (max-width: 620px) {
+  .survival-title-kicker {
+    letter-spacing: 3px;
+  }
+
+  .survival-title-name {
+    letter-spacing: 1.6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #survival-title,
+  .survival-title-shell,
+  .survival-title-name::after,
+  .survival-title-skip {
+    transition-duration: .01ms !important;
+  }
+
+  .survival-title-shell {
+    transform: none !important;
+  }
+}

@@ -21,6 +21,7 @@
 import * as THREE from 'three';
 import { COMBAT } from '../../config.js';
 import { GuardianShieldVfx } from './GuardianShieldVfx.js';
+import { immutableBossTuning } from './_partials/BossTuning.js';
 
 // Contract-level defaults. A subclass spreads its own numbers over these, so it
 // only has to state what actually differs from the baseline boss.
@@ -39,13 +40,20 @@ export class ArenaBoss {
    * @param {any} player     PlayerController (read for the pointer-lock guard)
    * @param {object} [tuning]   subclass numbers, spread over BOSS_DEFAULTS
    */
-  constructor(guardian, combat, audio, player, tuning = {}) {
+  constructor(guardian, combat, audio, player, tuning = {}, options = {}) {
     this.guardian = guardian;
     this.combat = combat;
     this.audio = audio;
     this.player = player;
     /** @type {Record<string, any>} — open by design; each boss adds its own keys */
-    this.tuning = { ...BOSS_DEFAULTS, ...tuning };
+    this.tuning = immutableBossTuning(BOSS_DEFAULTS, tuning);
+    this.externalHitResolution = !!options.externalHitResolution;
+    // Survival's tenth-wave Guardians fight alone — a boss that also summons is a
+    // wave stacked on a wave. An option rather than a tuning key because two of
+    // the Reveler's summon calls are hardcoded statements, not interval clocks,
+    // so a tuning value could not reach them. Campaign fights omit it and keep
+    // their adds.
+    this.allowSummons = options.allowSummons !== false;
 
     this.maxHp = this.tuning.HP;
     this.hp = this.maxHp;
@@ -66,6 +74,12 @@ export class ArenaBoss {
     // Scratch — a boss runs every frame alongside the whole combat sim.
     this._center = new THREE.Vector3();
     this._dir = new THREE.Vector3();
+    this._playerAttackTarget = {
+      kind: 'boss',
+      center: this._center,
+      radius: this.tuning.HIT_RADIUS,
+    };
+    this._playerAttackTargets = [this._playerAttackTarget];
   }
 
   // Open the fight. The guardian is already visible; this only turns it hostile.
@@ -83,6 +97,19 @@ export class ArenaBoss {
 
   // Chest height of the live guardian, copied out of its shared scratch vector.
   center() { return this._center.copy(this.guardian.center()); }
+
+  // Stable target records let Survival resolve both projectile piercing and
+  // hitscan beams without allocating on the per-frame combat path.
+  // Rebuilt rather than truncated to length 1: a subclass composes its pattern
+  // targets into the returned list, so truncating would leave whatever it put in
+  // slot 0 last frame sitting where the boss record belongs — and the boss would
+  // become permanently unhittable through this path.
+  getPlayerAttackTargets() {
+    this.center();
+    this._playerAttackTargets.length = 0;
+    this._playerAttackTargets.push(this._playerAttackTarget);
+    return this._playerAttackTargets;
+  }
 
   // Aim vector from the boss's chest toward `target`, normalized. Scratch-backed,
   // so a subclass's fire routine allocates nothing per shot.
@@ -184,13 +211,36 @@ export class ArenaBoss {
     const shot = this._findBoltOnChest();
     if (!shot) return;
     this.combat.bolts.deactivate(shot);
-    if (this._invuln > 0) { this.pingArmored(shot.mesh.position); return; }
-    this.damage(this.combat.boltDamage, shot.mesh.position);
-    this.combat.registerPlayerBoltHit(false);
+    this.receivePlayerAttack({
+      kind: 'projectile',
+      damage: this.combat.boltDamage,
+      position: shot.mesh.position,
+      creditKillBonus: false,
+    });
+  }
+
+  // Survival resolves projectile piercing and hitscan beams centrally, then
+  // hands the same weapon-neutral record to every Guardian. Campaign bosses keep
+  // `_testPlayerBolts()` above unless explicitly constructed with the external
+  // option, so their established bolt-scanning path is untouched.
+  receivePlayerAttack({
+    damage = 0,
+    position = null,
+    creditKillBonus = true,
+  } = {}) {
+    if (!this.active || this.defeated || damage <= 0) return { hit: false, defeated: false };
+    const impact = position || this.center();
+    if (this._invuln > 0) {
+      this.pingArmored(impact);
+      return { hit: true, blocked: true, defeated: false };
+    }
+    const applied = this.damage(damage, impact);
+    this.combat.registerPlayerBoltHit(creditKillBonus && this.defeated);
+    return { hit: true, blocked: false, applied, defeated: this.defeated };
   }
 
   damage(amount, position = null) {
-    if (this.defeated || amount <= 0) return;
+    if (this.defeated || amount <= 0) return 0;
     const applied = Math.min(this.hp, amount);   // never print overkill
     this.hp = Math.max(0, this.hp - amount);
     this.audio?.playHit?.();
@@ -203,6 +253,7 @@ export class ArenaBoss {
     this._onDamaged(impact);
     if (this.hp <= 0) this._defeat();
     else this._checkPhase();
+    return applied;
   }
 
   // Deepen the phase when HP crosses a threshold: flare invulnerable for a beat,
@@ -258,7 +309,7 @@ export class ArenaBoss {
     this._updateVfx(dt);
     if (this._invuln > 0) this._invuln = Math.max(0, this._invuln - dt);
     this._act(dt, playerPos);
-    this._testPlayerBolts();
+    if (!this.externalHitResolution) this._testPlayerBolts();
   }
 
   // --- subclass hooks --------------------------------------------------------
