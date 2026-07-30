@@ -1,5 +1,12 @@
 # Implementation Plan Index
 
+Current pause menu task:
+
+- `_partials/implementation_plan_pause_menu.md` — the two-line resume overlay
+  becomes a run ledger: objective checklist, memories/Souls/zones progress, and a
+  context-aware control reference, split as `PauseState` → `pauseModel` →
+  `PauseMenu` (the Journey Guide's proven pattern)
+
 Current arena victory task:
 
 - `_partials/implementation_plan_arena_victory_rift.md` — shared 5.6-second

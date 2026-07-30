@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { TOWER_ARENA } from '../../config.js';
 import { riddlesForZone } from '../../data.js';
+import { RUN_EVENT, emitRunEvent } from '../_partials/runEvents.js';
 import { RiddleScreen } from '../../ui/RiddleScreen.js';
 import { TowerGateConsole } from './_partials/TowerGateConsole.js';
 
@@ -158,12 +159,14 @@ export class TowerGateManager {
   }
 
   _wrongAnswer(gate) {
+    emitRunEvent(RUN_EVENT.BUGTONG, { correct: false });
     this.hooks.onTideSurge?.();
     this.hooks.onEvent?.('Incorrect seal · the tide surges', 'warning');
     this.combat.vfx.gatePulse(gate.center, false);
   }
 
   _open(gate) {
+    emitRunEvent(RUN_EVENT.BUGTONG, { correct: true });
     gate.open = true;
     gate.active = false;
     gate.console.setState('solved');

@@ -17,6 +17,8 @@ export function bindGameUi(game) {
   game.elResume = document.getElementById('resume');
   game.elResumeSub = document.getElementById('resume-sub');
   game.elResumeEnter = document.getElementById('resume-enter');
+  // The rest of the pause overlay's nodes belong to ui/PauseMenu.js, which caches
+  // them itself — Game only needs the three it drives directly.
   game.elFlash = document.getElementById('flash');
   game.elFaint = document.getElementById('faint');
   game.elGspeak = document.getElementById('gspeak');
@@ -33,6 +35,9 @@ export function bindGameUi(game) {
   game.elPreAwaken = document.getElementById('pre-awaken');
   game.elAwaken = document.getElementById('btn-awaken');
   game.elSettings = document.getElementById('settings');
+  game.elRestartZone = document.getElementById('restart-zone');
+  game.elQuitTitle = document.getElementById('quit-title');
+  game.elSessionNote = document.getElementById('session-note');
   game.elRingWrap = document.getElementById('holdring');
   game.elRing = game.elRingWrap.querySelector('.prog');
   game.elEndingBlack = document.getElementById('ending-black');
@@ -237,12 +242,58 @@ function wireSettings(game) {
   wireSlider('sfx-slider', 'sfx-val', 'strings.sfxVolume',
     (volume) => game.audio.setSfxVolume(volume));
 
+  // Look speed and brightness are multipliers around 1.0, not percentages of a
+  // bus, so they read/write the raw slider value rather than reusing wireSlider.
+  // Deliberately NOT readSaved: that one falls back to the legacy single-volume
+  // key, which would silently turn an old 50% volume into a 0.5× look speed.
+  const readNumber = (key, fallback) => {
+    try {
+      const raw = localStorage.getItem(key);
+      const parsed = parseFloat(raw);
+      if (raw !== null && !Number.isNaN(parsed)) return parsed;
+    } catch (e) { /* storage optional (private mode) */ }
+    return fallback;
+  };
+  const wireMultiplier = (sliderId, valueId, storageKey, format, apply) => {
+    const slider = document.getElementById(sliderId);
+    const value = document.getElementById(valueId);
+    const saved = readNumber(storageKey, 1);
+    const clamped = Math.min(Math.max(saved, slider.min / 100), slider.max / 100);
+    apply(clamped);
+    slider.value = Math.round(clamped * 100);
+    value.textContent = format(clamped);
+    slider.addEventListener('input', () => {
+      const next = slider.value / 100;
+      apply(next);
+      value.textContent = format(next);
+      try { localStorage.setItem(storageKey, String(next)); } catch (e) { /* ignore */ }
+    });
+  };
+  wireMultiplier('look-slider', 'look-val', 'strings.lookSpeed',
+    (v) => `${v.toFixed(2)}×`,
+    (speed) => { game.player.controls.pointerSpeed = speed; });
+  wireMultiplier('bright-slider', 'bright-val', 'strings.brightness',
+    (v) => `${Math.round(v * 100)}%`,
+    // ACES tone mapping is applied by OutputPass from the renderer's exposure,
+    // so this one dial brightens every scene (zones, hub, cutscenes) at once.
+    (exposure) => { game.renderer.toneMappingExposure = exposure; });
+
+  wireSessionActions(game);
+
   const open = (e) => {
     e.stopPropagation();
+    game.elRestartZone.disabled = !game.canRestartZone();
+    game.elSessionNote.textContent = game.canRestartZone()
+      ? 'Restarting keeps the memories you already recovered here.'
+      : 'Restart is available while you are inside a memory.';
     game.elSettings.classList.add('active');
   };
   document.getElementById('btn-settings').addEventListener('click', open);
-  document.querySelectorAll('.gear').forEach((gear) => gear.addEventListener('click', open));
+  // Every settings affordance outside the main menu is marked with the attribute
+  // (the Descend screen's corner gear, the pause menu's footer button). `open`
+  // stops propagation, so opening settings from the pause overlay never counts as
+  // the click-anywhere-to-resume gesture.
+  document.querySelectorAll('[data-settings]').forEach((el) => el.addEventListener('click', open));
 
   const close = (e) => {
     e.stopPropagation();
@@ -253,4 +304,40 @@ function wireSettings(game) {
   game.elSettings.addEventListener('click', (e) => {
     if (e.target === game.elSettings) close(e);
   });
+}
+
+// Restart / Quit are irreversible, so each button arms itself on the first click
+// and only acts on the second. A two-step button beats window.confirm here: a
+// native dialog inside a pointer-locked WebGL game steals focus and can leave the
+// pause overlay in a state the player did not ask for.
+function wireSessionActions(game) {
+  const ARM_TIMEOUT = 4000;
+  const arm = (button, act) => {
+    const idle = button.textContent.trim();
+    const confirmLabel = button.dataset.confirmLabel;
+    let timer = null;
+    const disarm = () => {
+      clearTimeout(timer);
+      timer = null;
+      button.classList.remove('is-armed');
+      button.textContent = idle;
+    };
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();     // never resume the game or close the modal
+      if (timer) { disarm(); act(); return; }
+      button.classList.add('is-armed');
+      button.textContent = confirmLabel;
+      timer = setTimeout(disarm, ARM_TIMEOUT);
+    });
+    // Closing the modal must not leave a button armed for the next time it opens.
+    game.elSettings.addEventListener('transitionend', () => {
+      if (!game.elSettings.classList.contains('active') && timer) disarm();
+    });
+  };
+
+  arm(game.elRestartZone, () => {
+    game.elSettings.classList.remove('active');
+    game._restartZone();
+  });
+  arm(game.elQuitTitle, () => game._quitToTitle());
 }

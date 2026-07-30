@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./_partials/rail-arena-hud.css" />
   <link rel="stylesheet" href="./_partials/tower-arena-hud.css" />
   <link rel="stylesheet" href="./_partials/journey-guide.css" />
+  <link rel="stylesheet" href="./_partials/pause-menu.css" />
 </head>
 
 <body>
@@ -225,6 +226,28 @@
         <input type="range" id="sfx-slider" min="0" max="100" value="90" />
         <span class="s-val" id="sfx-val">90%</span>
       </div>
+      <!-- Look speed drives PointerLockControls.pointerSpeed; brightness drives
+           the renderer's ACES tone-mapping exposure. Both persist like volume. -->
+      <div class="s-row">
+        <label for="look-slider">Look speed</label>
+        <input type="range" id="look-slider" min="30" max="200" step="5" value="100" />
+        <span class="s-val" id="look-val">1.00×</span>
+      </div>
+      <div class="s-row">
+        <label for="bright-slider">Brightness</label>
+        <input type="range" id="bright-slider" min="60" max="160" step="5" value="100" />
+        <span class="s-val" id="bright-val">100%</span>
+      </div>
+      <div class="s-session">
+        <div class="s-section-label">This Run</div>
+        <button class="menu-btn" id="restart-zone" data-confirm-label="Confirm restart?">
+          Restart this memory
+        </button>
+        <button class="menu-btn s-danger" id="quit-title" data-confirm-label="Confirm quit — progress is lost?">
+          Quit to title
+        </button>
+        <div class="s-note" id="session-note">Progress is kept for this session only.</div>
+      </div>
       <div class="platform-account">
         <div class="s-section-label">GameOn Portal</div>
         <button class="menu-btn" data-platform-action>Connect GameOn Account</button>
@@ -319,10 +342,110 @@
     <div class="enter" id="zc-enter">Return to your Museum</div>
   </div>
 
+  <!-- Pause ledger. Content is written by src/ui/PauseMenu.js (+ its
+       _partials/PauseCollection.js) from the view model in
+       src/ui/_partials/pauseModel.js; the skeleton stays here with the rest of
+       the DOM UI. Clicking the BACKDROP resumes (that click is the pointer-lock
+       gesture); the panel itself swallows clicks so browsing the tabs, reading a
+       memory, or opening Settings never ejects the player back into the water. -->
   <div id="resume" role="dialog" aria-modal="true" aria-label="Game paused" aria-hidden="true" style="display:none">
-    <button class="gear" data-settings aria-label="Settings">⚙</button>
-    <div class="sub" id="resume-sub">"The gallery waits in the quiet."</div>
-    <div class="enter" id="resume-enter">Click to keep looking</div>
+    <div class="pause-shell">
+      <header class="pause-head">
+        <p class="pause-kicker">Paused</p>
+        <h2 class="pause-location" id="pause-location">Aking Museo</h2>
+        <div class="sub" id="resume-sub">"The gallery waits in the quiet."</div>
+      </header>
+
+      <nav class="pause-tabs" role="tablist" aria-label="Pause sections">
+        <button class="pause-tab active" id="pause-tab-ledger" role="tab"
+                aria-selected="true" aria-controls="pause-panel-ledger">Ledger</button>
+        <button class="pause-tab" id="pause-tab-memories" role="tab"
+                aria-selected="false" aria-controls="pause-panel-memories">Memories</button>
+        <button class="pause-tab" id="pause-tab-lore" role="tab"
+                aria-selected="false" aria-controls="pause-panel-lore">Lore</button>
+      </nav>
+
+      <div class="pause-panel active" id="pause-panel-ledger" role="tabpanel"
+           aria-labelledby="pause-tab-ledger">
+      <div class="pause-body">
+        <section class="pause-card" aria-labelledby="pause-objectives-title">
+          <h3 class="pause-card-title" id="pause-objectives-title">Objectives</h3>
+          <ol class="pause-objective-list" id="pause-objectives"></ol>
+        </section>
+
+        <section class="pause-card" aria-labelledby="pause-ledger-title">
+          <h3 class="pause-card-title" id="pause-ledger-title">The Ledger</h3>
+
+          <div class="pause-meter" id="pause-memories" role="progressbar"
+               aria-label="Memories restored" aria-valuemin="0" aria-valuemax="27" aria-valuenow="0">
+            <div class="pause-meter-head">
+              <span>Memories restored</span>
+              <strong id="pause-memories-count">0 / 27</strong>
+            </div>
+            <div class="pause-meter-track"><div class="pause-meter-fill" id="pause-memories-fill"></div></div>
+          </div>
+
+          <ul class="pause-zone-rows" id="pause-zone-rows"></ul>
+
+          <div class="pause-tally">
+            <div class="pause-tally-row">
+              <span class="pause-tally-label">Guardian Souls</span>
+              <span class="pause-pips" id="pause-soul-pips" aria-hidden="true"></span>
+              <strong class="pause-tally-count" id="pause-soul-count">0 / 3</strong>
+            </div>
+            <div class="pause-tally-row">
+              <span class="pause-tally-label">Zones restored</span>
+              <span class="pause-pips" id="pause-zone-pips" aria-hidden="true"></span>
+              <strong class="pause-tally-count" id="pause-zone-count">0 / 3</strong>
+            </div>
+          </div>
+
+          <div class="pause-vitals" id="pause-vitals"></div>
+        </section>
+      </div>
+
+      <div class="pause-run" id="pause-run" aria-label="This run"></div>
+
+      <section class="pause-card pause-controls-card" aria-labelledby="pause-controls-title">
+        <h3 class="pause-card-title" id="pause-controls-title">Controls</h3>
+        <div class="pause-control-groups" id="pause-controls"></div>
+      </section>
+      </div>
+
+      <div class="pause-panel" id="pause-panel-memories" role="tabpanel"
+           aria-labelledby="pause-tab-memories" hidden>
+        <div class="pause-memory-groups" id="pause-memory-groups"></div>
+        <!-- Re-read a recovered memory without walking back to its pedestal. -->
+        <article class="pause-memory-detail" id="pause-memory-detail">
+          <button class="pause-detail-back" id="pause-detail-back" type="button">‹ Back to the collection</button>
+          <div class="pause-detail-body">
+            <img class="pause-detail-image" id="pause-detail-image" alt="" />
+            <div class="pause-detail-text">
+              <h4 class="pause-detail-fil" id="pause-detail-fil"></h4>
+              <div class="pause-detail-eng" id="pause-detail-eng"></div>
+              <div class="pause-detail-section">
+                <div class="pause-detail-label">Origin</div>
+                <p id="pause-detail-origin"></p>
+              </div>
+              <div class="pause-detail-section">
+                <div class="pause-detail-label">Lore</div>
+                <p id="pause-detail-lore"></p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="pause-panel" id="pause-panel-lore" role="tabpanel"
+           aria-labelledby="pause-tab-lore" hidden>
+        <div class="pause-lore" id="pause-lore"></div>
+      </div>
+
+      <footer class="pause-actions">
+        <button class="menu-btn primary" id="resume-enter">Resume</button>
+        <button class="menu-btn" data-settings>Settings</button>
+      </footer>
+    </div>
   </div>
 
   <script type="importmap">

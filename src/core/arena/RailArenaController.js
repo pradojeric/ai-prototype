@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { LUMINA, RAIL_ARENA, mulberry32 } from '../../config.js';
 import { riddlesForZone } from '../../data.js';
+import { RUN_EVENT, emitRunEvent } from '../_partials/runEvents.js';
 import { LanternProjectile } from './LanternProjectile.js';
 import { LuminaManager } from './LuminaManager.js';
 import { RailScenery } from './RailScenery.js';
@@ -281,11 +282,13 @@ export class RailArenaController {
   }
 
   _wrongLantern(lantern) {
+    emitRunEvent(RUN_EVENT.BUGTONG, { correct: false });
     lantern.dismiss();
     this.combat.damage(RAIL_ARENA.WRONG_DAMAGE);
   }
 
   _correctLantern(lantern) {
+    emitRunEvent(RUN_EVENT.BUGTONG, { correct: true });
     lantern.deflect();
     for (const other of this._lanterns) if (other !== lantern) other.dismiss();
     this.wards = Math.max(0, this.wards - 1);

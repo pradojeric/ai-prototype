@@ -1,3 +1,81 @@
+# Task — Memory Ledger Pause Menu (2026-07-30)
+
+Plan: `_partials/implementation_plan_pause_menu.md`
+
+## Objective
+
+Replace the two-line `#resume` overlay with a real pause menu that reads the run
+back to the player: an objective checklist, memories recovered (per zone and
+overall), Guardian Souls, zones restored, and a context-aware control reference.
+
+## Checklist
+
+- [x] `src/core/_partials/PauseState.js` — `collectPauseState(game)` snapshot
+- [x] `src/ui/_partials/pauseModel.js` — pure snapshot → view model (per-phase
+      objective checklists, meters, pips, control sets)
+- [x] `src/ui/PauseMenu.js` — `render(model)`, pooled list rows, no DOM churn
+- [x] `_partials/pause-menu.css` + `index.html` skeleton and stylesheet link
+- [x] `GamePause.js` — `_showOverlay` renders the ledger; focus the resume button
+      so Enter/Space resumes
+- [x] `GameUI.js` — bind the new nodes; `wireSettings` keys off `[data-settings]`
+      so the footer Settings button reuses the existing modal
+- [x] `Game.js` — construct `PauseMenu` before `GamePauseController`
+- [x] `styles.css` — split `#start`/`#resume` so pause is a translucent blurred
+      scrim over the frozen frame
+- [x] `tests/PauseMenu.test.js` (new) + `tests/GamePause.test.js` stub
+- [ ] User manually verify in browser: pause in zone / arena / museum, counts
+      match the HUD, Settings opens without resuming, narrow viewport
+
+## Phase 2 — chosen by the user from the hand-off questions
+
+Kept: Esc-only pause (no new keys). Skipped: bugtong log, on-screen pause button,
+subtitle/language toggle.
+
+- [x] Tabs — the shell becomes **Ledger / Memories / Lore**; every pause opens on
+      Ledger. The panel now swallows clicks (the backdrop still resumes) so
+      browsing can never eject the player; `#resume-enter` is bound directly.
+- [x] **Artifact gallery grid** — all 27 slots grouped by zone, thumbnails for
+      what is recovered and dashed silhouettes for what is not. Clicking a found
+      slot opens its origin/lore INSIDE the overlay (`ui/_partials/PauseCollection.js`)
+      — reusing `DiscoveryScreen` would deadlock, since its promise resolves on an
+      active-time wait that is frozen while paused.
+- [x] **Run stats** — `_partials/RunStats.js` + `_partials/runEvents.js`: time
+      beneath (Game's own paused-excluding clock), echoes dispersed, bugtong
+      answered, faints. One kill funnel (`ThreatBody.hit`, so `vanish()` is not
+      counted) and three answer sites (arena / rail / tower seals).
+- [x] **Zone lore recap** — `src/data/zoneLore.js`, retold from GDD §8–§10 and the
+      zone modules (identity, Guardian, trial shape, a Filipino line each).
+- [x] **Settings: look speed** (`controls.pointerSpeed`) and **brightness**
+      (`renderer.toneMappingExposure`, which ACES/OutputPass already reads), both
+      persisted — and deliberately NOT through `readSaved`, whose legacy
+      single-volume fallback would turn an old 50% volume into 0.5× look speed.
+- [x] **Restart this memory / Quit to title** — `_partials/SessionFlow.js`, each
+      behind a two-step arming confirm rather than `window.confirm`. Restart
+      targets `_returnZone` when inside an arena and reuses `_loadZone`;
+      `pause.abandon()` leaves the paused state without reclaiming pointer lock.
+- [x] `tests/SessionAndRunStats.test.js` (new) — caught a real bug: `canRestartZone`
+      as a *getter* on a mixin object is INVOKED by `Object.assign`, so the
+      prototype would have received a frozen `false`. It is a method now.
+- [ ] User manually verify in browser: the three tabs, a memory's inline detail,
+      look-speed + brightness sliders, restart mid-arena, quit to title
+
+## Phase 3 — complete control reference (user: "there are no combat system there")
+
+- [x] The reference lists **every** binding the game reads in every context, not
+      just the ones the context can use: combat (`Hold Click` / `F` / `R`), the
+      combat hop (`Space`), the seal number keys (`1`–`3`), the walk-over verbs,
+      and `Enter` to resume. Bindings re-read from the handlers, not recalled.
+- [x] Not-live rows are dimmed and say why — a group `note` ("Only inside a Memory
+      Arena") or the row's own caveat ("Armed only while a fight can floor you") —
+      instead of being filtered out, which is what hid the combat kit.
+- [x] `buildPauseModel` normalizes the `available`/`note` defaults so the renderer
+      never sees optional fields.
+- [x] Test asserts every binding appears exactly once per context across all
+      eleven pausable phases, so a new verb cannot be added and missed here.
+- Excluded on purpose: the hidden `Shift+P` presenter fast-forward (a stage tool).
+
+---
+
 # Task — Museum Pedestal Galleries + Floating Artifact Cubes (2026-07-29)
 
 Plan: `~/.claude/plans/read-src-museum-museum-js-the-groovy-crown.md`
@@ -548,580 +626,3 @@ Plan: `_partials/implementation_plan_zone_moonlight.md`
       portals (arenas inherit the new default rig)
 
 ---
-
-# Task — Arena 3 Seal Consoles (2026-07-26)
-
-## Objective
-
-Replace Arena 3's shoot-the-answer-node bugtong with the previous iteration's
-overlay: press **E** on a console beside each gate, then click a choice on the
-`#riddle` card. The tower sim keeps running underneath.
-
-Plan: `_partials/implementation_plan_tower_riddle_console.md`
-
-## Decisions (from user)
-
-- Trigger: **press E on a new console mesh** — no proximity auto-start.
-- Answering: **keyboard 1 / 2 / 3**; pointer stays locked throughout.
-- While the card is up: **tide + gargoyles keep running**, player can still move and shoot.
-- Wrong answer: **instant tide surge**; movement-slow penalty **removed**.
-- Retry: **card stays up**, wrong choice struck out, no second E press.
-- Scope: **Arena 3 only** — Arenas 1 and 2 keep shoot-the-node.
-
-## Checklist
-
-- [x] `config.js` — add `WRONG_TIDE_SURGE` / `CONSOLE_RANGE` / `CONSOLE_OFFSET`, drop `WRONG_SLOW*` + `GATE_CHOICE_GAP`
-- [x] New `arena/_partials/TowerGateConsole.js` (pedestal + rune plate + glyph, no collider)
-- [x] `RiddleScreen` — opt-in `keys` / `retryOnWrong` / `onWrong` options + `dismiss()`
-- [x] `styles.css` — number-badge style for the answer buttons
-- [x] `TowerGateManager` — consoles + overlay flow, drop AnswerNode/bolt scan/slow
-- [x] `TowerArenaController` — `_tidePenalty` + `onTideSurge` hook, drop slow HUD
-- [x] `Game.js` — pass `_ePressed` into `arena.update`
-- [x] `index.html` — remove the dead `#tower-slow` row
-- [x] `GamePause` — key-driven riddle must reclaim pointer lock on resume (soft-lock fix)
-- [x] Verify: syntax/import check + grep for dead references
-- [ ] User browser verify: all three seals, 1/2/3 select, tide surge on miss, retry in place
-
-## Verify (measured)
-
-- `node --check` passes on all 7 touched modules; all relative imports across
-  `src/` resolve.
-- Zero remaining references to `WRONG_SLOW`, `WRONG_SLOW_TIME`,
-  `GATE_CHOICE_GAP`, `tower-slow`, `onSlow`, `slowRemaining`, `_renderSlow`,
-  or `gate.nodes`.
-- `AnswerNode.js` retained — still imported by `ArenaController` (Arena 1) and
-  `LanternProjectile` (Arena 2).
-
-## Deviations from plan
-
-- **`GamePause` needed one change after all**, for the opposite reason to the
-  original draft. Its `_phaseNeedsPointerLock()` already exempted an active
-  `#riddle` card from reclaiming pointer lock on resume — correct for the old
-  click-driven card, but it would have left a player who alt-tabbed mid-seal
-  resuming unlocked and unable to move. `RiddleScreen` now marks the panel
-  `.keys` in key mode and GamePause exempts only the click-driven card.
-
----
-
-# Task — Guardian CC0 Texture Pass (2026-07-25)
-
-## Objective
-
-Texture all three Guardian bosses with CC0 PBR sets. They were the last major
-set-piece meshes still on flat untextured `fadeMat`, and the encounter is the
-closest the player ever gets to a large object.
-
-## Decisions (from user)
-
-- Scope: **all three** guardians in one pass.
-- Assets: **reuse committed sets + download new CC0 ones** from ambientCG.
-- Tinting: **multiply** — `mat.color` untouched, palette identity preserved.
-- Emissive accents: **left untextured** (fog/distance readability anchor).
-
-## Checklist
-
-- [x] Download + downsample 5 CC0 sets (bamboo / wicker / clay / fabric / sponge, 512px, 1.4 MB)
-- [x] Credit them in `assets/textures/CREDITS.md`
-- [x] Add `src/core/guardians/_partials/GuardianTextureKit.js` (repeat-tier clone cache + `skin`)
-- [x] Zone 1 Feastkeeper: rock / bamboo / wicker / clay
-- [x] Zone 2 Reveler: sponge (detail-only) / marble / fabric
-- [x] Zone 3 Keeper: rock / moss (detail-only) + split torso pottery onto a clay material
-- [x] Verify: syntax + import check, `fadeMats` contract unchanged, no accent gained a map
-- [ ] User browser verify: all three guardian encounters, fade-in, defeat scatter, beacon range
-
-## Verify (measured)
-
-- 11 materials textured across the 3 guardians; all 13 emissive/accent materials
-  confirmed still flat (no `map`, `normalMap` or `roughnessMap`).
-- `fadeMats` shape unchanged for Z1 (8) and Z2 (6); Z3 is 8 → 9 by the intended
-  clay-pottery split.
-- 13/13 kit unit checks pass against a stubbed three (tint preserved, opacity
-  untouched, repeat on all three maps, tier cache hits, clones share one `Source`).
-- 8 texture sets → 24 `load()` calls total, independent of how many repeat tiers
-  or materials use them.
-- Assets added: 1.4 MB (5 sets × 3 maps @ 512).
-
-Plan: [_partials/implementation_plan_guardian_textures.md](_partials/implementation_plan_guardian_textures.md)
-
----
-
-# Task — Zones 1–3 Layout Redesign + CC0 Asset Pass (2026-07-25)
-
-## Objective
-
-Improve the design and layout of the three submerged zones and pull free CC0 assets
-onto them. The zones were the weakest-looking scenes in the game (flat untextured
-colours, while the museum/ending already ran a CC0 PBR pipeline), zone 2 was a
-coordinate-for-coordinate clone of zone 1's floor plan, and ~940 draw calls per zone
-went on the mangrove ring alone.
-
-## Decisions (from user)
-
-- Scope: **both** layout redesign and asset/material work.
-- Assets: **download new CC0 sets** from ambientCG and reuse the committed ones.
-- Zone 2: **new floor plan, same anchors** (dock / riftSpot / guardianStart unchanged).
-- Performance target: **must run on low-end/mobile** — budget conservatively.
-
-## Checklist
-
-- [x] Verify ambientCG reachability; measure the baseline draw-call budget per zone
-- [x] Download + downsample 3 CC0 sets (silt / rust / moss, 512px, 764 KB) and credit them
-- [x] Add `src/core/_partials/TextureKit.js` — module-level cached loader + UV tilers
-- [x] Wire textures into `World._materials` AFTER the palette merge (tint preserved)
-- [x] Bake tiling UVs in `_building` / `_tower` / `_ruinArch` / seabed
-- [x] Batch the mangrove ring, stalls, rubble and tower fields into InstancedMeshes
-- [x] Add `src/core/zones/_partials/zoneKit.js` (perimeter, overlook, hall shell, cradles, hulls, dais, footbridge)
-- [x] Zone 1: asymmetric stall rows, Kanal Alley + footbridge, alley catwalk, warehouse mezzanine
-- [x] Zone 2: processional ring plaza, curved parade arc, SW float graveyard, distinct perimeter
-- [x] Zone 3: tightening colonnade rhythm, climbable collapsed vault, nave inlay, real transept shells
-- [x] Analytic water ripple normal + fresnel/sheen; silt seabed
-- [x] Split festival dressing into `_partials/FestivalDressing.js` (World.js was at 1030 lines)
-- [x] Verify: headless build of all 7 zones, reachability audit, 5400-placement stress test, texture-cache swap test
-- [ ] User browser verify: all three zones, the new climbable routes, guardian encounters, arena entry, museum + ending regression
-
-## Verify (measured)
-
-- Draw calls per zone: zone1 **1334 → 344**, zone2 **1558 → 657**, zone3 **1362 → 361**.
-- Every spawn/rift/guardian point is collision-free and flood-fill reachable from the dock.
-- 5400 real `ArtifactManager` placements across 3 zones: 0 in-collider, 0 unreachable.
-- Shared textures load once (21 `load()` calls) and survive repeated `World.dispose()`.
-- Per-zone palette tints preserved (zone2 concrete `#3a3128`, zone3 `#46525f`).
-
-# Task — Museum "Aking Museo" Visual Upgrade (CC0 assets) (2026-07-25)
-## Objective
-
-Improve the digital museum's look by pulling free CC0 assets from the internet and
-applying them to `src/museum/Museum.js`, WITHOUT breaking the dark-intro /
-bright-hub dual-palette mood.
-
-## Decisions (from user)
-
-- Asset types: **PBR wall/floor textures + HDRI environment map + decorative textures**.
-- Delivery: **download into repo `assets/`** (offline-safe; matches existing convention).
-- Scope: **preserve current mood** (color tint stays the intro→hub brightness driver).
-
-## Plan
-
-`_partials/implementation_plan_museum_assets.md`
-
-## Checklist
-
-- [x] Download CC0 texture sets — ambientCG Marble018 (floor), Plaster003 (walls),
-      Tiles101 (ceiling) → `assets/textures/{marble,gallery-wall,marble-tiles}/`
-- [x] Download neutral studio HDRI — Poly Haven studio_small_09 (1K) → `assets/hdri/gallery_1k.hdr`
-- [x] Museum.js `_loadTextures()` + `_tilePlane()`: bind map/normalMap/roughnessMap to
-      floor/wall/ceil materials with baked per-plane UV tiling; `.color` tints untouched
-- [x] Museum.js `_loadEnvironment()`: HDRI as `scene.environment` in hub only (intro clears it);
-      `envMapIntensity = 0.4` keeps IBL subtle regardless of three version
-- [x] Update `assets/textures/CREDITS.md` (museum textures + HDRI + Poly Haven CC0 note)
-- [x] Dispose the env texture in `dispose()`; texture sets tracked in `_texs`
-- [x] Static verify: `node --check` OK, Museum.js 898 lines (< 1000), assets on disk
-- [ ] User in-browser verify (no Playwright — see memory): intro still dark/moody;
-      hub floor reads as marble, walls plaster, ceiling tiled; soft reflections on
-      floor + metal frames; no bloom wash-out; console clean
-
-### Follow-up — reduce hub bloom + light (2026-07-25)
-
-- [x] `config.js`: `MUSEUM.BLOOM` (0.35 / 0.5 / 0.5) — gentler than the gameplay
-      default (0.8 / 0.6 / 0.2); hub has no string-glow to protect
-- [x] `Game.js`: `_enterMuseum` stashes gameplay bloom + applies `MUSEUM.BLOOM`;
-      `_enterZoneFromHub` restores it (zones keep their signature glow untouched)
-- [x] `Museum.js` `_hubLights`: ambient 0.75→0.55, hemi 0.65→0.5, key 0.7→0.55,
-      picture-bulb emissive 1.4→0.9, hanging PointLights 1.6→1.1
-- [x] Static verify: `node --check` OK on all three; files < 1000 lines
-
----
-
-# Task — Restored-Zones CC0 PBR Textures (v4) (2026-07-24)
-
-## Objective
-
-Improve detail by pulling free assets from the internet and applying them to the
-restored-zone ending diorama.
-
-## Decisions (from user)
-
-- Asset type: **PBR surface textures** only.
-- Scope: **ending diorama only**.
-- License/storage: **CC0 only, downloaded into the repo** (offline-safe).
-
-## What was done
-
-- Downloaded 7 CC0 texture sets from **ambientCG** (Bricks075A, PaintedPlaster001,
-  PavingStones037, Grass004, RoofingTiles004, Planks011, Rock030), 1K JPG,
-  color + NormalGL + roughness → `assets/textures/<name>/` (26 MB). CREDITS.md added.
-- RestoredKit `_loadTextures()`: binds map/normalMap/roughnessMap to materials
-  (brick, plaster→walls/capitol/limestone/lighthouse, paving→street/stone,
-  grass, roof, wood, rock→islets); sets `color=white`, `roughness=1`.
-- Per-material `userData.tile` (world units per repeat) + UV-tiling baked into
-  box/cyl/cone/sphere/dome/plane geometries so texel density is consistent on
-  surfaces of very different sizes (shared texture, repeat=1).
-- dispose() also frees the textures.
-
-## Notes / follow-ups
-
-- RestoredProvince is built in the Game constructor, so the 26 MB loads at page
-  start (async, non-blocking; instant on localhost, bandwidth cost on real host).
-  Could lazy-load if that matters.
-- Extrude pediments + torus (arch lintel, vault ribs) aren't UV-tiled — minor
-  stretch on small parts; dominant surfaces are tiled.
-
-## Verify
-
-- [x] 21 textures serve 200; all 5 JS files `node --check` OK, <1000 lines.
-- [ ] User in-browser verify of textured surfaces + texel density.
-
----
-
-# Task — Restored-Zones Architectural Fidelity Pass (v3) (2026-07-24)
-
-## Objective
-
-Improve the restored-zone STRUCTURES and LAYOUT with recognizable real
-Pangasinan landmarks (research via web/MCP + threejs AAA-graphics skill).
-
-## Decisions (from user)
-
-- Focus: **architectural fidelity** + **layout & composition** (not glow/props-density).
-- Fidelity: **recognizable real landmarks**.
-- Budget: **generous** (one-time cutscene, disposed after).
-
-## Research (WebSearch/WebFetch) → applied
-
-- **Cape Bolinao Lighthouse** (1905): WHITE tapered stone tower (30.78 m) on a
-  rocky headland, keeper's house + gallery + lantern room. → Zone 3 (fixed: was
-  wrongly red-striped; now white on a headland).
-- **St. John Cathedral, Dagupan**: Spanish, brick + buttresses, SINGLE side
-  belfry (not twin). → Zone 3 cathedral facade rebuilt to match.
-- **Zone 3 artifacts = 7 real landmarks** (data.js): Manaoag Basilica (twin
-  towers + dome), Provincial Capitol (neoclassical colonnade + dome), Bolinao
-  lighthouse, Hundred Islands, Casa Real/Banáan. → added as a landmark skyline
-  revealed in the finale wide lift.
-- **Dagupan bangus (milkfish) capital / Pantal**: → Zone 1 market hall + riverside
-  bamboo fish pens (kasilayan) + bangus baskets.
-- **Bangus Festival "Gilon-gilon ed Dalan"**: giant milkfish float, bamboo arko.
-  → Zone 2 giant bangus float + bamboo festival arches.
-
-## Changes
-
-- RestoredKit: + cyl/cone/sphere/dome/pediment/columnRow primitives and
-  brick/capitolStone/verdigris/lightWhite/bamboo/bangus/isletRock/water materials.
-- Zone 1: Public Market Hall (W anchor), Pantal riverside + bamboo fish pens,
-  bangus baskets, cleaner avenue→tower composition.
-- Zone 2: giant milkfish float (centre), bamboo festival arches framing the pan.
-- Zone 3: St. John cathedral facade (buttresses + single belfry) + landmark
-  skyline (Manaoag basilica, Provincial Capitol, white Bolinao lighthouse,
-  Hundred Islands, Casa Real); finale lift reveals the whole skyline.
-
-## Asset-sourcing note (AAA skill gate)
-
-Procedural-only is the final answer here: the project is a no-build, no-bundler
-vanilla-ESM app with no GLTF loader or asset hosting (CLAUDE.md), and repo memory
-forbids adding a heavy asset/browser pipeline — a real blocker for the 3D/image
-generators. Fidelity achieved via authored procedural forms (silhouette-first).
-
-## Verify
-
-- [x] Syntax (`node --check`) all 5 files; all <1000 lines; server serves them.
-- [x] Every `kit.*` member used by builders is defined.
-- [ ] User in-browser verify of landmark recognizability + per-zone framing.
-
----
-
-# Task — Restored-Zones Ending Montage (v2) (2026-07-24)
-
-## Objective
-
-Rework the ending (`src/cutscene/RestoredProvince.js`) into three **literally
-separate** restored-zone dioramas — faithful, restored recreations of the real
-zone layouts (zone1–zone3) — shown one at a time with slow camera pans on each,
-NOT tiled onto one shared plane. No human figures.
-
-## Decisions (from user)
-
-- Arrangement: **three separate zones, not on one plane** — shown one at a time.
-- Fidelity: **faithful districts + terminus landmark** per real zone.
-- Duration: **keep ~31s** total (ENDING.RESTORED_DURATION); subtitles already map.
-- Strings (Hibla): **kept, fading out** toward the finale.
-- People: none (replaced by lanterns / banners / drifting light "motes").
-
-## Architecture (split for the 1000-line rule)
-
-- `_partials/RestoredKit.js` — shared materials, mesh primitives, animation registries.
-- `_partials/restoredZone1.js` — PONSIA market (avenue+stalls, Memories Alley,
-  Fish Warehouse, Boatyard, Auction Square + whole bell-mast tower).
-- `_partials/restoredZone2.js` — LIKET festival (gong circle, parade stalls,
-  lantern/bunting canopy, Dancing Hall, Float Graveyard, Bandstand + parul mast).
-- `_partials/restoredZone3.js` — PANANISIA cathedral (narthex, nave colonnade +
-  vault ribs, transepts, altar/apse, whole bell-tower, memory strings).
-- `RestoredProvince.js` — slim driver: 3 groups, one visible at a time, per-zone
-  camera keys, black-dip cuts at zone boundaries, subtitles, shared animation.
-
-## Timeline (keyed to ENDING.SUBTITLES)
-
-- Zone 1: 0–11s  (intro + food cue) — 2 slow pans up the market to the tower.
-- Zone 2: 11–17.5s (festival cue)    — 1 slow rise up the avenue to the parul star.
-- Zone 3: 17.5–31s (landmark + strings-fade) — pan up the nave + closing wide lift.
-- Cuts at t=11 and t=17.5 hidden by a ~0.55s full-screen black dip.
-
-## Checklist
-
-- [x] RestoredKit primitives + animation registries.
-- [x] Zone 1 / 2 / 3 faithful restored builders.
-- [x] Driver: separate groups, one-visible-at-a-time, per-zone pans, black-dip cuts.
-- [x] Hibla strings per zone, fading at the finale; motes replace people.
-- [x] Syntax check (`node --check`) all 5 files, all <1000 lines; server serves them.
-- [ ] User in-browser verify of the montage + per-zone framing.
-
----
-
-# Task — Per-Run World Seed for Non-Duplicating Riddles (2026-07-24)
-
-## Objective
-
-Add a per-run world seed so each zone's arena draws a distinct, non-overlapping
-set of bugtong (riddles), deterministic across retries, with no riddle repeating
-across zone1/zone2/zone3 arenas in a single playthrough.
-
-## Decisions (from user)
-
-- Seed source: **fresh random per run** (page load).
-- Retry behavior: **different riddles each retry** (rotates a fresh window
-  through the zone's own block; revised from the initial "same riddles" answer).
-- Dedup scope: **no duplicates across all zones** (hard guarantee via disjoint
-  per-zone blocks).
-
-## Checklist
-
-- [x] Inspect riddle pool, `drawRiddles`, and all three arena draw sites
-- [x] Confirm arena→controller mapping and reservation counts
-- [x] Add `WORLD_SEED` (fresh-per-run) to `config.js`
-- [x] Add central `riddlesForZone(zoneId)` allocator to `data/riddles.js`
-- [x] Wire ArenaController (arena1) to the allocator via its zone id
-- [x] Wire RailArenaController (arena2) to the allocator
-- [x] Wire TowerGateManager (arena3) to the allocator
-- [x] Static sanity check (node syntax + allocation disjointness/stability)
-
----
-
-# Task — Rewrite STRINGS Game Design Document (2026-07-24)
-
-## Objective
-
-Read the complete repository and rewrite `STRINGS_GDD.md` so it is an accurate,
-cohesive design source of truth for the game that is currently implemented.
-
-## Checklist
-
-- [x] Load the applicable game-design documentation workflow
-- [x] Inventory repository files and identify existing design documents
-- [x] Write the focused implementation plan
-- [x] User review and approval of `implementation_plan.md`
-- [x] Read every authored source, markup, style, data, test, and design file
-- [x] Build a traceability ledger from player-facing claims to code ownership
-- [x] Reconcile current mechanics, progression, narrative, arenas, content, UI,
-      audio, controls, technical constraints, and external platform integration
-- [x] Rewrite `STRINGS_GDD.md`
-- [x] Audit the rewritten GDD against the complete repository
-- [x] Run Markdown, line-count, stale-claim, link, and whitespace checks
-
----
-
-# Task — Multiline Riddle Readability (2026-07-23)
-
-## Objective
-
-Widen the shared riddle banner and replace compressed single-line answer labels
-with fixed-size, centered, maximum-three-line panels across all arenas.
-
-## Checklist
-
-- [x] Trace the shared banner and answer-label paths across Arenas 1–3
-- [x] Lock banner width, wrapping, line count, alignment, tower spacing, and desktop scope
-- [x] Write the focused implementation plan
-- [x] User review and approval of the riddle readability plan
-- [x] Implement and test shared multiline canvas layout
-- [x] Apply dynamic label aspect sizing to nodes and lanterns
-- [x] Spread Tower seal choices without label scaling
-- [x] Widen and audit the riddle banner
-- [x] Run static and mocked verification
-- [ ] Manually verify longest text in all three arenas (local server permission
-      remains unavailable)
-
-Plan: `_partials/implementation_plan_riddle_readability.md`
-
----
-
-# Task — Remove Superseded Exploration HUD (2026-07-23)
-
-## Objective
-
-Remove the legacy Rift hint and artifact counter now represented by the Journey
-panel, while preserving interaction prompts and all combat/status UI.
-
-## Checklist
-
-- [x] Confirm legacy ownership and replacement coverage
-- [x] Remove legacy markup and CSS
-- [x] Remove obsolete DOM bindings and visibility calls
-- [x] Run syntax, stale-reference, line-count, test, and whitespace checks
-- [ ] Manually verify the Journey panel remains readable in browser (local
-      server permission remains unavailable)
-
----
-
-# Task — Fix Arena 2 rail look tumbling upside down
-
-The boat sway wrote roll onto the player camera, which corrupted
-PointerLockControls' YXZ read-back of yaw/pitch and let the view spin past
-vertical.
-
-## Checklist
-
-- [x] Trace the roll write (`RailScenery.update`) and PointerLockControls' per-
-      mousemove quaternion round-trip
-- [x] Adopt `YXZ` rotation order on the player camera for the rail arena so roll
-      survives the round-trip losslessly (keeps the sway unchanged)
-- [x] Add a rail aim cone: pitch via PointerLockControls' polar limits, yaw via a
-      new `PlayerController.setYawLimit` — the bangka faces forward, no looking
-      back over the stern
-- [x] Restore rotation order, polar limits, and free yaw in `RailScenery.dispose`
-- [x] Syntax check touched files
-
-## Follow-up — Arena 2 lateral boat drift
-
-- [x] Seeded value-noise wander (`RAIL_ARENA.DRIFT_*`): +/-0.6 m off centre,
-      slide only (no yaw), running continuously through the encounter
-- [x] Drift the boat and the player together; keep `movementAnchor` in sync
-- [x] Widen the aim cone to ~70 deg so the drift never fights the clamp
-- [x] Verify the curve numerically (starts centred, ~0.54 m peak, ~0.44 m/s max)
-- [ ] Manually verify in browser: enter Arena 2, sweep the mouse hard in circles,
-      confirm the horizon stays upright, the aim cone stops you facing the stern,
-      and the drift reads as current rather than steering
-
----
-
----
-
-# Task — Arena 2 Reveler: three new attack patterns
-
-Plan: [_partials/implementation_plan_reveler_patterns.md](_partials/implementation_plan_reveler_patterns.md)
-
-## Checklist
-
-- [x] Refactor `RevelerBoss._act` into a `_pattern` mutual-exclusion scheduler
-      (Feastkeeper shape); fold the existing orb formation in as a scheduled entry
-- [x] `_partials/ShellRotation.js` — closing petal shell with one orbiting gap,
-      shell hits route through the existing `pingArmored()`, gap hits deal 2x
-- [x] `_partials/ScatterHex.js` — pooled spray of 1-HP hexes scattered across the
-      view, staggered inward drift, 5 damage on reaching the boat
-- [x] `_partials/OverloadChannel.js` — 10 coral nodes at 6-8 HP each, diegetic
-      charge ring as the timer (`setDrawRange` radial fill), clear-all cancels into
-      a 3s stagger, expiry fires the beam for 35
-- [x] Suspend summons for the whole Overload Channel; redraw the summon timer on
-      channel end so no backlog dumps at once
-- [x] Gate anchor-hop DECISIONS on the pattern guard while letting a slide already
-      in flight finish (that is what lets the overload's move to centre resolve)
-- [x] Drop the now-dead `RevelerProjectilePool.formationLocked` getter
-- [x] Confirm every partial disposes its meshes (boss is rebuilt on faint-restart)
-- [x] Syntax, import-resolution, line-count, and whitespace checks on touched files
-- [ ] Manually verify in browser: each pattern fires, only one at a time, summons
-      visibly stop during the channel, and 10 nodes are clearable inside the timer
-
-## Tuning decisions made during implementation
-
-- `OVERLOAD.DURATION: [22, 20, 18]`, not 15s. `BOLT.COOLDOWN` 0.22 (~4.55
-  shots/sec) x `BOLT.DAMAGE` 1 means 10 nodes at 6-8 HP is ~70 bolts ~= 15.4s of
-  perfect uninterrupted fire — a 15s channel is unclearable by arithmetic. Drop
-  `NODE_COUNT` to 6 if the 15s feel is wanted instead.
-- `SHELL.GAP_MULT: 2`, down from the 1.5x in the plan and from a first pass at 4.
-  The chest is unreachable while the shell is closed, so x1 is a pure tax and x4
-  eclipsed the reflected-orb route (the fight's intended damage source) outright.
-- Shell hit test scales with the iris animation, and unintercepted bolts fall
-  through to the normal chest test — otherwise the ~0.55s of opening/closing is a
-  dead zone where the plate is visually small but blocking at full size.
-- No boss spit during Shell Rotation: `RailCombatManager`'s spit-vs-player path
-  hardcodes `SNIPER.DAMAGE` and assumes a `source` threat for reflection, so a
-  boss-owned spit would need changes to shared combat code. Live adds already
-  supply the pressure.
-
-## Presenter skip (Shift + P) — live-demo fast-forward
-
-Plan: [_partials/implementation_plan_presenter_skip.md](_partials/implementation_plan_presenter_skip.md)
-
-- [x] `CONFIG`/`PRESENTER` block in `src/config.js` (`ENABLED`, `KEY`, `SHIFT`, `COOLDOWN`)
-- [x] `src/core/_partials/PresenterSkip.js` — keybind wiring + context-aware dispatch
-      installed onto `Game.prototype`
-- [x] Intro cutscene skip (reuses the existing `IntroCutscene.skip`)
-- [x] `GuardianIntroCutscene.skip()` — winds the timeline out so `play()` resolves
-      normally (camera restore + `arena.begin` still run)
-- [x] `presenterSkipToBoss()` on all three arena controllers — a press inside an
-      arena cuts the armor phase (waves, bugtong rounds, tower ascent) and hands
-      over to the boss, still fully playable; only once the boss is up does a
-      press end the encounter
-- [x] `presenterWin()` on `ArenaController`, `RailArenaController`,
-      `TowerArenaController` — real teardown + `arena.won`, so the loop plays the
-      usual collapse and `_returnFromArena()` scatter
-- [x] `TowerGateManager.presenterAbort()` — dismiss a live seal-console riddle card
-- [x] `GuardianSoul.forceCollect()` — bank the Soul through its normal callback
-- [x] `RiddleScreen.autoSolve()` — resolve a live card as correct
-- [x] `_presenterClearZone()` — bank every memory + the Soul, then `_zoneComplete()`
-      (works either side of the arena; unlocks the next museum portal as usual)
-- [x] Completion card: Shift+P walks on into the hub
-- [ ] **Needs in-browser verification** (no automated harness in this repo)
-
----
-
-## Keeper of Memories — attack pattern pass
-
-Plan: [_partials/implementation_plan_keeper_attack_tuning.md](_partials/implementation_plan_keeper_attack_tuning.md)
-
-- [x] `CHARGE_SPEED` 13.5 → 19 — the dash commits faster; telegraph, interval and
-      recovery/stun windows deliberately untouched so the dodge window and whiff
-      punish are unchanged
-- [x] New `beam-approach` state before `beam-telegraph`: the Keeper walks to
-      `(0, 0)` at `BEAM_APPROACH_SPEED` (9 u/s, ≤0.76s) so the lighthouse sweep
-      pivots on the arena centre
-- [x] `_startBeamApproach()` bail-out timer — an interrupted walk still commits to
-      the sweep rather than stalling the fight
-- [x] Keeper stays at centre after the sweep; shots/charges resume from there
-- [x] `blocksPlayerAt()` also non-blocking during `beam-approach`, so a player on
-      the centre can't be pinned inside the walking body
-- [x] `BEAM_CLEARANCE: 0.55` — the sweep is jumpable, same value as the
-      Feastkeeper's Offering Slam so the Zone 1 jump-dodge transfers (~0.43s
-      window against the ~0.80m hop); `_playerInBeam()` gates on `jumpOffset`
-- [x] Sweep speed/width untouched — footwork stays a valid answer, the jump is
-      the cornered-or-caught-out option
-- [x] Laser rework: each arm is a deck scorch line **plus** a vertical shader
-      blade whose height *is* the hit volume, so the attack looks jumpable
-- [x] `_partials/LighthouseBeamMaterial.js` — local-space `ShaderMaterial`: hot
-      scrolling core at the deck, soft body falloff, crisp rim at the clearance
-      line, slower counter-pulse so the scroll isn't one repeating stripe
-- [x] `_setBeamIntensity()` drives scorch opacity + blade `uOpacity` together;
-      existing telegraph ramp unchanged. `uTime` resets per sweep
-- [x] Beam reach fixed to the 9m deck (`bounds.radius`) instead of 13.6m, which
-      hung the beam out over the void; hit cut-off uses the same `_beamReach`
-- [x] Guardian intro: hide the ViewModel for the cinematic — the hand is a child
-      of the player camera, which stays in the scene, so it drew as a floating
-      limb at the player's staged position (affected all three zones, not just
-      the Keeper)
-- [x] `Game._faceCamera(target)` — yaw onto a world position, pitch/roll levelled;
-      replaces the `_levelCamera()` call in `_runGuardianIntroduction` and runs
-      after `begin()` so it reads the live `arena.guardianCenter()`
-- [x] Instant snap, hidden by the same-frame `renderPass.camera` swap back to the
-      player camera; no input lock needed
-- [x] Attack callouts matching the other two bosses: `BEACON CHARGE`,
-      `MEMORY STONES`, `LIGHTHOUSE SWEEP` via `combat.hud.popupCallout`, fired at
-      pattern start; the basic shot stays silent as `spit`/`formation` do
-- [x] Sweep is called out on the walk, before the already-centred shortcut, so
-      that path is never silent and the attack announces exactly once
-- [x] The three replaced `onEvent` log lines dropped; the charge-miss stun and
-      phase-change lines stay (outcomes, not attack announcements)
-- [ ] **Needs in-browser verification** (no automated harness in this repo) —
-      shader compile, blade height readability, charge dodgeability at 19 u/s,
-      no hand in any boss intro, control returning aimed at each boss, and the
-      three callouts firing once each at the right beat
-
----
-
-Older task history: [_partials/task_archive.md](_partials/task_archive.md)

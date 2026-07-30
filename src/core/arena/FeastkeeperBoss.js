@@ -33,7 +33,7 @@ import { OfferingSlam } from './_partials/OfferingSlam.js';
 // where three unrelated boss fights would pile into one block.
 export const FEASTKEEPER_TUNING = {
   HP: 200,
-  SHOT_INTERVAL: [2.6, 1.9, 1.3],
+  SHOT_INTERVAL: [2.0, 1.5, 1.0],
   TELEGRAPH: 0.45,                  // warning pulse before each aimed shot leaves
   SPIT_SPEED: 11,
   SPIT_LIFE: 4,
@@ -45,27 +45,27 @@ export const FEASTKEEPER_TUNING = {
   // --- attack scheduler ---
   // Every pattern is unlocked from the first frame of the boss phase; phases only
   // tighten the gap between them and raise their counts. Weights are relative.
-  ATTACK_INTERVAL: [[3.2, 4.2], [2.6, 3.4], [2.0, 2.8]],
+  ATTACK_INTERVAL: [[3.2, 4.2], [2.0, 3.4], [1.5, 2.8]],
   ATTACK_WEIGHTS: { spit: 3, grenades: 2, spiral: 2, slam: 1 },
 
   // Handog Barrage. FUSE is warning time — the ground ring is up the moment the
   // pot leaves the hand, so this is how long the player has to read and move.
   GRENADE: {
     COUNT: [3, 5, 7], FUSE: 1.35, FLIGHT: 0.95, APEX: 5, STAGGER: 0.18,
-    RADIUS: 2.2, DAMAGE: 14, KNOCK: 3.5, SPREAD: [2.5, 7],
+    RADIUS: 2.5, DAMAGE: 14, KNOCK: 3.5, SPREAD: [2.5, 7],
   },
   // Spiral Feast. MUZZLE_Y is load-bearing: these rounds fly flat and
   // CombatManager rejects any spit more than 1.4m off the player's eye, so firing
   // from the guardian's ~4m chest would send every one of them overhead.
   SPIRAL: {
     ARMS: 3, SPIN: 0.9, RATE: 0.14, DURATION: [2.6, 3.4, 4.2], MUZZLE_Y: 1.3,
-    SPEED: 7, LIFE: 5, DAMAGE: 6, CHARGE: 1.1,
+    SPEED: 10, LIFE: 5, DAMAGE: 6, CHARGE: 1.1,
   },
   // Offering Slam. CLEARANCE (0.55) against the hop's ~0.80m peak sets how
   // forgiving the leap window is; GAP_ARC is the safe wedge, ~60°.
   SLAM: {
-    WINDUP: 0.9, SPEED: 9, BAND: 1.2, GAP_ARC: 1.05,
-    CLEARANCE: 0.55, DAMAGE: 12, KNOCK: 4.5, WAVES: [1, 1, 2],
+    WINDUP: 0.5, SPEED: 15, BAND: 1.2, GAP_ARC: 1.05,
+    CLEARANCE: 0.55, DAMAGE: 12, KNOCK: 4.5, WAVES: [2, 3, 4],
   },
 };
 

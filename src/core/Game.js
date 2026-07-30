@@ -16,14 +16,19 @@ import { ViewModel } from './ViewModel.js';
 import { createGameRenderer, createPostProcessing } from './_partials/GameRendering.js';
 import { bindGameUi, wireGameEvents } from './_partials/GameUI.js';
 import { GamePauseController } from './_partials/GamePause.js';
+import { collectPauseState } from './_partials/PauseState.js';
+import { buildPauseModel } from '../ui/_partials/pauseModel.js';
 import { arenaFlowMethods } from './_partials/ArenaFlow.js';
 import { debugZoneFlowMethods } from './_partials/DebugZoneFlow.js';
 import { gameGuidanceMethods } from './_partials/GameGuidance.js';
 import { presenterSkipMethods } from './_partials/PresenterSkip.js';
+import { sessionFlowMethods } from './_partials/SessionFlow.js';
+import { RunStats } from './_partials/RunStats.js';
 import { queuePlatformArtifactForCampaign } from './_partials/PlatformProgress.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { DiscoveryScreen } from '../ui/DiscoveryScreen.js';
 import { JourneyGuide } from '../ui/JourneyGuide.js';
+import { PauseMenu } from '../ui/PauseMenu.js';
 import { Museum } from '../museum/Museum.js';
 import { IntroCutscene } from '../cutscene/IntroCutscene.js';
 import { GuardianIntroCutscene } from '../cutscene/GuardianIntroCutscene.js';
@@ -98,7 +103,16 @@ export class Game {
     this.holdKey = false;     // E currently held
     this.holdProgress = 0;    // 0..1 hold-to-collect progress
     bindGameUi(this);
-    this.pause = new GamePauseController(this);
+    // Session tally reported by the pause menu. `_gameTime` already excludes
+    // paused frames, so it doubles as the run clock.
+    this.runStats = new RunStats(() => this._gameTime);
+    // The pause ledger reads this Game every time the overlay opens, so it only
+    // has to exist before the controller that shows the overlay.
+    this.pauseMenu = new PauseMenu();
+    this.pause = new GamePauseController(
+      this,
+      () => buildPauseModel(collectPauseState(this)),
+    );
     this.journeyGuide = new JourneyGuide(
       (milliseconds) => this.pause.wait(milliseconds),
     );
@@ -255,6 +269,7 @@ export class Game {
     const lookAt = camPos.clone().addScaledVector(this._faintLook, 5);
 
     this.phase = 'faint';
+    this.runStats.recordFaint();
     this._syncJourneyGuide(false);
     this.elCross.classList.remove('active');
     this.viewmodel.group.visible = false;
@@ -956,3 +971,4 @@ Object.assign(Game.prototype, arenaFlowMethods);
 Object.assign(Game.prototype, debugZoneFlowMethods);
 Object.assign(Game.prototype, gameGuidanceMethods);
 Object.assign(Game.prototype, presenterSkipMethods);
+Object.assign(Game.prototype, sessionFlowMethods);

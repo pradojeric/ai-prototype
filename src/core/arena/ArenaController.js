@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { ARENA, COMBAT, LUMINA } from '../../config.js';
 import { riddlesForZone } from '../../data.js';
+import { RUN_EVENT, emitRunEvent } from '../_partials/runEvents.js';
 import { AnswerNode } from './AnswerNode.js';
 import { FeastkeeperBoss } from './FeastkeeperBoss.js';
 import { LuminaManager } from './LuminaManager.js';
@@ -262,6 +263,7 @@ export class ArenaController {
   // Resolve a shot node: correct strips armor (and may open the boss); wrong
   // locks the round behind a penalty squad.
   _answer(node) {
+    emitRunEvent(RUN_EVENT.BUGTONG, { correct: !!node.correct });
     if (node.correct) {
       node.break();
       for (const n of this._nodes) if (!n.broken) n.break();   // shatter the whole round

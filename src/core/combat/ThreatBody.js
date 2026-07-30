@@ -14,6 +14,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { COMBAT } from '../../config.js';
+import { RUN_EVENT, emitRunEvent } from '../_partials/runEvents.js';
 
 export class ThreatBody {
   constructor(scene, type, {
@@ -110,6 +111,10 @@ export class ThreatBody {
     this.hp -= damage;
     if (this.hp > 0) return false;
     this._die();
+    // The one true kill funnel: every arena threat dies here, and `vanish()`
+    // (leash resets, faints, victory cleanup) deliberately does not pass through
+    // it — so the run tally counts earned kills only.
+    emitRunEvent(RUN_EVENT.ECHO_DEFEATED);
     return true;
   }
 

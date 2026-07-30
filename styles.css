@@ -183,13 +183,20 @@
       z-index: 10;
     }
 
-    #start,
-    #resume {
+    #start {
       background: radial-gradient(circle at 50% 40%, #0d2a2e 0%, #04090b 80%);
       cursor: pointer;
     }
 
+    /* Pause keeps the frozen frame visible behind a blurred scrim — the loop is
+       still rendering it (see Game.animate) — so pausing reads as the water
+       holding still rather than as leaving the game. Detailed panel styling
+       lives in _partials/pause-menu.css. */
     #resume {
+      justify-content: center;
+      background: radial-gradient(circle at 50% 40%, rgba(13, 42, 46, .82) 0%, rgba(4, 9, 11, .94) 78%);
+      backdrop-filter: blur(7px) saturate(.85);
+      cursor: pointer;
       z-index: 35;
     }
 
@@ -219,7 +226,6 @@
     }
 
     #start .enter,
-    #resume .enter,
     #zonecomplete .enter {
       margin-top: 44px;
       padding: 14px 34px;

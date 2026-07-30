@@ -17,8 +17,12 @@ const PAUSABLE_PHASES = new Set([
 const POINTER_PHASES = new Set(['playing', 'museum', 'arena', 'debug', 'faint']);
 
 export class GamePauseController {
-  constructor(game) {
+  // `describeRun` returns the pause ledger's view model for the current run (see
+  // PauseState.js + ui/_partials/pauseModel.js). Injected rather than imported so
+  // this controller stays a pure input/time authority with no content deps.
+  constructor(game, describeRun = null) {
     this.game = game;
+    this.describeRun = describeRun;
     this.isPaused = false;
     this.reason = null;
     this._resumeNeedsPointerLock = false;
@@ -42,7 +46,11 @@ export class GamePauseController {
     document.addEventListener('pointerlockerror', this._onPointerLockError);
     game.player.controls.addEventListener('lock', this._onLock);
     game.player.controls.addEventListener('unlock', this._onUnlock);
+    // The backdrop resumes; so does the explicit button, which is bound directly
+    // because the ledger panel between them swallows clicks so the player can
+    // browse it (see ui/PauseMenu.js).
     game.elResume.addEventListener('click', this._onResumeClick);
+    game.elResumeEnter.addEventListener('click', this._onResumeClick);
   }
 
   pause(reason = 'manual', needsPointerLock = this._phaseNeedsPointerLock()) {
@@ -110,6 +118,16 @@ export class GamePauseController {
     } catch (error) {
       this._handlePointerLockError();
     }
+  }
+
+  // Leave the paused state without reclaiming pointer lock, for the cases where
+  // another overlay takes over instead of gameplay resuming (Restart hands off to
+  // the Descend screen; Quit reloads). The clocks and animations restart, so no
+  // active-time wait is left frozen behind the new screen.
+  abandon() {
+    if (!this.isPaused) return;
+    this._resumeNeedsPointerLock = false;
+    this._completeResume();
   }
 
   releasePointerLock() {
@@ -208,6 +226,8 @@ export class GamePauseController {
     this.game.clock.getDelta();
     this.game.elResume.style.display = 'none';
     this.game.elResume.setAttribute('aria-hidden', 'true');
+    // Drop focus, or the combat hop's Space would keep re-activating the button.
+    this.game.elResumeEnter.blur?.();
     document.body.classList.remove('game-paused');
     this._resumeAnimations();
     this.game.audio.setPaused(false);
@@ -221,19 +241,21 @@ export class GamePauseController {
     this.game.combat?.cancelInput();
   }
 
+  // Paint the pause ledger from a fresh snapshot of the run, then reveal it. The
+  // model is built once per pause — nothing here runs per frame.
   _showOverlay() {
-    const { phase } = this.game;
-    let subtitle = 'The drowned city waits.';
-    if (phase === 'museum') subtitle = 'The gallery waits in the quiet.';
-    else if (phase === 'arena') subtitle = 'The memory holds while you catch your breath.';
-    else if (phase === 'debug') subtitle = 'Guardian Debug Zone';
-    else if (phase === 'faint') subtitle = 'The darkness waits.';
-    else if (phase === 'cutscene' || phase.startsWith('ending')) subtitle = 'The story waits.';
-    this.game.elResumeSub.textContent = subtitle;
-    this.game.elResumeEnter.textContent = 'Click to resume';
+    const model = this.describeRun?.();
+    if (model) {
+      this.game.elResumeSub.textContent = `"${model.subtitle}"`;
+      this.game.pauseMenu?.render(model);
+    }
+    this.game.elResumeEnter.textContent = 'Resume';
     this.game.elResume.style.display = 'flex';
     this.game.elResume.setAttribute('aria-hidden', 'false');
     this.game.elCross.classList.remove('active');
+    // Focus the primary action so Enter/Space resumes too: a keypress carries the
+    // same transient activation a click does, so pointer lock is still granted.
+    this.game.elResumeEnter.focus?.();
   }
 
   _startTask(task) {
