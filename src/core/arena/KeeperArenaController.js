@@ -8,8 +8,7 @@
 // HUD, and a retry that reforms the Keeper in place instead of replaying the tower.
 //
 // arena3boss.js republishes the tower's `towerSummitBounds` / `towerBossAddAnchors`
-// keys at the same height and radius, so TowerKeeper and TowerCombatManager need
-// no retuning to fight here.
+// contract at the same height, with a broader radius for this mobile duel.
 // ============================================================
 import { CONFIG, TOWER_ARENA, LUMINA } from '../../config.js';
 import { LuminaManager } from './LuminaManager.js';

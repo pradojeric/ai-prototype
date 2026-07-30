@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { CONFIG, COMBAT, GUARDIAN } from '../../config.js';
 import { fadeMat, angDelta } from '../guardians/primitives.js';
+import { attachAquaticSpiritVisual } from './AquaticSpiritVisual.js';
 import { ThreatBody } from './ThreatBody.js';
 
 export class Enemy extends ThreatBody {
@@ -39,6 +40,7 @@ export class Enemy extends ThreatBody {
 
     this.group.position.set(x, 0, z);
     this._buildBody();
+    attachAquaticSpiritVisual(this);
   }
 
   // Distinct silhouettes per archetype so threats read at a glance:

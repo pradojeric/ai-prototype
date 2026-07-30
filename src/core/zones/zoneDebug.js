@@ -15,8 +15,19 @@ export const DEBUG_GUARDIAN_LAYOUT = [
 
 export const DEBUG_GUARDIAN_FACING = { x: 0, z: 1 };
 
-function addGuardianColliders(world) {
-  for (const display of DEBUG_GUARDIAN_LAYOUT) {
+// One inert example of every regular arena threat. Pairs share a column by
+// source zone, while the eight-metre row gap leaves room for isolated shots.
+export const DEBUG_ENEMY_LAYOUT = [
+  { zone: 'Zone 1', type: 'chaser', x: -10, z: -16 },
+  { zone: 'Zone 1', type: 'spitter', x: -10, z: -24 },
+  { zone: 'Zone 2', type: 'sniper', x: 0, z: -16 },
+  { zone: 'Zone 2', type: 'boarder', x: 0, z: -24 },
+  { zone: 'Zone 3', type: 'gargoyle', x: 10, z: -16 },
+  { zone: 'Zone 3', type: 'gale', x: 10, z: -24 },
+];
+
+function addDisplayColliders(world) {
+  for (const display of [...DEBUG_GUARDIAN_LAYOUT, ...DEBUG_ENEMY_LAYOUT]) {
     world.addCollider(display.x, display.z, 1.8, 1.8);
   }
 }
@@ -43,6 +54,7 @@ export const zoneDebug = {
   seed: 1337,
   guardianStart: { x: 0, z: 0 },
   guardianDisplays: DEBUG_GUARDIAN_LAYOUT,
+  enemyDisplays: DEBUG_ENEMY_LAYOUT,
   displayFacing: DEBUG_GUARDIAN_FACING,
   playerStart: { x: 0, y: CONFIG.EYE_HEIGHT, z: 18 },
   background: 0x071c20,
@@ -53,8 +65,8 @@ export const zoneDebug = {
     foliage: 0x27453a,
   },
   build(world) {
-    world._mangroveRing({ radius: 22, step: 3.4 });
-    addGuardianColliders(world);
+    world._mangroveRing({ radius: 34, step: 3.4 });
+    addDisplayColliders(world);
     addInspectionLandmark(world);
     setSpawnNodes(world);
   },

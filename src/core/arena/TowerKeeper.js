@@ -8,8 +8,9 @@
 // hands that to the shell as the guardian. Everything else is the standard
 // contract — HP, staged enrages, a chest the light-bolt has to find.
 //
-// The player here can walk AND jump on an open circular deck, so the four attacks
+// The player here can walk AND jump on an open circular deck, so the attacks
 // are sorted by which kind of movement each one demands:
+//   melee   — a two-hit combo after a moderate pursuit, escaped by leaving its ring
 //   shot    — an aimed burst; the filler that keeps a rhythm between set-pieces
 //   charge  — Beacon Charge: a locked lane you step out of, punishing on a whiff
 //   stones  — Memory Stones: falling debris that denies ground, read spatially
@@ -28,6 +29,7 @@ import { TowerKeeperBody } from './_partials/TowerKeeperBody.js';
 import { BeaconCharge } from './_partials/BeaconCharge.js';
 import { MemoryStones } from './_partials/MemoryStones.js';
 import { LighthouseSweep } from './_partials/LighthouseSweep.js';
+import { KeeperMeleeCombo } from './_partials/KeeperMeleeCombo.js';
 
 // Per-phase arrays are indexed by phase 0/1/2 (PHASE_THRESHOLDS), so every one of
 // them must have exactly three entries. These live here, beside the mechanics
@@ -40,7 +42,7 @@ export const TOWER_KEEPER_TUNING = {
   PHASE_THRESHOLDS: [0.66, 0.33],
   ENRAGE_INVULN: 1,
 
-  // --- attack scheduler ---
+  // --- movement + attack scheduler ---
   // Every pattern is unlocked from the first frame; phases tighten the gap and
   // shift the MIX. Weights are relative and per-phase — the other two bosses use
   // a flat table, but the Keeper's four patterns want the enrage to move weight
@@ -57,6 +59,14 @@ export const TOWER_KEEPER_TUNING = {
   ],
   OPENING_DELAY: 1.4,        // grace after `begin()` before the first pattern
   FAILED_PATTERN_DELAY: 0.6, // short re-arm when a pattern declines to start
+  PURSUIT: {
+    SPEED: 1.8, STOP_RANGE: 1.65, MELEE_TRIGGER: 2.15,
+    RETURN_SPEED: 4.8, CENTER_EPSILON: 0.08,
+  },
+  MELEE: {
+    GAP: 0.34, RECOVERY: 0.65,
+    RANGE: 2.2, DAMAGE: [10, 12], KNOCKBACK: 3.8, COOLDOWN: 2.4,
+  },
 
   // --- summons (built, default OFF) ---
   // TowerCombatManager.spawnBossGroup(phase) is fully written and was never
@@ -87,7 +97,8 @@ export const TOWER_KEEPER_TUNING = {
   // dial — COUNT going up mostly reduces where there is left to stand.
   STONES: {
     COUNT: [5, 7, 9], TELEGRAPH: [1.15, 1, 0.85], STAGGER: 0.16,
-    FALL_SPEED: 12, DAMAGE: 16, RADIUS: 1.15, POWERUP_CHANCE: 0.5,
+    FALL_SPEED: 12, DAMAGE: 16, RADIUS: 1.8, POWERUP_CHANCE: 0.5,
+    SLOW_SCALE: 0.62, SLOW_DURATION: 1.25,
   },
   // Lighthouse Sweep. CLEARANCE (0.55) against the hop's ~0.80m peak sets how
   // forgiving the leap is — deliberately identical to the Feastkeeper's slam.
@@ -130,6 +141,9 @@ export class TowerKeeper extends ArenaBoss {
     this._sweep = new LighthouseSweep(
       scene, combat, player, body, bounds, this.tuning.SWEEP,
     );
+    this._melee = new KeeperMeleeCombo(
+      scene, combat, player, body, bounds, this.tuning.MELEE,
+    );
 
     this._pattern = 'idle';    // the mutual-exclusion guard; one attack at a time
     this._lastPattern = null;
@@ -139,6 +153,9 @@ export class TowerKeeper extends ArenaBoss {
     this._shotGap = 0;
     this._flare = 0;           // enrage pulse; not a pattern, see _act
     this._summonTimer = this._drawSummonDelay();
+    this._meleeCooldown = 0;
+    this._pendingPattern = null;
+    this._chasing = false;
   }
 
   begin() {
@@ -148,6 +165,9 @@ export class TowerKeeper extends ArenaBoss {
     this._lastPattern = null;
     this._attackTimer = this.tuning.OPENING_DELAY;
     this._summonTimer = this._drawSummonDelay();
+    this._meleeCooldown = 0.8;
+    this._pendingPattern = null;
+    this._chasing = false;
     super.begin();
     return true;
   }
@@ -169,6 +189,7 @@ export class TowerKeeper extends ArenaBoss {
     this._charge.update(dt, playerPos);
     this._stones.update(dt, playerPos);
     this._sweep.update(dt, playerPos);
+    this._melee.update(dt, playerPos);
 
     this._tickSummons(dt);
   }
@@ -176,9 +197,37 @@ export class TowerKeeper extends ArenaBoss {
   // --- scheduler -------------------------------------------------------------
 
   _tickAttackTimer(dt, playerPos) {
+    this._meleeCooldown = Math.max(0, this._meleeCooldown - dt);
+    const distance = this._pursuePlayer(dt, playerPos);
+    if (distance <= this.tuning.PURSUIT.MELEE_TRIGGER && this._meleeCooldown <= 0) {
+      this._beginMelee(playerPos);
+      return;
+    }
     this._attackTimer -= dt;
     if (this._attackTimer > 0) return;
     this._beginPattern(this._choosePattern(), playerPos);
+  }
+
+  _pursuePlayer(dt, playerPos) {
+    const group = this.body.group;
+    const dx = playerPos.x - group.position.x;
+    const dz = playerPos.z - group.position.z;
+    const distance = Math.hypot(dx, dz);
+    this._chasing = distance > this.tuning.PURSUIT.STOP_RANGE;
+    if (!this._chasing) return distance;
+    const step = Math.min(
+      distance - this.tuning.PURSUIT.STOP_RANGE,
+      this.tuning.PURSUIT.SPEED * dt,
+    );
+    group.position.x += dx / distance * step;
+    group.position.z += dz / distance * step;
+    const radius = Math.hypot(group.position.x, group.position.z);
+    if (radius > this.bounds.combatRadius) {
+      const clamp = this.bounds.combatRadius / radius;
+      group.position.x *= clamp;
+      group.position.z *= clamp;
+    }
+    return Math.max(0, distance - step);
   }
 
   // Weighted roll, rejecting whatever ran last so nothing repeats back-to-back.
@@ -196,8 +245,27 @@ export class TowerKeeper extends ArenaBoss {
   }
 
   _beginPattern(name, playerPos) {
-    this._pattern = name;
     this._lastPattern = name;
+    this._patternAge = 0;
+    this._chasing = false;
+    // Only the rotating Lighthouse Sweep depends on a central pivot. The other
+    // abilities stop the pursuit and cast honestly from the Keeper's current
+    // position instead of adding an unnecessary walk between every attack.
+    if (name !== 'sweep') {
+      this._startPattern(name, playerPos);
+      return;
+    }
+    this._pattern = 'return';
+    this._pendingPattern = name;
+    if (Math.hypot(this.body.group.position.x, this.body.group.position.z) <=
+      this.tuning.PURSUIT.CENTER_EPSILON) {
+      this._startPattern(name, playerPos);
+    }
+  }
+
+  _startPattern(name, playerPos) {
+    this._pattern = name;
+    this._pendingPattern = null;
     this._patternAge = 0;
 
     if (name === 'shot') {
@@ -229,11 +297,30 @@ export class TowerKeeper extends ArenaBoss {
     this._sweep.start(this.phase, this._rng);
   }
 
+  _beginMelee(playerPos) {
+    this._pattern = 'melee';
+    this._lastPattern = 'melee';
+    this._patternAge = 0;
+    this._chasing = false;
+    this._meleeCooldown = this.tuning.MELEE.COOLDOWN;
+    this.combat.hud.popupCallout(this._calloutAnchor(), 'TIDAL COMBO');
+    this._melee.start(playerPos);
+  }
+
   // Drive whichever pattern is live and hand control back to the timer the moment
   // it resolves. Returning to 'idle' is what lets the next pattern start.
   _advancePattern(dt, playerPos) {
     this._patternAge += dt;
 
+    if (this._pattern === 'return') {
+      this._returnToCenter(dt, playerPos);
+      return;
+    }
+    if (this._pattern === 'melee') {
+      if (this._melee.busy) return;
+      this._endPattern();
+      return;
+    }
     if (this._pattern === 'shot') { this._advanceShot(dt, playerPos); return; }
     if (this._pattern === 'charge') {
       if (this._charge.busy) return;
@@ -247,6 +334,20 @@ export class TowerKeeper extends ArenaBoss {
     }
     if (this._sweep.busy) return;
     this._endPattern();
+  }
+
+  _returnToCenter(dt, playerPos) {
+    const group = this.body.group;
+    const distance = Math.hypot(group.position.x, group.position.z);
+    if (distance <= this.tuning.PURSUIT.CENTER_EPSILON) {
+      group.position.x = 0;
+      group.position.z = 0;
+      this._startPattern(this._pendingPattern, playerPos);
+      return;
+    }
+    const step = Math.min(distance, this.tuning.PURSUIT.RETURN_SPEED * dt);
+    group.position.x -= group.position.x / distance * step;
+    group.position.z -= group.position.z / distance * step;
   }
 
   // Telegraph once for the whole burst, then space the bolts by BURST_GAP so a
@@ -344,8 +445,11 @@ export class TowerKeeper extends ArenaBoss {
     this._charge.clear();
     this._stones.clear();
     this._sweep.clear();
+    this._melee.clear();
     this._pattern = 'idle';
     this._lastPattern = null;
+    this._pendingPattern = null;
+    this._chasing = false;
     this._shotsLeft = 0;
     this.body.setFlare(0);
   }
@@ -362,7 +466,8 @@ export class TowerKeeper extends ArenaBoss {
   blocksPlayerAt(x, z, radius, supportY) {
     // While the Keeper is moving under its own power it must not body-block, or a
     // player standing on its path — the arena centre included — gets pinned.
-    if (!this.active || this._charge.moving || this._sweep.approaching) return false;
+    if (!this.active || this._chasing || this._pattern === 'return' ||
+      this._charge.moving || this._sweep.approaching) return false;
     if (Math.abs(supportY - this.bounds.height) > 1.4) return false;
     return Math.hypot(
       x - this.body.group.position.x,
@@ -378,6 +483,7 @@ export class TowerKeeper extends ArenaBoss {
     this._charge.dispose();
     this._stones.dispose();
     this._sweep.dispose();
+    this._melee.dispose();
     this.body.dispose();
     super.dispose();
   }

@@ -7,9 +7,7 @@
 //
 // SCAFFOLD: this is a deliberately plain traversable stage awaiting its real
 // design. What is NOT arbitrary is its scale — the deck is built at the tower
-// summit's exact height (18) and radius (9) so TowerKeeper's authored attack
-// geometry, camera framing and add-spawn distances need no retuning. Keep those
-// two numbers if you reshape everything else, or retune the Keeper alongside.
+// summit height, with a broader combat footprint for the Keeper's mobile duel.
 //
 // Geometry publishes authored encounter anchors; the fight is owned by
 // KeeperArenaController and TowerCombatManager.
@@ -18,10 +16,10 @@ import * as THREE from 'three';
 import { CONFIG, TOWER_ARENA } from '../../config.js';
 
 const DECK_HEIGHT = TOWER_ARENA.SUMMIT_HEIGHT;   // 18 — must match the Keeper's tuning
-const DECK_RADIUS = 9;                           // 9  — ditto
+const DECK_RADIUS = 10.8;                        // 20% broader than the old deck
 const DECK_APOTHEM = DECK_RADIUS * Math.cos(Math.PI / 8);
 const DECK_THICKNESS = 0.28;
-const COMBAT_RADIUS = 6.8;
+const COMBAT_RADIUS = 8.16;
 const RAIL_HEIGHT = 0.8;
 const RAIL_WIDTH = 0.14;
 const ENTRY_POINT = {
@@ -99,10 +97,10 @@ function publishAnchors(world) {
   world.towerFlightAnchors = [];
   world.towerGargoyleAnchors = [];
   world.towerBossAddAnchors = [
-    { x: 5.2, z: 0 },
-    { x: 0, z: -5.2 },
-    { x: -5.2, z: 0 },
-    { x: 0, z: 5.2 },
+    { x: 6.24, z: 0 },
+    { x: 0, z: -6.24 },
+    { x: -6.24, z: 0 },
+    { x: 0, z: 6.24 },
   ].map((point, index) => ({
     ...point,
     y: DECK_HEIGHT,
