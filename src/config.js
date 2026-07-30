@@ -92,16 +92,7 @@ export const PLATFORM_API = {
 // (they ship in the page) — the Firestore rule
 //   match /progress/{uid} { allow read, write: if request.auth.uid == uid; }
 // is what actually enforces access.
-export const FIREBASE = {
-  API_KEY: 'AIzaSyC21qkL65fCpx6IoMCauv02xUvKjsWKqTE',
-  AUTH_DOMAIN: 'strings-56804.firebaseapp.com',
-  PROJECT_ID: 'strings-56804',
-  STORAGE_BUCKET: 'strings-56804.firebasestorage.app',
-  MESSAGING_SENDER_ID: '868059898069',
-  APP_ID: '1:868059898069:web:9e6991029d6e8f95b4025c',
-  COLLECTION: 'progress',
-  SAVE_DEBOUNCE_MS: 2000,
-};
+
 
 // Intro cutscene — "waking in the digital museum" (scripted camera over the Museum).
 // Beat durations in seconds; the camera path is interpolated across them.
