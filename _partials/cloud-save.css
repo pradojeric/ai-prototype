@@ -1,0 +1,81 @@
+/* ============================================================
+   CLOUD SAVE — settings account panel + the main menu's New Game
+   ============================================================
+   The destructive/armed treatments in pause-menu.css are scoped to #settings,
+   so the main-menu New Game button restates them here rather than widening
+   those selectors and repainting every other menu. */
+
+.main-menu .menu-btn.s-danger {
+  border-color: rgba(232, 163, 163, .4);
+  color: #f2cccc;
+}
+
+.main-menu .menu-btn.s-danger:hover,
+.main-menu .menu-btn.s-danger:focus-visible {
+  border-color: #e8a3a3;
+  background: rgba(232, 163, 163, .14);
+  box-shadow: 0 0 18px rgba(232, 163, 163, .2);
+}
+
+.main-menu .menu-btn.is-armed {
+  border-color: var(--amber);
+  background: rgba(255, 217, 160, .16);
+  color: var(--amber);
+  letter-spacing: 2px;
+}
+
+/* ---- Settings: cloud save account ---- */
+
+#settings .cloud-save {
+  display: grid;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(111, 216, 208, .18);
+}
+
+#settings #cloud-form {
+  display: grid;
+  gap: 8px;
+}
+
+#settings .cloud-save input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid rgba(111, 216, 208, .28);
+  border-radius: 4px;
+  background: rgba(4, 12, 14, .6);
+  color: var(--ink, #eaf6f4);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: .6px;
+}
+
+#settings .cloud-save input::placeholder {
+  color: rgba(234, 246, 244, .32);
+}
+
+#settings .cloud-save input:focus-visible {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 14px rgba(111, 216, 208, .18);
+}
+
+#settings .cloud-save .menu-btn {
+  width: 100%;
+  padding-inline: 18px;
+  font-size: 12px;
+}
+
+#settings .cloud-save .menu-btn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+/* Status tones: the neutral copy inherits .s-note. */
+#settings #cloud-status[data-tone="error"] {
+  color: #f2cccc;
+}
+
+#settings #cloud-status[data-tone="success"] {
+  color: var(--teal);
+}

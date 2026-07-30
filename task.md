@@ -12,21 +12,37 @@ optional end-of-campaign reward unlock.
 
 ## Implementation checklist
 
-- [ ] Record and index the approved implementation plan before runtime edits
+- [x] Record and index the approved implementation plan before runtime edits
 - [ ] Create the Firebase project, enable Anonymous Auth, and apply the
-      `progress/{uid}` ownership rules (user-side console work)
-- [ ] Add the `FIREBASE` config block and the Firebase ESM entries to the
+      `progress/{uid}` ownership rules (user-side console work — **blocking**)
+- [x] Add the `FIREBASE` config block and the Firebase ESM entries to the
       `index.html` import map
-- [ ] Add `src/core/_partials/saveState.js` — pure snapshot/restore/validate
-- [ ] Add `src/core/SaveManager.js` — anonymous sign-in, load, debounced save,
+- [x] Split `ARTIFACT_DATA` into `src/data/artifacts.js` so the save path can be
+      imported without the riddle pool's `config.js` -> `three` chain
+- [x] Add `src/core/_partials/saveState.js` — pure snapshot/restore/validate
+- [x] Add `src/core/SaveManager.js` — anonymous sign-in, load, debounced save,
       with every failure degrading to in-memory play
-- [ ] Wire construction + load into `Game.js` and `queue` calls into the existing
-      collect/Soul/Guardian/zone-complete/ending milestones
-- [ ] Keep the GameOn reward gate reading live session state, never the restored
-      save, so a tampered document cannot claim the artifact
-- [ ] Add `tests/SaveState.test.mjs`; keep the Survival no-persistence assertion
+- [x] Wire construction + load into `Game.js` and `_saveProgress` calls into the
+      collect/Soul/zone-complete/ending milestones
+- [x] Carry reward eligibility through the save so a debug-fabricated run cannot
+      launder itself clean through a reload
+- [x] Add `tests/SaveState.test.mjs`; keep the Survival no-persistence assertion
       in `SurvivalIntegration.test.js` passing
-- [ ] Run full Node tests and the source syntax/import/file-length audits
+- [x] Populate the galleries on the restore path, not only on hub entry
+- [x] Title menu reads Continue when a resumable save exists, skipping the intro
+      cinematic straight into the walkable hub (`_continueFromSave`)
+- [x] Split the save path into `_partials/SaveFlow.js` to keep `Game.js` under
+      the 1000-line limit
+- [x] Add New Game (two-step confirm, document delete, reload) shown alongside
+      Continue as the only route back to a fresh run
+- [x] Add "Save to my email" (`linkWithCredential`, same uid) and "Sign in on
+      this device" (`signInWithEmailAndPassword`) in a settings Cloud Save panel
+- [x] Await `authStateReady()` so a returning linked player is not handed a new
+      anonymous account
+- [x] Correct the settings note that claimed progress was session-only
+- [x] Add `tests/SaveManager.test.mjs` covering link/sign-in/clear/offline
+      against a fake Firebase SDK
+- [x] Run full Node tests and the source syntax/import/file-length audits
 - [ ] Manually verify: fresh player, reload mid-Zone-1, restored museum portal
       locks, and offline/blocked-Firebase still playable
 

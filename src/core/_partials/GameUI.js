@@ -3,6 +3,7 @@
 // ============================================================
 import { CONFIG } from '../../config.js';
 import { PlatformAccountUI } from '../../ui/PlatformAccountUI.js';
+import { CloudSaveUI } from '../../ui/CloudSaveUI.js';
 import { wirePresenterSkip } from './PresenterSkip.js';
 
 // Keep DOM ownership outside the orchestration class without changing Game's
@@ -32,6 +33,9 @@ export function bindGameUi(game) {
   game.elTestEnding = document.getElementById('test-ending');
   game.elGuardianDebugZone = document.getElementById('guardian-debug-zone');
   game.elMenuStart = document.getElementById('btn-start');
+  // The label span, not the button — the button also holds the '›' mark.
+  game.elMenuStartLabel = game.elMenuStart.querySelector('span');
+  game.elNewGame = document.getElementById('btn-new-game');
   game.elPreAwaken = document.getElementById('pre-awaken');
   game.elAwaken = document.getElementById('btn-awaken');
   game.elSettings = document.getElementById('settings');
@@ -51,9 +55,12 @@ export function bindGameUi(game) {
 export function wireGameEvents(game) {
   // The player-facing Start action ends on the black pre-Awaken stage; it does
   // not begin the story cinematic until the separate Awaken action below.
+  // With a resumable save this button reads Continue and skips the cinematic
+  // entirely — the waking-in-the-museum intro only makes sense once per run.
   game.elMenuStart.addEventListener('click', (e) => {
     e.stopPropagation();
-    game._enterPreAwaken();
+    if (game.hasSavedProgress) game._continueFromSave();
+    else game._enterPreAwaken();
   });
   // This click begins the intro, so it must not bubble into the global
   // cutscene-click listener below and immediately skip the same cinematic.
@@ -91,10 +98,21 @@ export function wireGameEvents(game) {
   });
   wireSettings(game);
   game.platformAccountUi = new PlatformAccountUI(game.api);
+  game.cloudSaveUi = new CloudSaveUI(game.save, {
+    onAccountChanged: () => game._reloadForAccountChange(),
+  });
   addEventListener('beforeunload', () => {
     game.platformAccountUi.dispose();
     game.api.dispose();
   }, { once: true });
+  // Best-effort flush of a debounced save when the tab goes away. Browsers do
+  // not guarantee an in-flight request survives unload, so this narrows the
+  // window (close the tab within the debounce of a pickup) rather than closing
+  // it. 'pagehide' fires on the bfcache path too, where 'beforeunload' does not.
+  addEventListener('pagehide', () => { void game.save.flushNow(); });
+  addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') void game.save.flushNow();
+  });
   // Skipping the intro is deliberately presenter-only (hidden Shift+P). A plain
   // click must never skip it: the very click that starts the cinematic — or a
   // stray second click while the eyelids are still opening — would land on the
@@ -295,6 +313,9 @@ function wireSettings(game) {
     game.elSessionNote.textContent = game.canRestartZone()
       ? 'Restarting keeps the memories you already recovered here.'
       : 'Restart is available while you are inside a memory.';
+    // The account may have linked, or the save may have arrived, since the
+    // panel was last opened.
+    game.cloudSaveUi?.render();
     game.elSettings.classList.add('active');
   };
   document.getElementById('btn-settings').addEventListener('click', open);
@@ -349,4 +370,8 @@ function wireSessionActions(game) {
     game._restartZone();
   });
   arm(game.elQuitTitle, () => game._quitToTitle());
+  // Erasing the cloud save is the most destructive action in the game, so it
+  // uses the same two-step arm. It lives on the title menu rather than in
+  // settings, but the pattern (and the 4s auto-disarm) is identical.
+  if (game.elNewGame) arm(game.elNewGame, () => game._newGame());
 }

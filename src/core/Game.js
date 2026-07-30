@@ -4,13 +4,14 @@
 import * as THREE from 'three';
 import {
   CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
-  ENDING, PLATFORM_API, CUTSCENE,
+  ENDING, PLATFORM_API, FIREBASE, CUTSCENE,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
 import { createWorld, ZONES } from './zones/index.js';
 import { PlayerController } from './PlayerController.js';
 import { ArtifactManager } from './ArtifactManager.js';
 import { APIManager } from './APIManager.js';
+import { SaveManager } from './SaveManager.js';
 import { MemoryRift } from './MemoryRift.js';
 import { ViewModel } from './ViewModel.js';
 import { createGameRenderer, createPostProcessing } from './_partials/GameRendering.js';
@@ -22,6 +23,7 @@ import { arenaFlowMethods } from './_partials/ArenaFlow.js';
 import { debugZoneFlowMethods } from './_partials/DebugZoneFlow.js';
 import { gameGuidanceMethods } from './_partials/GameGuidance.js';
 import { presenterSkipMethods } from './_partials/PresenterSkip.js';
+import { saveFlowMethods } from './_partials/SaveFlow.js';
 import { sessionFlowMethods } from './_partials/SessionFlow.js';
 import { survivalFlowMethods } from './_partials/SurvivalFlow.js';
 import { RunStats } from './_partials/RunStats.js';
@@ -100,6 +102,14 @@ export class Game {
     this.completed = new Set();   // zone ids the player has finished
     this.platformRewardEligible = true; // invalidated by progress-fabricating shortcuts
     this.endingPlayed = false;    // session guard: global completion can only end once
+    // Cloud save. Kicked off here so it resolves behind the title screen, and
+    // awaited at the first transition that reads progress (_runIntro). Every
+    // failure path resolves to null, so a blocked Firebase just means the old
+    // session-only behaviour.
+    this.hasSavedProgress = false;   // set by _applyRestoredProgress
+    this.save = new SaveManager(FIREBASE);
+    this._saveReady = this.save.init()
+      .then((data) => { if (data) this._applyRestoredProgress(data); });
     this.currentZone = 'zone1';   // the active gameplay zone (built above)
     this.holdKey = false;     // E currently held
     this.holdProgress = 0;    // 0..1 hold-to-collect progress
@@ -154,6 +164,11 @@ export class Game {
   // Play the intro cutscene over the museum, then reveal the Descend screen.
   async _runIntro() {
     if (this.phase !== 'preAwaken') return;
+    // The cutscene flies over the hub, so any restored progress (seated Souls,
+    // unlocked portals) must already be applied. This has had the whole title
+    // screen to resolve and never rejects, so it is effectively instant.
+    await this._saveReady;
+    if (this.phase !== 'preAwaken') return;
     this.elAwaken.disabled = true;
     this.elAwaken.blur();
     this.elTitle.style.display = 'none';
@@ -190,6 +205,7 @@ export class Game {
       this.audio.removeEcho(nearest);   // silence this artifact's echo on pickup
     });
     this.busy = false;
+    this._saveProgress();
 
     if (this.artifacts.zoneComplete && this.collectedSouls.has(this.currentZone)) {
       this._zoneComplete();             // memories + this zone's Soul are safely recovered
@@ -236,6 +252,7 @@ export class Game {
   _collectSoul(zone) {
     this.collectedSouls.add(zone);
     this.soul = null;
+    this._saveProgress();
     this.audio.playWaveClear();
     this._syncJourneyGuide();
     if (this.phase === 'playing' && this.artifacts.zoneComplete) this._zoneComplete();
@@ -409,6 +426,7 @@ export class Game {
     );
     this._endingFromMuseum = this.phase === 'museum';
     this.endingPlayed = true;
+    this._saveProgress();
     this.busy = true;
     this.phase = 'endingPortal';
     this._syncJourneyGuide();
@@ -498,6 +516,7 @@ export class Game {
     if (this.player.controls.isLocked) this.pause.releasePointerLock();
     // Record this zone as done and open the next portal in the hub (sequential unlock).
     this.completed.add(this.currentZone);
+    this._saveProgress();
     const next = this.zoneOrder[this.zoneOrder.indexOf(this.currentZone) + 1];
     if (next) this.museum.unlockPortal(Number(next.slice(4)));   // 'zone2' -> 2
     // Full-zone copy on the shared completion card.
@@ -951,5 +970,6 @@ Object.assign(Game.prototype, arenaFlowMethods);
 Object.assign(Game.prototype, debugZoneFlowMethods);
 Object.assign(Game.prototype, gameGuidanceMethods);
 Object.assign(Game.prototype, presenterSkipMethods);
+Object.assign(Game.prototype, saveFlowMethods);
 Object.assign(Game.prototype, sessionFlowMethods);
 Object.assign(Game.prototype, survivalFlowMethods);

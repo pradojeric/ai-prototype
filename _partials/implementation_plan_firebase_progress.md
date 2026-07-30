@@ -20,10 +20,22 @@ per-user ownership without a Cloud Function (the project stays a static,
 buildless site). GameOn is left exactly as it is — still optional, still only
 the end-of-campaign reward unlock.
 
-**Accepted caveat:** an anonymous uid lives in browser storage, so a save is
-per-device and is lost if the player clears site data. A later opt-in
-"Save to my email" (`linkWithCredential`) can upgrade the same uid without
-losing progress. Out of scope here; the store is designed so it needs no change.
+**The anonymous caveat, and its answer:** an anonymous uid lives in browser
+storage, so by default a save is per-device and dies with the site data. The
+settings panel therefore offers an opt-in upgrade (`ui/CloudSaveUI.js`):
+
+- **"Save to my email"** — `linkWithCredential` upgrades the *same* uid to an
+  email account, so the document never moves and nothing is migrated.
+- **"Sign in on this device"** — `signInWithEmailAndPassword` adopts that
+  account's save on a second machine. Without this half, linking would be
+  pointless: a new browser mints a fresh anonymous uid and never sees the run.
+  The uid changes, so this reloads rather than splicing a foreign run into a
+  live session.
+
+`init()` awaits `auth.authStateReady()` before reading `currentUser`. Skipping
+that wait is a real bug, not a nicety: persisted-session restore is async, so a
+returning linked player would be handed a brand new anonymous account and lose
+sight of their save.
 
 ## Design
 
@@ -78,6 +90,31 @@ match /progress/{uid} {
 - Survival is **not** saved — runs are session-only by design
   (`SurvivalIntegration.test.js` already asserts `SurvivalFlow` touches no
   persistence, and that assertion must keep passing).
+
+## Continue (title menu)
+
+With a resumable save the title's Start action becomes **Continue** and skips
+the intro cinematic entirely — waking in the museum is a once-per-run beat, not
+something to replay every session. It reuses the existing `_skipToMuseum()`
+(already written for the debug button), which lights the open Zone 1 portal the
+intro would otherwise have lit.
+
+- `hasProgress(game)` in `saveState.js` is the gate: a document that exists but
+  holds nothing (signed in, quit before recovering a memory) still reads as a
+  new game and plays the intro.
+- The relabel is async, arriving whenever the restore lands. A player who clicks
+  Start before then keeps their progress — `_runIntro` already awaits
+  `_saveReady` — they just watch the cinematic.
+- **New Game** appears on the title menu at the same moment Continue does, and
+  is the only route back to a fresh run. It reuses the existing two-step
+  `data-confirm-label` arm (a native `window.confirm` steals focus from a
+  pointer-locked WebGL canvas), deletes the document, then reloads — a reload is
+  the honest reset, the same reasoning as SessionFlow's Quit.
+
+Because these methods pushed `Game.js` past 1000 lines, the whole save seam
+(`_saveProgress`, `_applyRestoredProgress`, `_syncTitleContinue`,
+`_continueFromSave`) lives in `_partials/SaveFlow.js`, mixed into
+`Game.prototype` alongside the other flow partials — so, methods never getters.
 
 ## Test plan (`tests/SaveState.test.mjs`)
 

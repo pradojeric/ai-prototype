@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="./_partials/tower-arena-hud.css" />
   <link rel="stylesheet" href="./_partials/journey-guide.css" />
   <link rel="stylesheet" href="./_partials/pause-menu.css" />
+  <link rel="stylesheet" href="./_partials/cloud-save.css" />
   <link rel="stylesheet" href="./_partials/survival-mode.css" />
   <link rel="stylesheet" href="./_partials/survival-briefing.css" />
   <link rel="stylesheet" href="./_partials/survival-title.css" />
@@ -251,6 +252,11 @@
           <button class="menu-btn primary" id="btn-start">
             <span>Start</span><span class="menu-btn-mark" aria-hidden="true">›</span>
           </button>
+          <!-- Shown only once a resumable save exists (see SaveFlow) — with one
+               present, Start becomes Continue and this is the only route back
+               to a fresh run and the intro. -->
+          <button class="menu-btn s-danger" id="btn-new-game" style="display:none"
+                  data-confirm-label="Confirm — erase saved progress?">New Game</button>
           <button class="menu-btn" id="btn-settings">Settings</button>
           <button class="menu-btn" data-platform-action>Connect GameOn Account</button>
           <button class="menu-btn debug-action" id="skipmuseum">Skip to Museum</button>
@@ -307,6 +313,18 @@
           Quit to title
         </button>
         <div class="s-note" id="session-note">Progress is kept for this session only.</div>
+      </div>
+      <div class="cloud-save" id="cloud-save">
+        <div class="s-section-label">Cloud Save</div>
+        <div class="s-note" id="cloud-status" role="status" aria-live="polite"></div>
+        <div id="cloud-form">
+          <input type="email" id="cloud-email" placeholder="you@example.com"
+                 autocomplete="email" aria-label="Email" />
+          <input type="password" id="cloud-password" placeholder="Password (6+ characters)"
+                 autocomplete="current-password" aria-label="Password" />
+          <button class="menu-btn" id="cloud-link">Save to my email</button>
+          <button class="menu-btn" id="cloud-signin">Sign in on this device</button>
+        </div>
       </div>
       <div class="platform-account">
         <div class="s-section-label">GameOn Portal</div>
@@ -646,7 +664,10 @@
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "firebase/app": "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js"
   }
 }
 </script>
