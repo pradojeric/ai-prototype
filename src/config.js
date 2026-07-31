@@ -25,10 +25,10 @@ export const CONFIG = {
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
   DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
-  DEBUG_UNLOCK_ALL_ZONES: true, // true → all 3 museum portals start unlocked (walk the hub into
+  DEBUG_UNLOCK_ALL_ZONES: false, // true → all 3 museum portals start unlocked (walk the hub into
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
-  DEBUG_SKIP_MUSEUM_BUTTON: true, // true → show the title shortcut into the walkable museum hub
+  DEBUG_SKIP_MUSEUM_BUTTON: false, // true → show the title shortcut into the walkable museum hub
   DEBUG_TEST_ENDING_BUTTON: false, // true → show a title-menu shortcut for the full final cutscene
   // With the debug ending enabled, set one of: feastkeeper, reveler, keeper.
   // Null preserves seeded random boss order for every ordinary run.
@@ -37,7 +37,7 @@ export const CONFIG = {
   // true → the Endless Echoes arch in the museum lobby is open on the first hub
   // visit, so Survival can be tested without playing through to the ending.
   // Normally the arch stays sealed until the ending cutscene has been seen.
-  DEBUG_SURVIVAL_UNLOCKED: true,
+  DEBUG_SURVIVAL_UNLOCKED: false,
 };
 
 // PRESENTER SKIP — the hidden "magic key" for live demos in front of a crowd.
@@ -48,7 +48,7 @@ export const CONFIG = {
 // museum portal. See src/core/_partials/PresenterSkip.js.
 // ENABLED is read at press time, so it can be flipped from the console mid-demo.
 export const PRESENTER = {
-  ENABLED: true,
+  ENABLED: false,
   KEY: 'KeyP',      // KeyboardEvent.code
   SHIFT: true,      // require Shift so a stray P during play does nothing
   COOLDOWN: 0.5,    // seconds between accepted presses (a held key can't chain)
