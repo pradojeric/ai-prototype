@@ -87,7 +87,7 @@ export const SURVIVAL_BOSS_BASES = Object.freeze({
   }),
   keeper: Object.freeze({
     id: 'keeper',
-    label: 'The Keeper',
+    label: 'The Archivist',
     baseHp: 200,
   }),
 });

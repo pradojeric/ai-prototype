@@ -20,7 +20,7 @@ const VEIL_WIDTH = 2.75;
 const VEIL_HEIGHT = 2.4;
 const SEAL_NAME = {
   fil: 'Tagapag-ingat ng mga Alaala',
-  eng: 'The Keeper of Memories',
+  eng: 'The Archivist',
 };
 
 export class TowerGateManager {

@@ -1,6 +1,6 @@
 # Arena 3 — Memory Tower: Pananisia
 
-**Guardian:** The Keeper of Memories
+**Guardian:** The Archivist
 
 **Zone:** 3 (Pangasinan landmarks and enduring places)
 
@@ -169,7 +169,7 @@ Boss activation clears every ascent Gargoyle, Gale, pending portal, and projecti
 The tide is fixed at **15 m**, safely below the deck, and drowning checks are disabled
 for the rest of the fight.
 
-The existing Zone 3 Guardian body becomes **The Keeper of Memories**, preserving its
+The existing Zone 3 Guardian body becomes **The Archivist**, preserving its
 authored materials, glow, animation, and chest hit sphere. The Keeper has **60 HP** and
 changes phase at 66% and 33% health.
 
@@ -249,7 +249,7 @@ The completed climb therefore does not have to be replayed after a boss-phase de
 | **Damage arcs** | Around the crosshair | Direction of the most recent hit |
 
 At boss activation, the ascent panel disappears. The shared top-center boss frame
-shows **The Keeper of Memories**, its 60-HP bar, and the trailing ghost fill. The
+shows **The Archivist**, its 60-HP bar, and the trailing ghost fill. The
 right-side counter changes to **Summoned Echoes** and reports live plus pending adds.
 World-space charge lanes remain the primary warning for the Keeper's rush.
 

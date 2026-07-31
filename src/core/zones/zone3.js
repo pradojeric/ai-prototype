@@ -326,7 +326,7 @@ export const zone3 = {
   riftSpot: { x: 0, z: 15 },
   guardianStart: { x: 0, z: 15 },   // center of the nave, just before the altar
   guardianRebuke: 'The archive does not open for a clouded mind. Kneel with the stones a while longer, and return.',
-  guardianName: { fil: 'Ang Tagapag-ingat ng mga Alaala', eng: 'The Keeper of Memories' },
+  guardianName: { fil: 'Ang Tagapag-ingat ng mga Alaala', eng: 'The Archivist' },
   // Hil's inner voice, spoken one line at a time right after the player descends.
   introDialogue: [
     'These stones feel familiar, though their names slip away.',

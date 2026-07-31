@@ -131,7 +131,7 @@ function setSpawnNodes(world) {
 
 export const arena3boss = {
   id: 'arena3boss',
-  name: 'The Keeper of Memories — Pananisia',
+  name: 'The Archivist — Pananisia',
   label: "Keeper's Deck",
   controller: 'keeper',
   spawnGuardian: false,

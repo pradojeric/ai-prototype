@@ -254,7 +254,7 @@ test('boss tuning uses normalized immutable bases and authored scaling', () => {
 
   assert.deepEqual(getSurvivalBossTuning('keeper', 0), {
     id: 'keeper',
-    label: 'The Keeper',
+    label: 'The Archivist',
     bossIndex: 0,
     baseHp: 200,
     hpMultiplier: 1,

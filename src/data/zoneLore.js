@@ -42,7 +42,7 @@ export const ZONE_LORE = [
     zone: 3,
     name: 'PANANISIA',
     subtitle: 'The landmarks that held the province’s faith',
-    guardian: 'Ang Tagapag-ingat ng mga Alaala · The Keeper of Memories',
+    guardian: 'Ang Tagapag-ingat ng mga Alaala · The Archivist',
     trial: 'Memory Tower — an eighteen-metre ascent against a rising tide, unsealing three memory seals on the way up.',
     body: 'A drowned cathedral and archive built from Pangasinan’s religious, civic '
       + 'and coastal landmarks: a flooded nave, broken vault ribs, altar ruins and '

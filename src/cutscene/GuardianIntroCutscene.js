@@ -33,7 +33,7 @@ const INTRO = {
   // ascent that earns the crossing is Arena 3's, hence the shared framing below.
   // Placeholder copy and shot list until arena3boss's real geometry is authored.
   arena3boss: {
-    name: 'THE KEEPER OF MEMORIES',
+    name: 'THE ARCHIVIST',
     title: 'Ang Tagapag-ingat ng mga Alaala',
     dialogue: [
       'Three seals broken. Three truths carried above the rising dark.',

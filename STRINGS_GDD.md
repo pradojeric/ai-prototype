@@ -420,7 +420,7 @@ A wrong answer:
 - slows movement to **55% for 4 seconds**;
 - summons a penalty Gargoyle.
 
-### Keeper of Memories
+### The Archivist
 
 After all seals open and the summit is reached, the Guardian introduction leads
 into the Keeper fight. The tide settles below the summit for the boss phase.

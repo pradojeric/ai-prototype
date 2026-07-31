@@ -54,7 +54,7 @@ Defeating lesser enemies within the Memory Arenas has a chance to drop temporary
 - **Zone Enemies:**
   - **Gargoyle Sentinels (Heavy Melee):** Stone enemies that spawn on narrow staircases. They physically block the path and take multiple light-bolts to shatter, forcing the player to waste precious time while the water rises.
   - **Gale Whispers (Ranged Evasive):** Flying enemies that circle the central shaft of the tower, shooting projectiles to knock the player off balance.
-- **Guardian Threat:** The Keeper of Memories manifests as a giant entity hovering in the center of the tower, controlling the water level.
+- **Guardian Threat:** The Archivist manifests as a giant entity hovering in the center of the tower, controlling the water level.
 - **The Riddle:** Periodically, the stairs are completely blocked by a massive, locked gate with three ancient mechanisms (the answers).
 - **Action:** Under the extreme pressure of the rising water, the player must shoot the correct mechanism to unlock the gate and continue climbing. A wrong choice spawns Gargoyle Sentinels and temporarily slows the player's movement speed, heavily risking them being swallowed by the rising tide.
 

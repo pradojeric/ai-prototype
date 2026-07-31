@@ -15,7 +15,7 @@ import { LuminaManager } from './LuminaManager.js';
 import { TowerKeeper } from './TowerKeeper.js';
 
 const EVENT_DURATION = 2.4;
-const BOSS_NAME = 'The Keeper of Memories';
+const BOSS_NAME = 'The Archivist';
 
 export class KeeperArenaController {
   constructor(scene, audio, player, seed, world) {
