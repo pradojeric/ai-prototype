@@ -27,7 +27,11 @@ export class AudioManager {
     this.musicVolume = 1;      // 0..1 user music volume (bed + melody); settable pre-init
     this.sfxVolume = 1;        // 0..1 user SFX volume (hum, echoes, scatter, teleport)
     this._paused = false;
-    this._musicMixScale = 1;
+    // Two music scales, because the two music buses leave the drowned world
+    // differently: the procedural bed (musicBus) is *of* the water and dies
+    // with it, while the recorded track (musicDry) has to carry the finale.
+    this._musicMixScale = 1;   // musicBus — bed + its delay tail
+    this._trackMixScale = 1;   // musicDry — the recorded mp3/wav layer
     this._sfxMixScale = 1;
     this._endingMixScale = 1;
     this._delayFeedback = 0.35;
@@ -336,16 +340,21 @@ export class AudioManager {
     osc.stop(at + 1.25);
   }
 
+  // Leaving the drowned world: the underwater bed and its feedback tail go
+  // with the water. The recorded track deliberately does NOT — the ending cue
+  // lives on musicDry and has to carry the museum tour and the restored
+  // province, so it keeps its own (unducked) scale.
   fadeUnderwater(seconds = 2) {
     if (!this.ready) return;
     const now = this.ctx.currentTime;
     this.clearEchoes();
     this._musicMixScale = 0.04;
     this._delayFeedback = 0;
-    for (const bus of [this.musicBus, this.musicDry]) {
+    for (const [bus, target] of [[this.musicBus, this._musicTarget()],
+                                 [this.musicDry, this._trackTarget()]]) {
       bus.gain.cancelScheduledValues(now);
       bus.gain.setValueAtTime(bus.gain.value, now);
-      bus.gain.linearRampToValueAtTime(this._musicTarget(), now + seconds);
+      bus.gain.linearRampToValueAtTime(target, now + seconds);
     }
     this.hum.gain.setTargetAtTime(0, now, 0.08);
     this.delayFb.gain.setTargetAtTime(this._paused ? 0 : this._delayFeedback,
@@ -427,6 +436,7 @@ export class AudioManager {
     if (this._dryWind) { try { this._dryWind.stop(); } catch (e) { /* ended */ } this._dryWind = null; }
     this._stopEndingVoice(false);
     this._musicMixScale = 1;
+    this._trackMixScale = 1;
     this._sfxMixScale = 1;
     this._endingMixScale = 1;
     this._delayFeedback = 0.35;
@@ -455,7 +465,7 @@ export class AudioManager {
     if (!this.ready) return;
     const target = this._musicTarget();
     this.musicBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
-    this.musicDry.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
+    this.musicDry.gain.setTargetAtTime(this._trackTarget(), this.ctx.currentTime, 0.05);
   }
 
   setSfxVolume(v) {
@@ -470,6 +480,12 @@ export class AudioManager {
     return this.musicVolume * this._musicMixScale * pauseScale;
   }
 
+  // musicDry: same user slider and pause duck, its own scene-mix scale.
+  _trackTarget() {
+    const pauseScale = this._paused ? PAUSED_MUSIC_SCALE : 1;
+    return this.musicVolume * this._trackMixScale * pauseScale;
+  }
+
   _sfxTarget() { return this._paused ? 0 : this.sfxVolume * this._sfxMixScale; }
 
   _endingTarget() { return this._paused ? 0 : this.sfxVolume * this._endingMixScale; }
@@ -482,7 +498,7 @@ export class AudioManager {
       param.setTargetAtTime(target, now, timeConstant);
     };
     apply(this.musicBus.gain, this._musicTarget());
-    apply(this.musicDry.gain, this._musicTarget());
+    apply(this.musicDry.gain, this._trackTarget());
     apply(this.sfxBus.gain, this._sfxTarget());
     apply(this.endingBus.gain, this._endingTarget());
     apply(this.delayFb.gain, this._paused ? 0 : this._delayFeedback);
