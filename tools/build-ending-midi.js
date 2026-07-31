@@ -10,7 +10,12 @@
 //   beat 12.0  B  MUSEUM TOUR      26.00s  ENDING.MUSEUM_DURATION
 //   beat 40.0     hold (3/8)        1.45s  wait(1450)
 //   beat 41.5  C  RESTORED PROV.   31.02s  ENDING.RESTORED_DURATION
-//   beat 73.5     end              69.73s
+//   beat 73.5     tail (5/4)        4.85s  black hold + the credits screen
+//   beat 78.5     end              74.59s
+//
+// The tail is pure ring-out — no new attack, just the final A major chord and
+// the last gong sustaining past the cut, so the cue decays under the credits
+// instead of stopping dead on the fade to black.
 //
 // Each section carries its own tempo so the barlines land on the cutscene
 // cuts instead of near them, and every tempo change is hidden under a hold
@@ -28,7 +33,7 @@ const bpmToUs = (bpm) => Math.round(60000000 / bpm);
 
 // Section downbeats in beats. B and C double as offsets below, so the
 // per-section music reads section-relative (B + 4 is "bar 2 of the tour").
-const HOLD1 = 10, B = 12, HOLD2 = 40, C = 41.5, END = 73.5;
+const HOLD1 = 10, B = 12, HOLD2 = 40, C = 41.5, TAIL = 73.5, END = 78.5;
 const TEMPO_A = bpmToUs(63.8);   // 10 beats = 9.40s
 const TEMPO_B = bpmToUs(64.6);   // 2-beat hold + 28 beats = 1.86s + 26.00s
 const TEMPO_C = bpmToUs(61.9);   // 1.5-beat hold + 32 beats = 1.45s + 31.02s
@@ -91,6 +96,7 @@ conductor.events.push(
   marker(beats(C + 11.35), 'sub · "Drums answer the morning"'),
   marker(beats(C + 18.06), 'sub · "Festivals gather every scattered voice"'),
   marker(beats(C + 24.76), 'sub · "The Strings fade"'),
+  timeSig(beats(TAIL), 5, 2), marker(beats(TAIL), 'tail · ring-out under credits'),
   meta(beats(END), 1, 0x06, str('END')),
 );
 
@@ -114,7 +120,7 @@ bell.note(C + 12, 76, 2, 88).note(C + 14, 73, 2, 82);
 bell.note(C + 16, 81, 1, 100).note(C + 17, 78, 1, 92).note(C + 18, 76, 1, 94).note(C + 19, 73, 1, 88);
 bell.note(C + 20, 76, 1, 92).note(C + 21, 78, 1, 96).note(C + 22, 81, 2, 100);
 bell.note(C + 24, 78, 1.5, 72).note(C + 25.5, 76, 0.5, 60).note(C + 26, 73, 2, 64);
-bell.note(C + 28, 71, 1, 58).note(C + 29, 69, 3, 62);                            // home
+bell.note(C + 28, 71, 1, 58).note(C + 29, 69, 8, 62);                            // home, ringing into the tail
 
 // ---- 2: agung (gong voice) -------------------------------------------
 const gong = new Track('Agung (gong)', 1, 115);          // GM 116 Taiko Drum
@@ -124,7 +130,7 @@ gong.note(HOLD1, 33, 2, 108);                             // the portal impact, 
   .forEach(([t, p]) => gong.note(B + t, p, 3.5, 84));
 [[0, 45], [4, 45], [8, 38], [12, 40], [16, 45], [20, 45], [24, 38]]
   .forEach(([t, p], i) => gong.note(C + t, p, 3.5, i === 4 ? 104 : 86));
-gong.note(C + 28, 33, 4, 110);                            // the last strike
+gong.note(C + 28, 33, 9, 110);                            // the last strike, decaying under the credits
 
 // ---- 3: strings pad ---------------------------------------------------
 const strings = new Track('Strings pad', 2, 48);         // GM 49 String Ensemble 1
@@ -139,7 +145,7 @@ strings.chord(C + 8, [50, 54, 57], 4, 60);                // D
 strings.chord(C + 12, [52, 56, 59], 4, 62);               // E
 strings.chord(C + 16, [57, 61, 64, 69], 8, 78);           // A major, full
 strings.chord(C + 24, [50, 54, 57], 4, 58);               // D
-strings.chord(C + 28, [45, 57, 61, 64], 4, 66);           // A major, settling
+strings.chord(C + 28, [45, 57, 61, 64], 9, 66);           // A major, settling and holding out
 
 // ---- 4: choir pad -----------------------------------------------------
 const choir = new Track('Choir pad', 3, 52);             // GM 53 Choir Aahs
@@ -147,7 +153,7 @@ choir.note(B + 12, 69, 4, 40).note(B + 16, 72, 4, 46).note(B + 20, 69, 4, 46);
 choir.note(B + 24, 71, 5.5, 54);                          // sustains across the hold with the strings
 choir.note(C + 0, 69, 4, 56).note(C + 4, 73, 4, 58).note(C + 8, 71, 4, 56).note(C + 12, 76, 4, 62);
 choir.chord(C + 16, [69, 73, 76], 8, 82);                 // "gather every scattered voice"
-choir.note(C + 24, 66, 4, 54).note(C + 28, 69, 4, 48);
+choir.note(C + 24, 66, 4, 54).note(C + 28, 69, 9, 48);
 
 // ---- 5: dabakan (channel 10) -----------------------------------------
 const drum = new Track('Dabakan', 9);

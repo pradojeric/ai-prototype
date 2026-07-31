@@ -18,7 +18,7 @@
 const TRACK_URLS = {
   explore: './assets/music/strings-bgm.mp3',
   combat: './assets/music/combat_guardian.mp3',
-  ending: './assets/music/ending-theme.wav',
+  ending: './assets/music/ending-theme.mp3',
 };
 
 // Per-track trim. The mp3s are mastered hot next to the synthesized bed;
@@ -36,6 +36,11 @@ const CROSSFADE = 1.5;      // seconds, equal-power-ish linear ramp
 // The finale cue opens on a bare gong strike, which a 1.5s fade-in swallows.
 // Only its own fade-in is shortened; the outgoing theme still leaves slowly.
 const TRACK_FADE_IN = { ending: 0.35 };
+// ...and it closes on a held A major chord rather than a decaying sample, so
+// it needs a fade to land instead of stopping flat. Scheduled off the decoded
+// buffer's own duration, so re-exporting the cue at a new length just works.
+// Looping tracks are exempt — a loop that faded out would gap every cycle.
+const TRACK_FADE_OUT = { ending: 1.5 };
 const SWELL_FLOOR = 0.82;   // exploration track volume with no artifact near
 const SWELL_CEIL = 1.0;     // ...and standing on top of one
 
@@ -121,14 +126,26 @@ export const MusicTracks = {
     const ctx = this.ctx;
     const now = ctx.currentTime;
 
+    const loop = TRACK_LOOP[name] ?? true;
+    const fadeIn = TRACK_FADE_IN[name] ?? CROSSFADE;
+
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(TRACK_GAIN[name], now + (TRACK_FADE_IN[name] ?? CROSSFADE));
+    gain.gain.linearRampToValueAtTime(TRACK_GAIN[name], now + fadeIn);
     gain.connect(this.trackBus);
+
+    // Tail fade for one-shot tracks, scheduled up front against the buffer's
+    // own end. An early _stopTrack (the player leaving the finale) cancels it.
+    const fadeOut = loop ? 0 : (TRACK_FADE_OUT[name] ?? 0);
+    if (fadeOut > 0) {
+      const at = Math.max(now + fadeIn, now + buffer.duration - fadeOut);
+      gain.gain.setValueAtTime(TRACK_GAIN[name], at);
+      gain.gain.linearRampToValueAtTime(0.0001, at + fadeOut);
+    }
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.loop = TRACK_LOOP[name] ?? true;
+    source.loop = loop;
     source.connect(gain);
     source.start(now);            // always from the top, by design
 
