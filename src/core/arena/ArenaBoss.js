@@ -118,6 +118,12 @@ export class ArenaBoss {
     return this._dir.copy(target).sub(this.center()).normalize();
   }
 
+  // The single question every damage path asks before applying a number: is the
+  // boss currently untouchable? The base answer is the enrage flare; a subclass
+  // widens it (Arena 2 shields the whole Overload Channel) by overriding this,
+  // so no damage route can be added that quietly bypasses the shield.
+  get shielded() { return this._invuln > 0; }
+
   // Armored feedback: the bolt is spent, the armor flares, nothing else happens.
   // Reads as "that did not work", not as a missed shot.
   pingArmored(position) {
@@ -230,7 +236,7 @@ export class ArenaBoss {
   } = {}) {
     if (!this.active || this.defeated || damage <= 0) return { hit: false, defeated: false };
     const impact = position || this.center();
-    if (this._invuln > 0) {
+    if (this.shielded) {
       this.pingArmored(impact);
       return { hit: true, blocked: true, defeated: false };
     }

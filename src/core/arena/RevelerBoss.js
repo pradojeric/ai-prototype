@@ -251,6 +251,17 @@ export class RevelerBoss extends ArenaBoss {
     this._attackTimer = this._draw(this.tuning.ATTACK_INTERVAL[this.phase]);
   }
 
+  // The Overload Channel is the one pattern whose answer is somewhere other than
+  // the boss: the ten tethers are the target, and a player dumping bolts into the
+  // chest is misreading it. Shielding the body for the channel makes that misread
+  // impossible rather than merely wasteful, and every damage route (bolts, the
+  // shell gap, reflected orbs) funnels through this one predicate.
+  //
+  // Read off `_overload.busy`, not `_pattern`, so severing the tenth tether drops
+  // the shield on the same frame the channel collapses — the stagger it buys is a
+  // real damage window, not a locked-out three seconds.
+  get shielded() { return super.shielded || this._overload.busy; }
+
   // --- shell-aware bolt handling ---------------------------------------------
 
   // The shell gets first refusal on every bolt: through the gap is bonus damage,
@@ -265,7 +276,7 @@ export class RevelerBoss extends ArenaBoss {
       const result = this._shell.testBolt(shot.mesh.position);
       if (result === 'miss') continue;
       this.combat.bolts.deactivate(shot);
-      if (result === 'blocked' || this._invuln > 0) {
+      if (result === 'blocked' || this.shielded) {
         this.pingArmored(shot.mesh.position);
         continue;
       }
@@ -295,7 +306,7 @@ export class RevelerBoss extends ArenaBoss {
       }
       return super.receivePlayerAttack(attack);
     }
-    if (result === 'blocked' || this._invuln > 0) {
+    if (result === 'blocked' || this.shielded) {
       this.pingArmored(position);
       return { hit: true, blocked: true, defeated: false };
     }
@@ -400,7 +411,7 @@ export class RevelerBoss extends ArenaBoss {
 
   _receiveReflectedHit(position) {
     if (!this.active || this.defeated) return;
-    if (this._invuln > 0) {
+    if (this.shielded) {
       this.pingArmored(position);
       return;
     }
