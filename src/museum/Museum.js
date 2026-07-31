@@ -74,6 +74,9 @@ export class Museum {
     this._hallway();
     this._hubLights();    // built but kept off-scene until the hub visit
     this._freezeStatic(); // bake transforms — nothing built here ever moves
+    // Dynamic and intentionally created after _freezeStatic: its six strands
+    // flow every frame while the opening cinematic points Hil toward Zone 1.
+    this._introString();
   }
 
   // Disable per-frame matrix recomputation for the whole static gallery. Only
@@ -333,6 +336,64 @@ export class Museum {
     }
   }
 
+  // The first visible Hibla teaches the title's central idea without text: a
+  // memory-thread wakes beside Hil, crosses the lobby, and enters PONSIA. The
+  // cutscene reveals it with the hallway light; normal hub visits keep it hidden.
+  _introString() {
+    const cfg = MUSEUM.INTRO_STRING;
+    const H = MUSEUM.ROOM_HALF;
+    const startZ = this.spawnPoint.z - 0.45;
+    const endZ = this.hallwayPoint.z + 0.18;
+    this._introStringCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.055, startZ),
+      new THREE.Vector3(-0.2, 0.06, startZ - 2.1),
+      new THREE.Vector3(0.16, 0.055, 0.6),
+      new THREE.Vector3(-0.1, 0.06, -H + 0.4),
+      new THREE.Vector3(0, 0.08, endZ),
+    ]);
+
+    this._introStringLines = [];
+    for (let i = 0; i < cfg.STRANDS; i++) {
+      const positions = new Float32Array(cfg.POINTS * 3);
+      const geometry = this.track.geo(new THREE.BufferGeometry());
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setDrawRange(0, 0);
+      const material = this.track.mat(new THREE.LineBasicMaterial({
+        color: cfg.COLOR,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }));
+      const line = new THREE.Line(geometry, material);
+      line.frustumCulled = false;
+      line.visible = false;
+      line.renderOrder = 3;
+      this.scene.add(line);
+
+      this._introStringLines.push({
+        line,
+        positions,
+        phase: i / cfg.STRANDS * Math.PI * 2,
+      });
+    }
+    this._introStringPoint = new THREE.Vector3();
+    this._introStringElapsed = 0;
+    this._shapeIntroStrings(0);
+  }
+
+  setIntroStringVisible(on, reset = false) {
+    if (!this._introStringLines) return;
+    if (reset) {
+      this._introStringElapsed = 0;
+      for (const strand of this._introStringLines) strand.line.geometry.setDrawRange(0, 0);
+    }
+    for (const strand of this._introStringLines) {
+      strand.line.visible = on;
+    }
+  }
+
   // Bright-gallery lighting for the walkable hub. Built into an UNATTACHED group
   // so it contributes nothing until setHubLighting(true) adds it (keeping the
   // intro dark).
@@ -399,6 +460,7 @@ export class Museum {
 
   update(dt, t) {
     this.soulPedestal.update(t);
+    this._updateIntroString(dt, t);
     if (this.hubMode) {
       // Hub: the vortices carry the portal look — just spin them — and the
       // recovered memories bob and turn in their cases.
@@ -412,6 +474,51 @@ export class Museum {
     for (const p of this.portals) {
       if (p.lit && p.panelMat) p.panelMat.emissiveIntensity = 1.6 + Math.sin(t * 1.7) * 0.2;
     }
+  }
+
+  _updateIntroString(dt, t) {
+    if (!this._introStringLines?.[0]?.line.visible) return;
+    const cfg = MUSEUM.INTRO_STRING;
+    this._introStringElapsed += dt;
+    this._shapeIntroStrings(t);
+
+    for (let i = 0; i < this._introStringLines.length; i++) {
+      const strand = this._introStringLines[i];
+      const elapsed = Math.max(0, this._introStringElapsed - i * cfg.STAGGER);
+      const drawProgress = Math.min(1, elapsed / cfg.DRAW_TIME);
+      const count = elapsed > 0 ? Math.max(2, Math.ceil(drawProgress * cfg.POINTS)) : 0;
+      strand.line.geometry.setDrawRange(0, count);
+
+      strand.line.material.opacity = 0.7 + Math.sin(t * 2.4 + strand.phase) * 0.14;
+    }
+  }
+
+  _shapeIntroStrings(t) {
+    const cfg = MUSEUM.INTRO_STRING;
+    for (let strandIndex = 0; strandIndex < this._introStringLines.length; strandIndex++) {
+      const strand = this._introStringLines[strandIndex];
+      for (let i = 0; i < cfg.POINTS; i++) {
+        const u = i / (cfg.POINTS - 1);
+        this._sampleIntroString(strandIndex, u, t, this._introStringPoint);
+        const offset = i * 3;
+        strand.positions[offset] = this._introStringPoint.x;
+        strand.positions[offset + 1] = this._introStringPoint.y;
+        strand.positions[offset + 2] = this._introStringPoint.z;
+      }
+      strand.line.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  _sampleIntroString(strandIndex, u, t, out) {
+    const cfg = MUSEUM.INTRO_STRING;
+    const phase = this._introStringLines[strandIndex].phase;
+    this._introStringCurve.getPointAt(u, out);
+    // Waves travel toward the portal instead of merely trembling in place.
+    const flow = u * Math.PI * 4.5 - t * 1.7 + phase;
+    out.x += Math.sin(flow) * cfg.WAVE_WIDTH;
+    out.y += cfg.HOVER_HEIGHT + Math.cos(flow * 0.78) * cfg.WAVE_HEIGHT;
+    out.z += Math.sin(flow * 0.52 + phase) * 0.035;
+    return out;
   }
 
   // Snap the hallway light on/off (the intro pops it on for the startle beat).
@@ -462,6 +569,7 @@ export class Museum {
   // the intro, so mutating the shared room materials here is safe.
   setHubLighting(on) {
     this.hubMode = on;
+    if (on) this.setIntroStringVisible(false);
     this.soulPedestal.setVisible(on);
     // Present in the hub, but whether it is OPEN is game policy (ending seen or
     // the debug unlock), decided by Game — this class stays geometry-only.

@@ -67,6 +67,7 @@ export class IntroCutscene {
     this._ignited = false;
     this.flash.style.opacity = '0';
     this.museum.setHallLit(false);            // dark hallway until the startle beat
+    this.museum.setIntroStringVisible(false, true);
     // Snap the black overlay opaque without animating (it sits hidden otherwise,
     // so it doesn't cover the title screen on boot)...
     this.wake.style.transition = 'none';
@@ -87,6 +88,7 @@ export class IntroCutscene {
     if (!this._ignited && this._time >= CUTSCENE.WAKE + CUTSCENE.LOOK) {
       this._ignited = true;
       this.museum.setHallLit(true);
+      this.museum.setIntroStringVisible(true, true);
     }
 
     // Kick the white fade once at the start of the final beat (CSS eases it).
@@ -120,6 +122,7 @@ export class IntroCutscene {
   _finish() {
     if (!this.active) return;
     this.active = false;
+    this.museum.setIntroStringVisible(false);
     const res = this._resolve;
     this._resolve = null;
     res && res();
