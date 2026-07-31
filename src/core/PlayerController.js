@@ -47,6 +47,8 @@ export class PlayerController {
     this._dashStarted = null;
     this.movementLocked = false;     // rail encounters keep aim but suppress WASD movement
     this.movementAnchor = new THREE.Vector3();
+    this.lookSpeed = 1;              // the settings slider's value, whether or not look is live
+    this.lookEnabled = true;         // false during the descend card: a fully cinematic beat
     this.yawLimit = null;            // {center, range} aim cone; null = free look
     this.collide = null;             // (x, z) => boolean, injected by Game
     this.groundHeight = null;        // (x, z) => number, injected by Game
@@ -165,6 +167,20 @@ export class PlayerController {
 
   // Game wires the world's support-height function (ramps, landings, dock, ladder).
   setGroundHeight(fn) { this.groundHeight = fn; }
+
+  // Mouse-look sensitivity (the settings slider) and whether mouse-look is live
+  // at all are two different things, but PointerLockControls only has the one
+  // `pointerSpeed` dial. Both go through here so a slider drag mid-cutscene
+  // cannot be lost, and re-enabling look cannot resurrect a stale sensitivity.
+  setLookSpeed(speed) {
+    this.lookSpeed = speed;
+    if (this.lookEnabled) this.controls.pointerSpeed = speed;
+  }
+
+  setLookEnabled(enabled) {
+    this.lookEnabled = enabled;
+    this.controls.pointerSpeed = enabled ? this.lookSpeed : 0;
+  }
 
   setMovementLocked(locked, anchor = null) {
     this.movementLocked = locked;

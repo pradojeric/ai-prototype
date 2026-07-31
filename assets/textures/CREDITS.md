@@ -51,9 +51,9 @@ teal). The guardians also re-use `rock`, `moss` and `marble` from the tables abo
 
 | Folder        | ambientCG asset | Used for |
 |---------------|-----------------|----------|
-| marble        | Marble018       | gallery floor (polished marble) |
+| marble        | Marble018       | gallery floor **and ceiling** (polished marble — one shared set, tiled tighter overhead) |
 | gallery-wall  | Plaster003      | gallery + wing walls |
-| marble-tiles  | Tiles101        | gallery ceiling (tiled accent) |
+| marble-tiles  | Tiles101        | *(unused)* — was the gallery ceiling before it moved to `marble` |
 | marble-pale   | Marble012       | artifact plinths + zone-marker bases (pale veined marble, chosen to read against the darker `marble` floor) |
 | brass         | Metal007        | plinth cap rings + zone-marker medallions — 512 px, it only ever covers small trim |
 

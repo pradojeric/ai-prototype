@@ -25,7 +25,7 @@ export const CONFIG = {
   TEAL: 0x2f6f6a,
   DOCK_TOP: 1.7,            // top surface of the raised spawn platform (above water)
   DEBUG_ZONE: false,       // true → force the small debug arena instead of zone1/2/3
-  DEBUG_UNLOCK_ALL_ZONES: false, // true → all 3 museum portals start unlocked (walk the hub into
+  DEBUG_UNLOCK_ALL_ZONES: true, // true → all 3 museum portals start unlocked (walk the hub into
   // zone1/2/3 in any order); each zone's guardian gate is untouched.
   // Independent of DEBUG_ZONE — leave that false to actually see them.
   DEBUG_SKIP_MUSEUM_BUTTON: true, // true → show the title shortcut into the walkable museum hub
@@ -212,8 +212,21 @@ export const ENDING = {
   },
 };
 
+// Zone-entry title card: names the memory being descended into, then hands the
+// player straight into it (see Game._showDescend / ui/_partials/descendCard.js).
+// The three phases are the whole screen — roughly two seconds end to end — so a
+// player re-entering a cleared zone is never waiting on a click they don't want.
+export const DESCEND_CARD = {
+  FADE_IN: 0.45,
+  HOLD: 2.1,
+  FADE_OUT: 0.45,
+  // Pointer lock is requested from the entry gesture but granted asynchronously.
+  // How long to wait for that event before falling back to the click prompt.
+  LOCK_GRACE: 0.25,
+};
+
 // Zone-entry dialogue: per-zone lines shown one at a time as a subtitle right
-// after the player clicks to descend (see Game._playZoneIntro / zone.introDialogue).
+// after the descend card clears (see Game._playZoneIntro / zone.introDialogue).
 export const ZONE_INTRO = {
   LINE: 3.4,   // seconds each line holds on screen
   GAP: 0.45,   // seconds between lines (covers the fade out/in)

@@ -987,3 +987,55 @@ Plan: addendum in `_partials/implementation_plan_survival_title.md`.
       "Beyond the last memory / Endless Echoes" → "Click to skip" appears after a
       beat → card crossfades into the briefing → Enter the tide starts Wave 1;
       clicking early skips; retry from the ledger replays the card
+
+---
+
+## Zone entry — timed descend card
+
+Plan: `_partials/implementation_plan_descend_card.md`.
+
+Replaces the click-gated `#start` screen ("Click to Descend") with a ~2s title
+card in the survival card's language: kicker, zone name, quote.
+
+- [x] `DESCEND_CARD` block in config.js (.45 / 1.1 / .45 = 2.0s)
+- [x] `#descend-card` markup + `_partials/descend-card.css` (teal wash, z-index 12
+      — above the HUD, below the pause overlay so ESC still opens over it)
+- [x] `src/ui/_partials/descendCard.js` — fade/hold/fade driver, Promise, timing
+      injected (config.js imports `three`, which breaks UI unit tests)
+- [x] Not skippable: swallows all input for its whole timed life
+- [x] Hub → zone keeps pointer lock (`_loadZone` no longer releases it); the card's
+      own completion calls `_startGameplayPhase()` + `_playZoneIntro()`
+- [x] First descend after the intro, and Restart-this-memory, hold no lock →
+      `awaitClick` reveals the "Click to Descend" prompt + settings gear, and the
+      ordinary pointer-lock listener finishes the entry as before
+- [x] `_descendToken` guard + `pause.isPaused` handoff so a restart or ESC-pause
+      inside the two seconds cannot start the zone twice (doubled intro dialogue)
+- [x] `tests/DescendCard.test.js` (ordering, swallowing, both exits, markup, ~2s)
+- [x] Dead `#start` CSS removed from styles.css
+- [ ] Re-verify in browser: walk a museum portal → card names the zone over the
+      loaded world, ~2s, no click, mouse-look still live, wade frozen → clears
+      into the zone intro dialogue; New Game's first descend and Restart both
+      show the click prompt instead
+
+### Follow-up — no click on any path, and the spawn fix
+
+- [x] Intro: `controls.lock()` in the Awaken click handler, held through the
+      cutscene (its own camera renders, so the live mouse-look is invisible);
+      the lock listener ignores `preAwaken`/`cutscene`
+- [x] `_runIntro` re-spawns at the dock before the card — WASD/mouse were live
+      behind the cutscene camera and could have drifted/spun the player
+- [x] Restart: `controls.lock()` in `_restartZone`, still inside the button's
+      activation window (`_restartZone` → `_loadZone` is synchronous)
+- [x] Card API split — `play()` = fade in + hold, then `dismiss()` (lock held) or
+      `holdForClick()` (lock refused), so the decision happens at the right moment
+- [x] `DESCEND_CARD.LOCK_GRACE` — re-request lock and wait a beat before falling
+      back to the prompt, since the grant is asynchronous
+- [x] **Spawn bug**: `setMovementLocked(true)` with no anchor pinned the player to
+      a stale `movementAnchor` (mid-zone). `_freezeForDescend` now always passes
+      the dock position
+- [x] Mouse-look suppressed for the card too — `PlayerController.setLookEnabled`
+      + `setLookSpeed` share ownership of `controls.pointerSpeed` with the
+      settings slider
+- [ ] Re-verify in browser: New Game → Awaken → cutscene → card → zone, no click
+      anywhere, spawned on the dock facing forward; then a portal descend and a
+      Restart, both the same

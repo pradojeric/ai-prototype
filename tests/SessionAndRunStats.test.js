@@ -50,7 +50,7 @@ function testTallyListensToWhatCombatEmits() {
 }
 
 function buildGame(overrides = {}) {
-  const calls = { abandon: 0, loaded: [], reloads: 0 };
+  const calls = { abandon: 0, loaded: [], reloads: 0, locks: 0 };
   const game = {
     phase: 'playing',
     currentZone: 'zone1',
@@ -59,6 +59,7 @@ function buildGame(overrides = {}) {
     busy: true,
     elPrompt: { classList: new ClassList() },
     elCross: { classList: new ClassList() },
+    player: { controls: { lock() { calls.locks++; } } },
     pause: { abandon() { calls.abandon++; } },
     _loadZone(zoneId) { calls.loaded.push(zoneId); },
     ...overrides,
@@ -74,6 +75,9 @@ function testRestartTargetsTheMainZone() {
   assert.deepEqual(calls.loaded, ['zone1']);
   assert.equal(calls.abandon, 1, 'the pause state must be left before the zone loads');
   assert.equal(game.busy, false);
+  // The descend card that follows is timed, not clicked, so this button press is
+  // the only user gesture left to reclaim pointer lock from.
+  assert.equal(calls.locks, 1, 'restart must request pointer lock on its own gesture');
 
   // Inside an arena, `currentZone` is the arena — restart must target the zone
   // the arena returns to, not a world that has no dock to spawn on.

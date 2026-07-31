@@ -24,15 +24,18 @@ export const sessionFlowMethods = {
     return !!this._restartTargetZone();
   },
 
-  // Start the current memory over from its dock. Ends the pause without asking
-  // for pointer lock (the Descend screen's click supplies the next gesture) and
-  // hands off to the ordinary zone-load path, so nothing here duplicates it.
+  // Start the current memory over from its dock, then hand off to the ordinary
+  // zone-load path so nothing here duplicates it.
   _restartZone() {
     if (!this.canRestartZone()) return false;
     const zoneId = this._restartTargetZone();
     // The zone keeps the memories already recovered there: this restarts a
     // memory, it does not erase the collection (that is Quit's job).
     this.pause.abandon();
+    // Reclaim pointer lock on the Restart button's own gesture, which is still
+    // valid in this synchronous call. The descend card that follows is timed, so
+    // there is no later click to supply one — see Game._showDescend.
+    this.player.controls.lock();
     this.busy = false;
     this._introToken = (this._introToken || 0) + 1;   // cancel any running intro dialogue
     this.elPrompt.classList.remove('active');

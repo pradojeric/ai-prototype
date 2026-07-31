@@ -74,11 +74,15 @@ export class SurvivalPortal {
     panel.position.set(this.x, h / 2, this.z);
     this.group.add(panel);
 
-    // Its own vortex material (not the zone portals' shared one) so the violet
-    // Endless Echoes swirl can spin independently of the warm zone portals.
+    // Its own vortex material (not the zone portals' shared one) so this swirl can
+    // spin independently of them. DoubleSide as the Memory Rift does: this arch is
+    // free-standing near the +Z wall with the lobby BEHIND it at -Z, so a plane's
+    // default +Z normal would face the wall and cull away from the player — leaving
+    // only the violet backing panel visible.
     this.vortexMat = this.track.mat(createVortexMaterial((inner * 2) / h));
+    this.vortexMat.side = THREE.DoubleSide;
     const vortex = new THREE.Mesh(panelGeo, this.vortexMat);
-    vortex.position.set(this.x, h / 2, this.z - 0.03);   // faces the lobby
+    vortex.position.set(this.x, h / 2, this.z - 0.03);   // lobby side of the panel
     vortex.visible = false;
     this.group.add(vortex);
     this.vortexMesh = vortex;

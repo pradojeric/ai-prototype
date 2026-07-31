@@ -107,9 +107,14 @@ export class Museum {
   // albedo map just multiplies against it for detail.
   _loadTextures() {
     this._texLoader ||= new THREE.TextureLoader();
-    applyTextureSet(this.floorMat, loadTextureSet(this._texLoader, 'marble', this.track));
+    // Floor and ceiling share ONE marble set so the room reads as a single stone.
+    // Safe to share because tilePlane bakes the repeat into each plane's UVs, so
+    // the ceiling keeps its tighter density (userData.tile) off the same textures,
+    // and neither material passes `repeat` (which would mutate the shared set).
+    const marble = loadTextureSet(this._texLoader, 'marble', this.track);
+    applyTextureSet(this.floorMat, marble);
+    applyTextureSet(this.ceilMat, marble);
     applyTextureSet(this.wallMat, loadTextureSet(this._texLoader, 'gallery-wall', this.track));
-    applyTextureSet(this.ceilMat, loadTextureSet(this._texLoader, 'marble-tiles', this.track));
   }
 
   _lights() {

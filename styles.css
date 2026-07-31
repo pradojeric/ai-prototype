@@ -168,8 +168,9 @@
       opacity: .55;
     }
 
-    /* ---- Title + Start overlays ---- */
-    #start,
+    /* ---- Title + overlay screens ----
+       The zone-entry screen is no longer one of these: it is the timed descend
+       card in _partials/descend-card.css. */
     #resume,
     #discovery,
     #zonecomplete {
@@ -181,11 +182,6 @@
       justify-content: center;
       text-align: center;
       z-index: 10;
-    }
-
-    #start {
-      background: radial-gradient(circle at 50% 40%, #0d2a2e 0%, #04090b 80%);
-      cursor: pointer;
     }
 
     /* Pause keeps the frozen frame visible behind a blurred scrim — the loop is
@@ -200,15 +196,6 @@
       z-index: 35;
     }
 
-    #start h1 {
-      font-size: 64px;
-      letter-spacing: 14px;
-      font-weight: normal;
-      color: var(--teal);
-      text-shadow: 0 0 40px rgba(111, 216, 208, .5);
-    }
-
-    #start .sub,
     #resume .sub {
       margin-top: 14px;
       font-style: italic;
@@ -216,16 +203,6 @@
       font-size: 17px;
     }
 
-    #start .zone {
-      margin-top: 40px;
-      font-size: 13px;
-      letter-spacing: 4px;
-      text-transform: uppercase;
-      color: var(--amber);
-      opacity: .8;
-    }
-
-    #start .enter,
     #zonecomplete .enter {
       margin-top: 44px;
       padding: 14px 34px;
@@ -235,14 +212,6 @@
       letter-spacing: 3px;
       text-transform: uppercase;
       animation: pulse 2.6s ease-in-out infinite;
-    }
-
-    #start .controls {
-      margin-top: 34px;
-      font-size: 12px;
-      opacity: .45;
-      letter-spacing: 1px;
-      line-height: 1.9;
     }
 
     .menu-btn {

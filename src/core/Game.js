@@ -3,7 +3,7 @@
 // ============================================================
 import * as THREE from 'three';
 import {
-  CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO,
+  CONFIG, MUSEUM, GUARDIAN, WORLD_UP, PLAYER_RADIUS, FAINT, ZONE_INTRO, DESCEND_CARD,
   ENDING, PLATFORM_API, FIREBASE, CUTSCENE,
 } from '../config.js';
 import { ARTIFACT_DATA } from '../data.js';
@@ -94,6 +94,8 @@ export class Game {
     this._gameTime = 0;
     this.phase = 'title';     // title -> cutscene/descend/playing/arena, or direct debug
     this.busy = false;        // true during discovery / riddle / scatter
+    this._descendOwned = false;  // the descend card owns descend -> playing while up
+    this._descendToken = 0;      // supersedes an abandoned card (see _showDescend)
     this.bossDefeated = false; // true once the arena is cleared & artifacts are loose
     this.collectedSouls = new Set();   // main-zone ids whose Guardian Soul is recovered
     this._returnZone = 'zone1';        // main zone an active arena returns to
@@ -186,9 +188,13 @@ export class Game {
 
     await introFinished;
 
-    // Restore gameplay rendering; reveal the Descend screen as the white fades.
+    // Restore gameplay rendering; the descend card plays as the white fades.
     this.renderPass.scene = this.world.scene;
     this.renderPass.camera = this.camera;
+    // Pointer lock was claimed back at the Awaken click, so WASD and the mouse
+    // have been live (and invisible) behind the cutscene camera all along. Put
+    // the player back on the dock, facing forward, before handing the view over.
+    this._spawnAtDock();
     this._showDescend();
     this.cutscene.flash.style.opacity = '0';
   }
@@ -375,14 +381,72 @@ export class Game {
     if (html.includes('<b>E</b>')) this.journeyGuide.showControl('interact');
   }
 
-  // Show the Descend screen for the currently-built zone: label it with the
-  // active zone and reveal the overlay. Used both after the intro and on every
-  // zone entry from the hub, so the player always reads which zone they're
-  // dropping into and clicks to descend (the click gesture re-locks the pointer).
-  _showDescend() {
+  // Name the memory being entered, then drop the player into it. Used after the
+  // intro and on every zone entry from the hub, so they always read which zone
+  // they are descending into — but only for the ~2s the card takes.
+  //
+  // No path asks for a click: each entry arranges pointer lock from its own
+  // originating gesture (the portal walk still holds it; Awaken and Restart each
+  // request it at click time), and the card's own completion starts gameplay,
+  // because no lock event will arrive to do it. The click prompt is only the
+  // safety net for a browser that refused lock anyway.
+  async _showDescend() {
     this.phase = 'descend';
-    this.elStartZone.textContent = this.world.zone.label;
-    this.elStart.style.display = 'flex';
+    // Superseded-entry guard, same shape as _introToken: a Restart during the
+    // card tears this play() down and starts a new one, and the abandoned
+    // continuation below must not then start the zone under it.
+    const token = (this._descendToken = (this._descendToken || 0) + 1);
+    // The card owns descend -> playing for its whole life, so a pointer-lock
+    // event landing inside it (a late grant, or an ESC-pause and resume) does not
+    // also start the zone and double the intro dialogue.
+    this._descendOwned = true;
+    this._freezeForDescend(true);
+
+    await this.descendCard.play({
+      kicker: 'Descending into',
+      title: this.world.zone.label,
+      quote: '"Beneath the water, the city still breathes."',
+      timing: DESCEND_CARD,
+    });
+    if (token !== this._descendToken || this.phase !== 'descend') return;
+
+    // Lock is requested from the entry gesture, but granted asynchronously — on
+    // the Restart path the request is only a frame or two old. Re-ask (harmless
+    // if already held) and give the event a beat to land before giving up.
+    if (!this.player.controls.isLocked) {
+      this.player.controls.lock();
+      await new Promise((resolve) => setTimeout(resolve, DESCEND_CARD.LOCK_GRACE * 1000));
+      if (token !== this._descendToken || this.phase !== 'descend') return;
+    }
+
+    // Refused. Rather than strand the player in a zone they cannot look around
+    // in, hold the card open and let their click be the gesture; the ordinary
+    // pointer-lock listener finishes the entry from there.
+    if (!this.player.controls.isLocked) {
+      this._descendOwned = false;
+      this.descendCard.holdForClick();
+      return;
+    }
+
+    await this.descendCard.dismiss();
+    if (token !== this._descendToken || this.phase !== 'descend') return;
+    this._freezeForDescend(false);
+    this._descendOwned = false;
+    // Paused mid-card (ESC drops pointer lock): the resume's lock event is the
+    // continuation, so hand off to it rather than starting an unlocked zone.
+    if (this.pause.isPaused) return;
+    this._startGameplayPhase();
+    this._playZoneIntro();
+  }
+
+  // The card's two seconds are fully cinematic: the player is pinned to the dock
+  // they just spawned on (the anchor is REQUIRED — setMovementLocked without one
+  // keeps whatever anchor a rail encounter last set, which teleports them into
+  // the middle of the zone) and mouse-look is suppressed without disturbing the
+  // sensitivity setting. Called on the way out of the card, from either exit.
+  _freezeForDescend(frozen) {
+    this.player.setMovementLocked(frozen, frozen ? this.player.controls.getObject().position : null);
+    this.player.setLookEnabled(!frozen);
   }
 
   // Enter the active main-zone "playing" phase. Before the arena is cleared the
@@ -691,12 +755,11 @@ export class Game {
     this.museum.setHubLighting(false);
     this._spawnAtDock();
 
-    // Always pause on the Descend screen for the active zone (first entry and
-    // replays alike). Coming from the hub the player is pointer-locked, so unlock
-    // to surface the overlay; the descend click re-locks and starts gameplay.
-    this._showDescend();
+    // Always name the zone on entry (first visit and replays alike). Pointer lock
+    // is deliberately NOT released here: coming from the hub the player keeps it,
+    // so the card is a beat on the way in rather than a gate asking for a click.
+    this._showDescend();          // async, but sets `phase` before its first await
     this._syncJourneyGuide();
-    if (this.player.controls.isLocked) this.pause.releasePointerLock();
   }
 
   animate() {

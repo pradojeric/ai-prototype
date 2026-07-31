@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="./_partials/survival-mode.css" />
   <link rel="stylesheet" href="./_partials/survival-briefing.css" />
   <link rel="stylesheet" href="./_partials/survival-title.css" />
+  <link rel="stylesheet" href="./_partials/descend-card.css" />
 </head>
 
 <body>
@@ -43,8 +44,8 @@
     </div>
   </div>
 
-  <div id="alab" role="progressbar" aria-label="Alab rapid fire charge"
-       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+  <div id="alab" role="progressbar" aria-label="Alab rapid fire charge" aria-valuemin="0" aria-valuemax="100"
+    aria-valuenow="0">
     <div class="label">Alab <span>R</span></div>
     <div class="track">
       <div class="fill" id="alab-fill"></div>
@@ -93,10 +94,14 @@
       <div class="risk" id="tower-risk">Tide dormant</div>
     </div>
     <div class="readouts">
-      <div class="primary"><span class="label">Air gap</span><strong><span id="tower-clearance">1.2</span> m</strong></div>
-      <div class="secondary"><span class="label">Altitude</span><strong><span id="tower-altitude">0.0</span> m</strong></div>
+      <div class="primary"><span class="label">Air gap</span><strong><span id="tower-clearance">1.2</span> m</strong>
+      </div>
+      <div class="secondary"><span class="label">Altitude</span><strong><span id="tower-altitude">0.0</span> m</strong>
+      </div>
     </div>
-    <div class="track"><div class="fill" id="tower-progress"></div></div>
+    <div class="track">
+      <div class="fill" id="tower-progress"></div>
+    </div>
     <div class="status" id="tower-status">Tide dormant · 8.0s</div>
     <div class="seals" aria-label="Memory seals">
       <span class="label">Memory seals</span>
@@ -143,9 +148,8 @@
         <span class="survival-label">Primary Thread</span>
         <strong id="survival-weapon">Light Bolt</strong>
       </div>
-      <div id="survival-heat" class="survival-heat" role="progressbar"
-           aria-label="Laser heat" aria-valuemin="0" aria-valuemax="100"
-           aria-valuenow="0" hidden>
+      <div id="survival-heat" class="survival-heat" role="progressbar" aria-label="Laser heat" aria-valuemin="0"
+        aria-valuemax="100" aria-valuenow="0" hidden>
         <div class="survival-meter-head">
           <span>Heat</span>
           <strong id="survival-heat-label">Ready</strong>
@@ -168,9 +172,8 @@
       </div>
     </section>
 
-    <section id="survival-health" class="survival-health"
-             role="progressbar" aria-label="Survival health"
-             aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+    <section id="survival-health" class="survival-health" role="progressbar" aria-label="Survival health"
+      aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
       <div class="survival-meter-head">
         <span>Health</span>
         <strong id="survival-health-label">100 / 100</strong>
@@ -228,13 +231,10 @@
 
   <div id="title" style="display:none">
     <div class="main-menu-art" aria-hidden="true">
-      <img class="main-menu-bg" src="./assets/UI/menu/background.png" alt=""
-           draggable="false" fetchpriority="high" />
-      <img class="main-menu-city" src="./assets/UI/menu/city.png" alt=""
-           draggable="false" />
+      <img class="main-menu-bg" src="./assets/UI/menu/background.png" alt="" draggable="false" fetchpriority="high" />
+      <img class="main-menu-city" src="./assets/UI/menu/city.png" alt="" draggable="false" />
       <div class="main-menu-glow"></div>
-      <img class="main-menu-guardians" src="./assets/UI/menu/guardians.png" alt=""
-           draggable="false" />
+      <img class="main-menu-guardians" src="./assets/UI/menu/guardians.png" alt="" draggable="false" />
       <div class="main-menu-threads"></div>
     </div>
 
@@ -244,8 +244,7 @@
         <h1 id="main-menu-heading" class="visually-hidden">
           Strings — Follow the Path. Restore the Forgotten
         </h1>
-        <img class="main-menu-logo" src="./assets/UI/menu/logo.png"
-             alt="" aria-hidden="true" draggable="false" />
+        <img class="main-menu-logo" src="./assets/UI/menu/logo.png" alt="" aria-hidden="true" draggable="false" />
         <div class="main-menu-rule" aria-hidden="true"><span></span></div>
 
         <nav class="menu" aria-label="Main menu">
@@ -256,7 +255,7 @@
                present, Start becomes Continue and this is the only route back
                to a fresh run and the intro. -->
           <button class="menu-btn s-danger" id="btn-new-game" style="display:none"
-                  data-confirm-label="Confirm — erase saved progress?">New Game</button>
+            data-confirm-label="Confirm — erase saved progress?">New Game</button>
           <button class="menu-btn" id="btn-settings">Settings</button>
           <button class="menu-btn" data-platform-action>Connect GameOn Account</button>
           <button class="menu-btn debug-action" id="skipmuseum">Skip to Museum</button>
@@ -318,10 +317,9 @@
         <div class="s-section-label">Cloud Save</div>
         <div class="s-note" id="cloud-status" role="status" aria-live="polite"></div>
         <div id="cloud-form">
-          <input type="email" id="cloud-email" placeholder="you@example.com"
-                 autocomplete="email" aria-label="Email" />
+          <input type="email" id="cloud-email" placeholder="you@example.com" autocomplete="email" aria-label="Email" />
           <input type="password" id="cloud-password" placeholder="Password (6+ characters)"
-                 autocomplete="current-password" aria-label="Password" />
+            autocomplete="current-password" aria-label="Password" />
           <button class="menu-btn" id="cloud-link">Save to my email</button>
           <button class="menu-btn" id="cloud-signin">Sign in on this device</button>
         </div>
@@ -335,18 +333,22 @@
     </div>
   </div>
 
-  <div id="start" style="display:none">
+  <!-- Descend card. Names the memory being entered, then hands the player into
+       it after ~2s (CONFIG.DESCEND_CARD). No entry path asks for a click: each
+       one claims pointer lock from its own gesture (the portal walk already
+       holds it; Awaken and Restart request it at click time). The prompt and the
+       gear are the safety net for a browser that refused lock anyway. -->
+  <div id="descend-card" aria-hidden="true" hidden>
     <button class="gear" data-settings aria-label="Settings">⚙</button>
-    <h1>STRINGS</h1>
-    <div class="sub">"Beneath the water, the city still breathes."</div>
-    <div class="zone" id="start-zone">Zone 1 — PONSIA</div>
-    <div class="enter">Click to Descend</div>
-    <div class="controls">WASD — Wade · SHIFT — Sprint · MOUSE — Look · HOLD CLICK — Cast Light · F — Shockwave · E — Reach · ESC — Release
+    <div class="descend-card-shell">
+      <p class="descend-card-kicker" id="descend-card-kicker">Descending into</p>
+      <h2 class="descend-card-name" id="descend-card-name">Zone 1 — PONSIA</h2>
+      <p class="descend-card-quote" id="descend-card-quote"></p>
     </div>
+    <!-- <p class="descend-card-enter">Click to Descend</p> -->
   </div>
 
-  <div id="pre-awaken" role="dialog" aria-modal="true"
-       aria-labelledby="awaken-cue" aria-hidden="true">
+  <div id="pre-awaken" role="dialog" aria-modal="true" aria-labelledby="awaken-cue" aria-hidden="true">
     <div class="awaken-lid awaken-lid-upper" aria-hidden="true"></div>
     <div class="awaken-lid awaken-lid-lower" aria-hidden="true"></div>
     <div class="awaken-prompt">
@@ -382,8 +384,7 @@
     </div>
   </div>
 
-  <div id="survival-boss-stinger" role="status" aria-live="assertive"
-       aria-atomic="true" hidden>
+  <div id="survival-boss-stinger" role="status" aria-live="assertive" aria-atomic="true" hidden>
     <div class="survival-stinger-rift" aria-hidden="true">
       <i></i><i></i><i></i>
     </div>
@@ -408,9 +409,8 @@
   <!-- Pre-run briefing. Shown on every entry through the Endless Echoes arch,
        before Wave 1 is spawned; the body is painted from SurvivalBriefing.js so
        the rules quoted here cannot drift from SurvivalRules. -->
-  <div id="survival-briefing" role="dialog" aria-modal="true"
-       aria-labelledby="survival-briefing-title" aria-describedby="survival-briefing-lede"
-       aria-hidden="true" inert hidden>
+  <div id="survival-briefing" role="dialog" aria-modal="true" aria-labelledby="survival-briefing-title"
+    aria-describedby="survival-briefing-lede" aria-hidden="true" inert hidden>
     <div class="survival-modal-shell survival-briefing-shell">
       <header class="survival-modal-head">
         <p class="survival-kicker" id="survival-briefing-kicker">Beyond the last memory</p>
@@ -432,9 +432,8 @@
     </div>
   </div>
 
-  <div id="survival-upgrade" role="dialog" aria-modal="true"
-       aria-labelledby="survival-upgrade-title" aria-describedby="survival-upgrade-copy"
-       aria-hidden="true" inert hidden>
+  <div id="survival-upgrade" role="dialog" aria-modal="true" aria-labelledby="survival-upgrade-title"
+    aria-describedby="survival-upgrade-copy" aria-hidden="true" inert hidden>
     <div class="survival-modal-shell survival-upgrade-shell">
       <header class="survival-modal-head">
         <p class="survival-kicker">The memory answers</p>
@@ -481,8 +480,8 @@
     </div>
   </div>
 
-  <div id="survival-defeat" role="dialog" aria-modal="true"
-       aria-labelledby="survival-defeat-title" aria-hidden="true" inert hidden>
+  <div id="survival-defeat" role="dialog" aria-modal="true" aria-labelledby="survival-defeat-title" aria-hidden="true"
+    inert hidden>
     <div class="survival-modal-shell survival-defeat-shell">
       <header class="survival-modal-head">
         <p class="survival-kicker">The thread returns to silence</p>
@@ -491,12 +490,25 @@
       </header>
 
       <dl class="survival-results" aria-label="Survival run result">
-        <div><dt>Wave</dt><dd id="survival-result-wave">1</dd></div>
-        <div><dt>Active time</dt><dd id="survival-result-time">0:00</dd></div>
-        <div><dt>Echoes defeated</dt><dd id="survival-result-kills">0</dd></div>
-        <div><dt>Guardians defeated</dt><dd id="survival-result-bosses">0</dd></div>
+        <div>
+          <dt>Wave</dt>
+          <dd id="survival-result-wave">1</dd>
+        </div>
+        <div>
+          <dt>Active time</dt>
+          <dd id="survival-result-time">0:00</dd>
+        </div>
+        <div>
+          <dt>Echoes defeated</dt>
+          <dd id="survival-result-kills">0</dd>
+        </div>
+        <div>
+          <dt>Guardians defeated</dt>
+          <dd id="survival-result-bosses">0</dd>
+        </div>
         <div class="survival-result-weapon">
-          <dt>Final primary thread</dt><dd id="survival-result-weapon">Light Bolt</dd>
+          <dt>Final primary thread</dt>
+          <dd id="survival-result-weapon">Light Bolt</dd>
         </div>
       </dl>
 
@@ -569,63 +581,63 @@
       </header>
 
       <nav class="pause-tabs" role="tablist" aria-label="Pause sections">
-        <button class="pause-tab active" id="pause-tab-ledger" role="tab"
-                aria-selected="true" aria-controls="pause-panel-ledger">Ledger</button>
-        <button class="pause-tab" id="pause-tab-memories" role="tab"
-                aria-selected="false" aria-controls="pause-panel-memories">Memories</button>
-        <button class="pause-tab" id="pause-tab-lore" role="tab"
-                aria-selected="false" aria-controls="pause-panel-lore">Lore</button>
+        <button class="pause-tab active" id="pause-tab-ledger" role="tab" aria-selected="true"
+          aria-controls="pause-panel-ledger">Ledger</button>
+        <button class="pause-tab" id="pause-tab-memories" role="tab" aria-selected="false"
+          aria-controls="pause-panel-memories">Memories</button>
+        <button class="pause-tab" id="pause-tab-lore" role="tab" aria-selected="false"
+          aria-controls="pause-panel-lore">Lore</button>
       </nav>
 
-      <div class="pause-panel active" id="pause-panel-ledger" role="tabpanel"
-           aria-labelledby="pause-tab-ledger">
-      <div class="pause-body">
-        <section class="pause-card" aria-labelledby="pause-objectives-title">
-          <h3 class="pause-card-title" id="pause-objectives-title">Objectives</h3>
-          <ol class="pause-objective-list" id="pause-objectives"></ol>
-        </section>
+      <div class="pause-panel active" id="pause-panel-ledger" role="tabpanel" aria-labelledby="pause-tab-ledger">
+        <div class="pause-body">
+          <section class="pause-card" aria-labelledby="pause-objectives-title">
+            <h3 class="pause-card-title" id="pause-objectives-title">Objectives</h3>
+            <ol class="pause-objective-list" id="pause-objectives"></ol>
+          </section>
 
-        <section class="pause-card" aria-labelledby="pause-ledger-title">
-          <h3 class="pause-card-title" id="pause-ledger-title">The Ledger</h3>
+          <section class="pause-card" aria-labelledby="pause-ledger-title">
+            <h3 class="pause-card-title" id="pause-ledger-title">The Ledger</h3>
 
-          <div class="pause-meter" id="pause-memories" role="progressbar"
-               aria-label="Memories restored" aria-valuemin="0" aria-valuemax="27" aria-valuenow="0">
-            <div class="pause-meter-head">
-              <span>Memories restored</span>
-              <strong id="pause-memories-count">0 / 27</strong>
+            <div class="pause-meter" id="pause-memories" role="progressbar" aria-label="Memories restored"
+              aria-valuemin="0" aria-valuemax="27" aria-valuenow="0">
+              <div class="pause-meter-head">
+                <span>Memories restored</span>
+                <strong id="pause-memories-count">0 / 27</strong>
+              </div>
+              <div class="pause-meter-track">
+                <div class="pause-meter-fill" id="pause-memories-fill"></div>
+              </div>
             </div>
-            <div class="pause-meter-track"><div class="pause-meter-fill" id="pause-memories-fill"></div></div>
-          </div>
 
-          <ul class="pause-zone-rows" id="pause-zone-rows"></ul>
+            <ul class="pause-zone-rows" id="pause-zone-rows"></ul>
 
-          <div class="pause-tally">
-            <div class="pause-tally-row">
-              <span class="pause-tally-label">Guardian Souls</span>
-              <span class="pause-pips" id="pause-soul-pips" aria-hidden="true"></span>
-              <strong class="pause-tally-count" id="pause-soul-count">0 / 3</strong>
+            <div class="pause-tally">
+              <div class="pause-tally-row">
+                <span class="pause-tally-label">Guardian Souls</span>
+                <span class="pause-pips" id="pause-soul-pips" aria-hidden="true"></span>
+                <strong class="pause-tally-count" id="pause-soul-count">0 / 3</strong>
+              </div>
+              <div class="pause-tally-row">
+                <span class="pause-tally-label">Zones restored</span>
+                <span class="pause-pips" id="pause-zone-pips" aria-hidden="true"></span>
+                <strong class="pause-tally-count" id="pause-zone-count">0 / 3</strong>
+              </div>
             </div>
-            <div class="pause-tally-row">
-              <span class="pause-tally-label">Zones restored</span>
-              <span class="pause-pips" id="pause-zone-pips" aria-hidden="true"></span>
-              <strong class="pause-tally-count" id="pause-zone-count">0 / 3</strong>
-            </div>
-          </div>
 
-          <div class="pause-vitals" id="pause-vitals"></div>
+            <div class="pause-vitals" id="pause-vitals"></div>
+          </section>
+        </div>
+
+        <div class="pause-run" id="pause-run" aria-label="This run"></div>
+
+        <section class="pause-card pause-controls-card" aria-labelledby="pause-controls-title">
+          <h3 class="pause-card-title" id="pause-controls-title">Controls</h3>
+          <div class="pause-control-groups" id="pause-controls"></div>
         </section>
       </div>
 
-      <div class="pause-run" id="pause-run" aria-label="This run"></div>
-
-      <section class="pause-card pause-controls-card" aria-labelledby="pause-controls-title">
-        <h3 class="pause-card-title" id="pause-controls-title">Controls</h3>
-        <div class="pause-control-groups" id="pause-controls"></div>
-      </section>
-      </div>
-
-      <div class="pause-panel" id="pause-panel-memories" role="tabpanel"
-           aria-labelledby="pause-tab-memories" hidden>
+      <div class="pause-panel" id="pause-panel-memories" role="tabpanel" aria-labelledby="pause-tab-memories" hidden>
         <div class="pause-memory-groups" id="pause-memory-groups"></div>
         <!-- Re-read a recovered memory without walking back to its pedestal. -->
         <article class="pause-memory-detail" id="pause-memory-detail">
@@ -648,8 +660,7 @@
         </article>
       </div>
 
-      <div class="pause-panel" id="pause-panel-lore" role="tabpanel"
-           aria-labelledby="pause-tab-lore" hidden>
+      <div class="pause-panel" id="pause-panel-lore" role="tabpanel" aria-labelledby="pause-tab-lore" hidden>
         <div class="pause-lore" id="pause-lore"></div>
       </div>
 

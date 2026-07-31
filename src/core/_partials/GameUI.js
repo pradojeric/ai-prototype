@@ -5,6 +5,7 @@ import { CONFIG } from '../../config.js';
 import { PlatformAccountUI } from '../../ui/PlatformAccountUI.js';
 import { CloudSaveUI } from '../../ui/CloudSaveUI.js';
 import { wirePresenterSkip } from './PresenterSkip.js';
+import { DescendCard } from '../../ui/_partials/descendCard.js';
 
 // Keep DOM ownership outside the orchestration class without changing Game's
 // existing element fields. The fields remain on Game because its state-machine
@@ -13,8 +14,9 @@ export function bindGameUi(game) {
   game.elPrompt = document.getElementById('prompt');
   game.elCross = document.getElementById('crosshair');
   game.elTitle = document.getElementById('title');
-  game.elStart = document.getElementById('start');
-  game.elStartZone = document.getElementById('start-zone');
+  // The zone-entry screen is a timed card, not a click gate; its driver owns the
+  // overlay's nodes the way the survival title card owns its own.
+  game.descendCard = new DescendCard(document);
   game.elResume = document.getElementById('resume');
   game.elResumeSub = document.getElementById('resume-sub');
   game.elResumeEnter = document.getElementById('resume-enter');
@@ -66,7 +68,13 @@ export function wireGameEvents(game) {
   // cutscene-click listener below and immediately skip the same cinematic.
   game.elAwaken.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (game.phase === 'preAwaken') game._runIntro();
+    if (game.phase !== 'preAwaken') return;
+    // Claim pointer lock HERE, on the gesture, and hold it through the cinematic:
+    // the descend card that follows is timed, not clicked, and by the time it
+    // ends this activation is long expired. The intro draws its own cutscene
+    // camera, so the mouse-look this enables is invisible until the card clears.
+    game.player.controls.lock();
+    game._runIntro();
   });
   // Move keyboard focus only once the Start-to-black fade has completed.
   game.elPreAwaken.addEventListener('transitionend', (e) => {
@@ -119,7 +127,14 @@ export function wireGameEvents(game) {
   // fading overlay and fast-forward the beat the player just asked to see.
   wirePresenterSkip(game);   // hidden Shift+P demo fast-forward
 
-  game.elStart.addEventListener('click', () => {
+  // Only live while the descend card is holding its prompt — the entry paths
+  // that arrive without pointer lock (first descend, Restart-this-memory), where
+  // this click is the gesture the browser needs before it will grant lock back.
+  // The card swallows everything during its timed phase, and CSS keeps the
+  // overlay pointer-events:none outside `.awaiting-click`.
+  game.descendCard.overlay?.addEventListener('click', (e) => {
+    if (!game.descendCard.awaitingClick) return;
+    if (e.target.closest('[data-settings]')) return;   // the corner gear, not a descend
     game.audio.init();
     game.player.controls.lock();
   });
@@ -132,7 +147,18 @@ export function wireGameEvents(game) {
     if (game.phase === 'endingCredits') game._enterEpilogueMuseum();
   });
   game.player.controls.addEventListener('lock', () => {
-    game.elStart.style.display = 'none';
+    // The intro requests lock from the Awaken click and holds it through the
+    // whole cinematic (a cutscene camera is drawn instead, so mouse movement is
+    // invisible). Neither phase is a gameplay entry.
+    if (game.phase === 'preAwaken' || game.phase === 'cutscene') return;
+    // While the descend card is up it is the single owner of descend -> playing
+    // (a late lock grant, or a pause + resume inside those two seconds, would
+    // otherwise start the zone a second time and double the intro dialogue).
+    if (game._descendOwned) return;
+    if (game.descendCard.awaitingClick) {
+      game._freezeForDescend(false);
+      void game.descendCard.dismiss();
+    }
     // Combat phases own their state transitions. They only need the aiming
     // reticle restored after entry or the pause controller reacquires lock.
     if (game.phase === 'arena' || game.phase === 'survival') {
@@ -298,7 +324,7 @@ function wireSettings(game) {
   };
   wireMultiplier('look-slider', 'look-val', 'strings.lookSpeed',
     (v) => `${v.toFixed(2)}×`,
-    (speed) => { game.player.controls.pointerSpeed = speed; });
+    (speed) => { game.player.setLookSpeed(speed); });
   wireMultiplier('bright-slider', 'bright-val', 'strings.brightness',
     (v) => `${Math.round(v * 100)}%`,
     // ACES tone mapping is applied by OutputPass from the renderer's exposure,
