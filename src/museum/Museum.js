@@ -74,8 +74,8 @@ export class Museum {
     this._hallway();
     this._hubLights();    // built but kept off-scene until the hub visit
     this._freezeStatic(); // bake transforms — nothing built here ever moves
-    // Dynamic and intentionally created after _freezeStatic: its traveler moves
-    // every frame while the opening cinematic points Hil toward Zone 1.
+    // Dynamic and intentionally created after _freezeStatic: its six strands
+    // flow every frame while the opening cinematic points Hil toward Zone 1.
     this._introString();
   }
 
@@ -352,7 +352,6 @@ export class Museum {
       new THREE.Vector3(0, 0.08, endZ),
     ]);
 
-    const beadGeometry = this.track.geo(new THREE.IcosahedronGeometry(0.075, 1));
     this._introStringLines = [];
     for (let i = 0; i < cfg.STRANDS; i++) {
       const positions = new Float32Array(cfg.POINTS * 3);
@@ -373,22 +372,8 @@ export class Museum {
       line.renderOrder = 3;
       this.scene.add(line);
 
-      const beadMaterial = this.track.mat(new THREE.MeshBasicMaterial({
-        color: cfg.COLOR,
-        transparent: true,
-        opacity: 1,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        toneMapped: false,
-      }));
-      const traveler = new THREE.Mesh(beadGeometry, beadMaterial);
-      traveler.visible = false;
-      traveler.renderOrder = 4;
-      this.scene.add(traveler);
-
       this._introStringLines.push({
         line,
-        traveler,
         positions,
         phase: i / cfg.STRANDS * Math.PI * 2,
       });
@@ -406,9 +391,6 @@ export class Museum {
     }
     for (const strand of this._introStringLines) {
       strand.line.visible = on;
-      // _updateIntroString reveals each traveler after its strand's stagger;
-      // keeping them hidden here avoids a one-frame cluster at the route origin.
-      strand.traveler.visible = false;
     }
   }
 
@@ -507,15 +489,6 @@ export class Museum {
       const count = elapsed > 0 ? Math.max(2, Math.ceil(drawProgress * cfg.POINTS)) : 0;
       strand.line.geometry.setDrawRange(0, count);
 
-      // Each bead leads its drawing tip, then repeatedly travels down its own
-      // moving strand so all three currents point toward the portal.
-      const travelerProgress = drawProgress < 1
-        ? drawProgress
-        : ((elapsed - cfg.DRAW_TIME) * cfg.TRAVEL_SPEED) % 1;
-      this._sampleIntroString(i, travelerProgress, t, strand.traveler.position);
-      strand.traveler.visible = elapsed > 0;
-      const pulse = 0.82 + Math.sin(t * 7 + strand.phase) * 0.18;
-      strand.traveler.scale.setScalar(pulse);
       strand.line.material.opacity = 0.7 + Math.sin(t * 2.4 + strand.phase) * 0.14;
     }
   }

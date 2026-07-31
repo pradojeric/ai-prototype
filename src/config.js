@@ -227,8 +227,7 @@ export const MUSEUM = {
   INTRO_STRING: {
     COLOR: 0x9ffcff,       // first Hibla: cool memory-light against the warm Zone 1 portal
     DRAW_TIME: 1.8,        // seconds for the thread to reach the portal
-    TRAVEL_SPEED: 0.22,    // loops per second once the whole route is visible
-    STRANDS: 3,             // a small living bundle rather than a single guide line
+    STRANDS: 6,             // a fuller living bundle of pure flowing threads
     STAGGER: 0.14,          // each strand wakes a fraction after the previous one
     HOVER_HEIGHT: 0.48,     // lift the bundle clear of the floor
     WAVE_WIDTH: 0.2,        // lateral breathing around the route center
