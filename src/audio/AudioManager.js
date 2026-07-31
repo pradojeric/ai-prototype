@@ -5,15 +5,17 @@
 // Three layers share one master bus + a feedback DelayNode that doubles as the
 // underwater "echo" tail:
 //   1. ambient bed   — a slow, LFO-muffled drone (always on, low)
-//   2. melody         — sparse pentatonic kulintang-style bells; swells near a find
-//   3. echo voices    — one spatialized ping per artifact (the locator)
+//   2. echo voices    — one spatialized ping per artifact (the locator)
+//
+// The melodic layer is NOT synthesized: it is the recorded BGM in assets/music,
+// crossfaded by game phase on a dry bus (see _partials/MusicTracks.js).
 // ============================================================
 import * as THREE from 'three';
 import { ECHO, ENDING, MUSIC_SWELL_RANGE, COMBAT, clamp01, mulberry32 } from '../config.js';
 import { EchoVoice } from './EchoVoice.js';
-import { BGM_BPM, BGM_LOOP_BEATS, BGM_SCORE } from './BgmScore.js';
 import { CombatSfx } from './_partials/CombatSfx.js';
 import { SurvivalSfx } from './_partials/SurvivalSfx.js';
+import { MusicTracks } from './_partials/MusicTracks.js';
 
 // Fixed headroom on the master bus; user music/SFX volumes scale their buses.
 const MASTER_BASE_GAIN = 0.9;
@@ -89,7 +91,7 @@ export class AudioManager {
 
       this._buildHum();
       this._buildBed();
-      this._buildMelody();
+      this._initMusicTracks();
 
       this.ready = true;
       this._preloadEndingVoiceover();
@@ -147,78 +149,9 @@ export class AudioManager {
     lfo.start();
   }
 
-  // Composed kulintang-style BGM (see BgmScore.js): bells route through
-  // melodyGain so the near-artifact swell keeps modulating the lead line;
-  // gongs get their own steady gain. A short look-ahead scheduler walks the
-  // score and books each note on the Web Audio clock, wrapping per loop.
-  _buildMelody() {
-    const ctx = this.ctx;
-    this.melodyGain = ctx.createGain();
-    this.melodyGain.gain.value = 0.05;    // the lead line; swells further near a find
-    this.melodyGain.connect(this.musicBus);
-
-    this.gongGain = ctx.createGain();
-    this.gongGain.gain.value = 0.13;
-    this.gongGain.connect(this.musicBus);
-
-    // The pointer walks the score in order, so it MUST be time-sorted —
-    // the source file groups notes by voice for readability.
-    const score = [...BGM_SCORE].sort((a, b) => a.t - b.t);
-    const beat = 60 / BGM_BPM;
-    const loopDur = BGM_LOOP_BEATS * beat;
-    let loopStart = ctx.currentTime + 0.15;
-    let i = 0;
-    const LOOKAHEAD = 0.6; // schedule anything starting within this window
-
-    this._melodyTimer = setInterval(() => {
-      const horizon = ctx.currentTime + LOOKAHEAD;
-      // Book due notes; when the score is exhausted, roll into the next cycle.
-      while (true) {
-        if (i >= score.length) { loopStart += loopDur; i = 0; }
-        const n = score[i];
-        // A start time in the past would collapse the note's envelope ramps
-        // to silence (e.g. after a background-tab stall) — nudge it to "now".
-        const at = Math.max(loopStart + n.t * beat, ctx.currentTime + 0.01);
-        if (at > horizon) break;
-        i++;
-        if (n.voice === 'gong') this._gong(n.f, at, n.d * beat, n.v);
-        else this._bell(n.f, at, n.d * beat, n.v);
-      }
-    }, 200);
-  }
-
-  // Kulintang pot: bright triangle strike with a ringing tail.
-  _bell(freq, at, dur, vel) {
-    const ctx = this.ctx;
-    const o = ctx.createOscillator();
-    const env = ctx.createGain();
-    o.type = 'triangle';
-    o.frequency.value = freq;
-    const tail = Math.max(dur, 1.2);
-    env.gain.setValueAtTime(0.0001, at);
-    env.gain.exponentialRampToValueAtTime(0.5 * vel, at + 0.02);
-    env.gain.exponentialRampToValueAtTime(0.0001, at + tail);
-    o.connect(env).connect(this.melodyGain);
-    o.start(at);
-    o.stop(at + tail + 0.1);
-  }
-
-  // Agung: deep sine strike, a slight pitch sag, long fat decay.
-  _gong(freq, at, dur, vel) {
-    const ctx = this.ctx;
-    const o = ctx.createOscillator();
-    const env = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(freq * 1.02, at);
-    o.frequency.exponentialRampToValueAtTime(freq, at + 0.25);
-    const tail = Math.max(dur, 2.4);
-    env.gain.setValueAtTime(0.0001, at);
-    env.gain.exponentialRampToValueAtTime(0.6 * vel, at + 0.04);
-    env.gain.exponentialRampToValueAtTime(0.0001, at + tail);
-    o.connect(env).connect(this.gongGain);
-    o.start(at);
-    o.stop(at + tail + 0.1);
-  }
+  // The melodic layer is no longer synthesized — it is the recorded BGM in
+  // assets/music, crossfaded by game phase. See _partials/MusicTracks.js.
+  // (BgmScore.js keeps the old hand-authored kulintang score, now unused.)
 
   // ---- one-shot scatter burst ----------------------------------------------
   // Fired when the guardian shatters and the artifacts burst outward: a bright
@@ -409,9 +342,11 @@ export class AudioManager {
     this.clearEchoes();
     this._musicMixScale = 0.04;
     this._delayFeedback = 0;
-    this.musicBus.gain.cancelScheduledValues(now);
-    this.musicBus.gain.setValueAtTime(this.musicBus.gain.value, now);
-    this.musicBus.gain.linearRampToValueAtTime(this._musicTarget(), now + seconds);
+    for (const bus of [this.musicBus, this.musicDry]) {
+      bus.gain.cancelScheduledValues(now);
+      bus.gain.setValueAtTime(bus.gain.value, now);
+      bus.gain.linearRampToValueAtTime(this._musicTarget(), now + seconds);
+    }
     this.hum.gain.setTargetAtTime(0, now, 0.08);
     this.delayFb.gain.setTargetAtTime(this._paused ? 0 : this._delayFeedback,
       now, Math.max(0.05, seconds / 4));
@@ -518,7 +453,9 @@ export class AudioManager {
   setMusicVolume(v) {
     this.musicVolume = clamp01(v);
     if (!this.ready) return;
-    this.musicBus.gain.setTargetAtTime(this._musicTarget(), this.ctx.currentTime, 0.05);
+    const target = this._musicTarget();
+    this.musicBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
+    this.musicDry.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
   }
 
   setSfxVolume(v) {
@@ -545,6 +482,7 @@ export class AudioManager {
       param.setTargetAtTime(target, now, timeConstant);
     };
     apply(this.musicBus.gain, this._musicTarget());
+    apply(this.musicDry.gain, this._musicTarget());
     apply(this.sfxBus.gain, this._sfxTarget());
     apply(this.endingBus.gain, this._endingTarget());
     apply(this.delayFb.gain, this._paused ? 0 : this._delayFeedback);
@@ -559,12 +497,11 @@ export class AudioManager {
   }
 
   // ---- theme swell ----------------------------------------------------------
-  // Ramp the melody up as the nearest echo closes in.
+  // Ramp the exploration track up as the nearest echo closes in.
   setSwell(nearestDist) {
     if (!this.ready) return;
-    const swell = clamp01((MUSIC_SWELL_RANGE - nearestDist) / MUSIC_SWELL_RANGE);
-    const target = 0.05 + swell * 0.15;   // matches the melody's base gain
-    this.melodyGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.4);
+    this._swell = clamp01((MUSIC_SWELL_RANGE - nearestDist) / MUSIC_SWELL_RANGE);
+    this._applySwell();
   }
 
   // ---- spatialized artifact echoes -----------------------------------------
@@ -621,3 +558,4 @@ export class AudioManager {
 // every existing call site — audio.playShoot(), audio.playHit(), … — unchanged.
 Object.assign(AudioManager.prototype, CombatSfx);
 Object.assign(AudioManager.prototype, SurvivalSfx);
+Object.assign(AudioManager.prototype, MusicTracks);

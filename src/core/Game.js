@@ -709,6 +709,12 @@ export class Game {
     this._gameTime += dt;
     const t = this._gameTime;
 
+    // Music follows the phase (policy lives in audio/_partials/MusicTracks.js).
+    // Synced here rather than at each `this.phase = ...` site because those are
+    // spread across Game and five flow partials; the call no-ops unless the
+    // resolved track actually changed.
+    this.audio.setMusicPhase(this.phase);
+
     // Intro cutscene owns the camera; skip all gameplay/input until it ends.
     if (this.phase === 'cutscene') {
       this.museum.update(dt, t);
