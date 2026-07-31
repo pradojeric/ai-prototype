@@ -224,6 +224,16 @@ export const ZONE_INTRO = {
 export const MUSEUM = {
   HALL_LIGHT_COLOR: 0xffe6b0,
   HALL_LIGHT_ON: 4,        // intensity once the light suddenly appears (off until then)
+  INTRO_STRING: {
+    COLOR: 0x9ffcff,       // first Hibla: cool memory-light against the warm Zone 1 portal
+    DRAW_TIME: 1.8,        // seconds for the thread to reach the portal
+    STRANDS: 6,             // a fuller living bundle of pure flowing threads
+    STAGGER: 0.14,          // each strand wakes a fraction after the previous one
+    HOVER_HEIGHT: 0.48,     // lift the bundle clear of the floor
+    WAVE_WIDTH: 0.2,        // lateral breathing around the route center
+    WAVE_HEIGHT: 0.1,       // gentle vertical drift while the strands hover
+    POINTS: 96,            // smooth enough to read as a single continuous strand
+  },
   LOCK_PORTAL_COLOR: 0x1a2730, // dim cold teal-grey for the two locked-zone portals
   // Half-extent of the LOBBY (x/z). The lobby is a crossroads, not an exhibition
   // space — the artifacts all live in the galleries now — so it is deliberately
